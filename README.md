@@ -2,27 +2,6 @@
 
 A sophisticated, platform-agnostic futures trading bot that implements the Opening Range Breakthrough strategy with comprehensive risk management. Switch between different trading platforms (Binance, Tradovate, NinjaTrader) by simply changing a configuration setting.
 
-## ✅ FIXED ISSUES
-
-**All import issues have been resolved!** The project now has a clean, flat file structure with all Python modules in the root directory. You can now run:
-
-- `python main.py` - Start the trading bot
-- `python test_strategy.py` - Test the strategy implementation
-- All imports work correctly without any subdirectory complications
-
-## 🚀 Quick Start
-
-### 1. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Configure Your Platform
-Copy the example environment file and configure your credentials:
-```bash
-cp .env.example .env
-# Edit .env with your API credentials
-```
 
 ### 3. Choose Your Trading Platform
 Edit `.env` and set your preferred platform:
@@ -36,65 +15,11 @@ TRADOVATE_PASSWORD=your_password
 TRADOVATE_DEMO=true
 ```
 
-**For Crypto Futures (Testing):**
-```bash
-TRADING_PLATFORM=binance
-DEFAULT_SYMBOL=BTCUSDT
-BINANCE_API_KEY=your_api_key
-BINANCE_API_SECRET=your_api_secret
-BINANCE_TESTNET=true
-```
-
-**For Traditional Futures (Simulation):**
-```bash
-TRADING_PLATFORM=ninjatrader
-DEFAULT_SYMBOL=ES
-NINJATRADER_API_URL=http://localhost:8080
-NINJATRADER_SIMULATION=true
-```
-
-### 4. Test the Setup
-```bash
-# Test connection and basic functionality
-python main.py --mode test
-
-# Test the strategy implementation
-python test_strategy.py
-
-# Check bot status
-python main.py --mode status
-```
-
-### 5. Start Trading
-```bash
-# Start the bot with default settings
-python main.py
-
-# Start with specific symbol
-python main.py --symbol ES
-
-# Start with different platform
-python main.py --platform tradovate --symbol ES
-```
 
 ## 🔄 Platform Switching
 
-The bot is truly platform-agnostic. Switch between platforms by:
+The bot is truly platform-agnostic. 
 
-1. **Environment Variable**: Change `TRADING_PLATFORM` in `.env`
-2. **Command Line**: Use `--platform` argument
-3. **Runtime**: Programmatically via the API
-
-```bash
-# Switch to Tradovate for S&P 500 futures
-python main.py --platform tradovate --symbol ES
-
-# Switch to Binance for crypto futures  
-python main.py --platform binance --symbol BTCUSDT
-
-# Switch to NinjaTrader for simulation
-python main.py --platform ninjatrader --symbol ES
-```
 
 ## 📊 Features
 
@@ -224,30 +149,6 @@ NINJATRADER_SIMULATION=true
 ```
 
 ## 📈 Usage Examples
-
-### Basic Usage
-```bash
-# Start with default settings
-python main.py
-
-# Test mode (no real trading)
-python main.py --mode test
-
-# Check status
-python main.py --mode status
-```
-
-### Platform-Specific Usage
-```bash
-# Trade S&P 500 futures on Tradovate
-python main.py --platform tradovate --symbol ES
-
-# Trade crypto futures on Binance
-python main.py --platform binance --symbol BTCUSDT
-
-# Simulate on NinjaTrader
-python main.py --platform ninjatrader --symbol ES
-```
 
 ### Strategy Testing
 ```bash

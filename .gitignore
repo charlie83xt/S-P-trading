@@ -18,3 +18,9 @@ PROJECT_BUNDLE.txt
 .DS_Store
 Thumbs.db
 
+# Random files
+.local
+documentation
+ss
+
+
