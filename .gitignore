@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment variables (Crucial for security!)
+.env
+env
+
+# Project specific
+PROJECT_BUNDLE.txt
+*.txt
+*.log
+*.html
+
+# OS generated
+.DS_Store
+Thumbs.db
+
