@@ -87,6 +87,9 @@ class TradingBot:
         self._last_fill_ts = 0.0
         self._seen_fill_ids: set[str] = set()
         self._seen_attempt_ids = set()
+
+        # Avoid spamming exits repeatedly
+        self._last_exit_ts: dict[str, float] = {}
         
     def _setup_logging(self):
         """Setup logging configuration."""
@@ -176,15 +179,6 @@ class TradingBot:
 
         misses = 0 # NEW: count consecutive
 
-
-        # first = None
-        # for _ in range(10):
-        #     first =  self.data_manager.get_current_price(symbol)
-        #     if first is not None:
-        #         break
-        #     time.sleep(0.5)
-        # if first is None:
-        #     self.logger.warning("No price yet for %s; continuing but signals may delay.", symbol)
 
         last_log = 0.0
         while self.is_running:
@@ -360,7 +354,7 @@ class TradingBot:
             try:
                 if not self.is_paused:
                     self._process_market_data()
-                    self._check_existing_positions()
+                    # self._check_existing_positions()
                 
                 # Sleep for a short interval
                 time.sleep(1)  # Check every second
@@ -376,6 +370,8 @@ class TradingBot:
         try:
             # Get current price
             current_price = self.data_manager.get_current_price(self.symbol)
+
+            self._maybe_exit_position(self.symbol, current_price) # NEW (first)
             
             if current_price <= 0:
                 self.logger.warning(f"Invalid price received for {self.symbol}: {current_price}")
@@ -702,6 +698,7 @@ class TradingBot:
                     )
                     return False
 
+                t0 = time.time()
                 # 3) Confirm the popup (if supported)
                 # sent = True
                 confirmed = True
@@ -722,7 +719,20 @@ class TradingBot:
                         qty,
                         px
                     )
+                    self.logger.error("INVARIANT: confirm_order=False -> must NOT record fill (sig=%s att=%s)", signal_id, attempt_id)
                     return False
+
+                # wait briefly for Orders table to update
+                fill_px = None
+                if hasattr(api, "get_latest_filled_order"):
+                    try:
+                        o = api.get_latest_filled_order(symbol=sym, side=side, since_ts=t0)
+                        if o and o.get("avg_fill") is not None:
+                            fill_px = float(o["avg_fill"])
+                    except Exception:
+                        fill_px = None
+
+                px_exec = fill_px if fill_px is not None else px # fallback
 
                 # 4) Only now do we record the fill
                 self.logger.info(
@@ -732,7 +742,7 @@ class TradingBot:
                 # self.logger.info("LIVE %s %s x%s @ %s", side, sym, qty, px)
                 # Only after UI worked, record live fill
                 # self._record_fill(sym, side, qty, px, dry_run=(acct_mode != "false"))
-                fill = self._record_fill(sym, side, qty, px, dry_run=False, signal_id=signal_id, attempt_id=attempt_id)
+                fill = self._record_fill(sym, side, qty, px_exec, dry_run=False, signal_id=signal_id, attempt_id=attempt_id, exit_reason=signal.get("reason"))
 
                 if not isinstance(fill, dict):
                     self.logger.error("FILL missing after confirmed order: sig=%s att=%s (dedupe or RM error)", signal_id, attempt_id)
@@ -998,7 +1008,8 @@ class TradingBot:
         Returns:
             Dictionary of open positions
         """
-        return self.risk_manager.current_positions.copy()
+        return {p["symbol"]: p for p in self.risk_manager.get_positions()}
+        # return self.risk_manager.current_positions.copy()
 
 
     def set_strategy(self, name: str, params: Dict[str, Any] | None = None):
@@ -1052,7 +1063,8 @@ class TradingBot:
         dry_run: bool,
         # new debug addition
         signal_id=None,
-        attempt_id=None
+        attempt_id=None,
+        exit_reason: str | None = None
     ):
         fill_id = f"fill_{signal_id}_{attempt_id}" if signal_id and attempt_id else _new_id("fill")
 
@@ -1097,6 +1109,7 @@ class TradingBot:
                 qty=int(qty),
                 price=float(price),
                 dry_run=bool(dry_run),
+                exit_reason=exit_reason
             )
             # after = len(rm.trade_history)
             self.logger.info(
@@ -1129,6 +1142,33 @@ class TradingBot:
             q = int(t.get("qty") or 0)
             qty += q if side == "BUY" else -q
         return qty
-            
+
+
+    def _maybe_exit_position(self, symbol: str, current_price: float):
+        rm = self.risk_manager
+        qty = rm.get_position_qty(symbol)
+        if qty == 0:
+            return
+
+        # prevent exit spam (2s)
+        now = time.time()
+        if (now - self._last_exit_ts.get(symbol, 0.0)) < 2.0:
+            return
+
+        # choose points from config (example defaults)
+        stop_pts = getattr(self.config, "STOP_LOSS_POINTS", 6)
+        take_pts = getattr(self.config, "TAKE_PROFIT_POINTS", 8)
+        
+        reason = rm.check_exit_points(symbol, current_price, stop_pts, take_pts)
+        if not reason:
+            return
+
+        self._last_exit_ts[symbol] = now
+
+        close_side = "SELL" if qty > 0 else "BUY"
+        self.logger.info("EXIT: reason=%s qty=%s -> sending %s", reason, qty, close_side)
+
+        exit_signal = {"type": close_side, "symbol": symbol, "reason": reason, "_signal_id": _new_id("exit")}
+        self._execute_trade(exit_signal, abs(qty), current_price)
 
     

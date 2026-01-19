@@ -2412,3 +2412,161 @@ class TradovateWebUIAPI(TradingAPIInterface):
             ), timeout=0.8)
         except Exception:
             pass
+
+
+    def get_latest_filled_order(self, symbol: str, side: str, since_ts: float | None = None) -> dict | None:
+        """
+        Scrape Tradovate Orders table and return the newest FILLED order matching (symbol, side)
+        after `since_ts` (epoch seconds). Best-effort.
+        Returns:
+            {"symbol": str, "side": str, "avg_fill": float, "filled_qty": int|float, "ts": str|None, "row_text": str}
+            or None if not found.
+        """
+        try:
+            self._ensure_page()
+            self.cleanup_backdrops(timeout_ms=1500)
+
+            # 1) Go to orders tab
+            self._click_any("orders.tab", timeout_ms=3000)
+            self.cleanup_backdrops(timeout_ms=1500)
+
+            # 2) Wait for Orders table container
+            table_sel = self._wait_any(self._expand("orders.table"), timeout_ms=2500)
+            if not table_sel:
+                logger.warning("get_latest_filled_order: orders.table not found/visible")
+                return None
+
+            table = self._page.locator(table_sel).first
+
+            # 3) Locate rows (same style as get_positions)
+            row_candidates = [
+                ".fixedDataTableRowLayout_rowWrapper",
+                ".public_fixedDataTableRow_main",
+                "[class*='fixedDataTableRow]",
+                "[role=row]",
+                "tbody tr",
+                "tr",
+            ]
+
+            rows = None
+            for rsel in row_candidates:
+                try:
+                    loc = table.locator(rsel)
+                    cnt = self._run(loc.count(), timeout=1.0) or 0
+                    if cnt > 0:
+                        rows = loc
+                        break
+                except Exception:
+                    continue
+
+            if rows is None:
+                return None
+
+            want_sym = (symbol or "").upper()
+            want_side = (side or "").upper()
+
+            # helper parsers
+            def _to_float_safe(txt: str | None):
+                if not txt:
+                    return None
+                t = " ".join(txt.split()).replace(",", "")
+                # extract first float-ish token
+                m = re.search(r"[-+]?\d+(?:\.\d+)?", t)
+                if not m:
+                    return None
+                try:
+                    return float(m.group(0))
+                except Exception:
+                    return None
+
+            def _to_qty_safe(txt: str | None):
+                f = _to_float_safe(txt)
+                if f is None:
+                    return None
+                # most features qty are ints
+                try:
+                    if abs(f - int(f)) < 1e-9:
+                        return int(f)
+                except Exception:
+                    pass
+                return f
+
+            best = None
+            cnt = self._run(rows.count(), timeout=1.0) or 0
+            max_rows = min(cnt, 60)
+
+            for i in range(max_rows):
+                r = rows.nth(i)
+                try:
+                    if not self._run(r.is_visible(), timeout=0.5):
+                        continue
+                    row_txt = self._run(r.inner_text(), timeout=1.0) or ""
+                    row_txt_norm = " ".join(row_txt.split())
+                    if not row_txt_norm:
+                        continue
+
+                    # Must contain symbol and side
+                    if want_sym and want_sym not in row_txt_norm.upper():
+                        continue
+
+                    # Side matching: usually "Buy" / " Sell"
+                    up = row_txt_norm.upper()
+                    if want_side == "BUY" and "BUY" not in up:
+                        continue
+                    if want_side == "SELL" and "SELL" not in up:
+                        continue
+                    
+                    # Must look FILLED (or "Filled")
+                    if "FILLED" not in up:
+                        continue
+
+                    # Try to pull an avg fill price from the text
+                    # Common labels: "Avg Fill", "Avg", "Fill Price", etc.
+                    avg_fill = None
+                    m = re.search(r"(AVG\s*FILL|AVG|FILL\s*PRICE)\s*[:\s]*([-+]?\d+(?:\.\d+)?)", up, re.I)
+                    if m:
+                        try:
+                            avg_fill = float(m.group(2))
+                        except Exception:
+                            avg_fill = None
+
+                    # fallback: pick the last float in the row (often avg fill is near end)
+                    if avg_fill is None:
+                        floats = re.findall(r"[-+]?\d+(?:\.\d+)?", row_txt_norm.replace(",", ""))
+                        if floats:
+                            try:
+                                avg_fill = float(floats[-1])
+                            except Exception:
+                                avg_fill = None
+
+                    if avg_fill is None:
+                        continue
+
+
+                    # Try to parse filled qty (optional)
+                    filled_qty = None
+                    mqty = re.search(r"(FILLED|QTY|SIZE)\s*[:\s]*(-?\d+(?:\.\d+)?)", up, re.I)
+                    if mqty:
+                        filled_qty = _to_qty_safe(mqty.group(2))
+
+                    candidate =  {
+                        "symbol": want_sym,
+                        "side": want_side,
+                        "avg_fill": avg_fill,
+                        "filled_qty": filled_qty,
+                        "ts": datetime.utcnow().isoformat(),
+                        "row_text": row_txt_norm,
+                    }
+
+                    # If since_ts is supplied, prefer "newest" rows (we don't have perfect timestamps, so keep first match)
+                    best = candidate
+                    break
+
+                except Exception:
+                    continue
+            
+            return best
+
+        except Exception as e:
+            logger.warning("get_latest_filled_order failed: %s", e)
+            return None

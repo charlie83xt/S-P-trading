@@ -208,7 +208,9 @@ def _snap_status(from_trading_thread: bool = False):
                     pass
 
             # expose open positions count at top-level for the dashboard tile
-            _status["open_positions_count"] = int(len(positions))
+            _status["open_positions_count"] = sum(
+                1 for p in positions.values() if int(p.get("qty") or 0) != 0
+            ) # int(len(positions))
 
             # 1) realized today = only closed if it has an exit_price 
             # daily_realized = sum(float(t.get("pnl", 0.0) or 0.0) for t in daily_trades)
