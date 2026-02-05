@@ -70,6 +70,10 @@ class Config:
     INSTANT_CLOSE_TRADES = "hold" # keep positions, don't force close
     # fallback siimulation account balance
     SIM_BALANCE = 50000
+    # Exit points. 1 point = $50 per contract (classic ES)
+    # 1 tick = 0.25 points = $12.50
+    STOP_LOSS_POINTS = 2
+    TAKE_PROFIT_POINTS = 2 
     
     @classmethod
     def validate_platform(cls):

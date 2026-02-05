@@ -109,8 +109,13 @@ class RiskManager:
         
         # Check for existing position in same symbol
         symbol = signal['symbol']
-        if symbol in self.current_positions:
-            return False, f"Already have position in {symbol}", 0.0
+        # if symbol in self.current_positions:
+        qty_now = self.get_position_qty(symbol)
+        if qty_now != 0:
+            side = (signal.get("type") or signal.get("side") or "").upper()
+            is_close = (qty_now > 0 and side == "SELL") or (qty_now < 0 and side == "BUY")
+            if not is_close:
+                    return False, f"Already have position in {symbol}", 0.0
         
         # Calculate suggested position size
         suggested_quantity = self._calculate_position_size(account_balance, current_price, signal)
@@ -183,26 +188,27 @@ class RiskManager:
             price: Entry price
             order_id: Order ID from exchange
         """
-        self._check_new_day()
+        # self._check_new_day()
         
-        trade_record = {
-            'symbol': symbol,
-            'side': side,
-            'quantity': quantity,
-            'entry_price': price,
-            'entry_time': datetime.now(),
-            'order_id': order_id,
-            'status': 'open'
-        }
+        # trade_record = {
+        #     'symbol': symbol,
+        #     'side': side,
+        #     'quantity': quantity,
+        #     'entry_price': price,
+        #     'entry_time': datetime.now(),
+        #     'order_id': order_id,
+        #     'status': 'open'
+        # }
         
-        # Add to current positions
-        self.current_positions[symbol] = trade_record
+        # # Add to current positions
+        # self.current_positions[symbol] = trade_record
         
-        # Increment daily trade counter
-        self.daily_trades += 1
-        self.last_trade_time = datetime.now()
+        # # Increment daily trade counter
+        # self.daily_trades += 1
+        # self.last_trade_time = datetime.now()
         
-        self.logger.info(f"Trade entry recorded: {side.upper()} {quantity} {symbol} at {price}")
+        # self.logger.info(f"Trade entry recorded: {side.upper()} {quantity} {symbol} at {price}")
+        self.logger.warning("record_trade_entry() legacy call ignored; use paper_fill()")
     
     def record_trade_exit(self, symbol: str, exit_price: float, exit_reason: str = "manual"):
         """
@@ -213,45 +219,46 @@ class RiskManager:
             exit_price: Exit price
             exit_reason: Reason for exit ('stop_loss', 'take_profit', 'manual')
         """
-        if symbol not in self.current_positions:
-            self.logger.warning(f"No open position found for {symbol}")
-            return
+        # if symbol not in self.current_positions:
+        #     self.logger.warning(f"No open position found for {symbol}")
+        #     return
         
-        position = self.current_positions[symbol]
+        # position = self.current_positions[symbol]
         
-        # Calculate P&L
-        entry_price = position['entry_price']
-        quantity = position['quantity']
-        side = position['side']
+        # # Calculate P&L
+        # entry_price = position['entry_price']
+        # quantity = position['quantity']
+        # side = position['side']
         
-        if side.lower() == 'buy':
-            pnl = (exit_price - entry_price) * quantity
-        else:  # sell
-            pnl = (entry_price - exit_price) * quantity
+        # if side.lower() == 'buy':
+        #     pnl = (exit_price - entry_price) * quantity
+        # else:  # sell
+        #     pnl = (entry_price - exit_price) * quantity
         
-        # Update position record
-        position.update({
-            'exit_price': exit_price,
-            'exit_time': datetime.now(),
-            'exit_reason': exit_reason,
-            'pnl': pnl,
-            'status': 'closed'
-        })
+        # # Update position record
+        # position.update({
+        #     'exit_price': exit_price,
+        #     'exit_time': datetime.now(),
+        #     'exit_reason': exit_reason,
+        #     'pnl': pnl,
+        #     'status': 'closed'
+        # })
         
-        # Move to trade history
-        self.trade_history.append(position.copy())
+        # # Move to trade history
+        # self.trade_history.append(position.copy())
         
-        # Remove from current positions
-        del self.current_positions[symbol]
+        # # Remove from current positions
+        # del self.current_positions[symbol]
         
-        # Update daily P&L
-        self.daily_pnl += pnl
+        # # Update daily P&L
+        # self.daily_pnl += pnl
         
-        # Record loss time for cooldown
-        if pnl < 0:
-            self.last_loss_time = datetime.now()
+        # # Record loss time for cooldown
+        # if pnl < 0:
+        #     self.last_loss_time = datetime.now()
         
-        self.logger.info(f"Trade exit recorded: {symbol} at {exit_price}, P&L: {pnl:.2f}, Reason: {exit_reason}")
+        # self.logger.info(f"Trade exit recorded: {symbol} at {exit_price}, P&L: {pnl:.2f}, Reason: {exit_reason}")
+        self.logger.warning("record_trade_exit() legacy call ignored; use paper_fill()")
     
     def check_stop_loss_take_profit(self, symbol: str, current_price: float) -> Optional[str]:
         """
@@ -264,29 +271,40 @@ class RiskManager:
         Returns:
             'stop_loss', 'take_profit', or None
         """
+
+        stop_pts = getattr(self, "STOP_LOSS_POINTS", None)
+        take_pts = getattr(self, "TAKE_PROFIT_POINTS", None)
+
+        # if our config defines points, prefer them
+        if stop_pts is not None and take_pts is not None:
+            return self.check_exit_points(symbol, current_price, stop_pts, take_pts)
+
+        # otherwise: do nothing (or fallback to % logic if insisting)
+        return None 
+
         if symbol not in self.current_positions:
             return None
         
-        position = self.current_positions[symbol]
-        entry_price = position['entry_price']
-        side = position['side']
+        # position = self.current_positions[symbol]
+        # entry_price = position['entry_price']
+        # side = position['side']
         
         # Calculate stop loss and take profit levels
-        stop_loss_level = entry_price * (1 - self.stop_loss_pct / 100) if side.lower() == 'buy' else entry_price * (1 + self.stop_loss_pct / 100)
-        take_profit_level = entry_price * (1 + self.take_profit_pct / 100) if side.lower() == 'buy' else entry_price * (1 - self.take_profit_pct / 100)
+        # stop_loss_level = entry_price * (1 - self.stop_loss_pct / 100) if side.lower() == 'buy' else entry_price * (1 + self.stop_loss_pct / 100)
+        # take_profit_level = entry_price * (1 + self.take_profit_pct / 100) if side.lower() == 'buy' else entry_price * (1 - self.take_profit_pct / 100)
         
-        if side.lower() == 'buy':
-            if current_price <= stop_loss_level:
-                return 'stop_loss'
-            elif current_price >= take_profit_level:
-                return 'take_profit'
-        else:  # sell
-            if current_price >= stop_loss_level:
-                return 'stop_loss'
-            elif current_price <= take_profit_level:
-                return 'take_profit'
+        # if side.lower() == 'buy':
+        #     if current_price <= stop_loss_level:
+        #         return 'stop_loss'
+        #     elif current_price >= take_profit_level:
+        #         return 'take_profit'
+        # else:  # sell
+        #     if current_price >= stop_loss_level:
+        #         return 'stop_loss'
+        #     elif current_price <= take_profit_level:
+        #         return 'take_profit'
         
-        return None
+        # return None
     
     def get_risk_metrics(self) -> Dict:
         """
@@ -325,7 +343,7 @@ class RiskManager:
             'max_daily_trades': self.max_daily_trades,
             'daily_pnl': self.daily_pnl,
             'max_daily_loss_pct': self.max_daily_loss,
-            'current_positions': len(self.current_positions),
+            'current_positions': sum(1 for p in self.positions.values() if int(p.get("qty") or 0) != 0), # len(self.current_positions),
             'total_trades': len(closed_trades),
             'win_rate': win_rate,
             'avg_pnl': avg_pnl,
@@ -347,7 +365,7 @@ class RiskManager:
         emergency_status = {
             'emergency_stop_activated': True,
             'timestamp': datetime.now().isoformat(),
-            'open_positions': len(self.current_positions),
+            'open_positions': sum(1 for p in self.positions.values() if int(p.get("qty") or 0) != 0), # len(self.current_positions),
             'daily_pnl': self.daily_pnl
         }
         
@@ -373,9 +391,52 @@ class RiskManager:
         Returns:
             Position information or None if no position exists
         """
-        return self.current_positions.get(symbol)
+        sym = (symbol or "").upper() 
+        pos = self.positions.get(sym) or self.positions.get(symbol) # From paper_fill
+        if not pos:
+            return None
+
+        qty = int(pos.get("qty") or 0)
+        if qty == 0:
+            return None
+        
+        side = "buy" if qty > 0 else "sell"
+        return {
+            "symbol": sym,
+            "side": side,
+            "quantity": abs(qty),
+            "entry_price": float(pos.get("avg_price") or 0.0),
+            "status": "open",
+        }
+        # return self.current_positions.get(symbol)
 
     ### --- extra-helper methods --- ####
+    def check_exit_points(self, symbol: str, current_price: float, stop_points: float, take_points: float) -> str | None:
+        sym = (symbol or "").upper() 
+        pos = self.positions.get(sym) or self.positions.get(symbol) # From paper_fill
+        if not pos:
+            return None
+
+        qty = int(pos.get("qty") or 0)
+        avg = float(pos.get("avg_price") or 0.0)
+        px = float(current_price)
+
+        # long
+        if qty > 0:
+            if px <= avg - float(stop_points):
+                return "stop_loss_points"
+            if px >= avg + float(take_points):
+                return "take_profit_points"
+
+        # short
+        if qty < 0:
+            if px >= avg + float(stop_points):
+                return "stop_loss_points"
+            if px <= avg - float(take_points):
+                return "take_profit_points"
+
+        return None
+
 
     def _mult(self, symbol: str) -> float:
         # fallback to 1 if unknown
@@ -391,7 +452,7 @@ class RiskManager:
             # keep positions open across days (common in futures), or clear if you prefer
         self._rotate_daily_if_needed()
 
-    def paper_fill(self, symbol: str, side: str, qty: int, price: float, dry_run: bool = True, fill_id: str | None = None, signal_id: str | None = None, attempt_id: str | None = None) -> dict:
+    def paper_fill(self, symbol: str, side: str, qty: int, price: float, dry_run: bool = True, fill_id: str | None = None, signal_id: str | None = None, attempt_id: str | None = None, exit_reason: str | None = None) -> dict:
         """
         Simulate and immediate market fill and update positions & realized PnL.
         Returns a trade record we can append to history
@@ -413,6 +474,7 @@ class RiskManager:
         # ts = ts or datetime.utcnow().isoformat(timespec="seconds")
 
         pos = self.positions.setdefault(symbol, {"qty": 0, "avg_price": 0.0, "last_px": px, "unrealized": 0.0})
+        meta = {"fill_id": fill_id, "signal_id": signal_id, "attempt_id": attempt_id}
 
         cur_qty = int(pos["qty"])
         avg = float(pos["avg_price"])
@@ -437,6 +499,7 @@ class RiskManager:
 
                 # make an OPEN record so web_app can show it
                 open_record = {
+                    **meta,
                     "symbol": symbol,
                     "side": "BUY",
                     "qty":qty,
@@ -473,6 +536,7 @@ class RiskManager:
                     pos["qty"] = qty
                     # create an open record for that leftover
                     open_record = {
+                        **meta,
                         "symbol": symbol,
                         "side": "BUY",
                         "qty":qty,
@@ -488,13 +552,14 @@ class RiskManager:
                 # record a realized trade for the reduced portion
                 if reduce_qty > 0:
                     trade_record = {
+                        **meta,
                         "symbol": symbol,
                         "side": "BUY",  # buy to cover short
                         "qty": reduce_qty,
                         "entry_price": avg,
                         "exit_price": px,
                         "pnl": float((avg - px) * reduce_qty * cm),
-                        "exit_reason": "dry_run_close",
+                        "exit_reason": exit_reason, #"dry_run_close",
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }
 
@@ -509,6 +574,7 @@ class RiskManager:
                 pos["avg_price"] = new_avg
 
                 open_record = {
+                    **meta,
                     "symbol": symbol,
                     "side": "SELL",
                     "qty":qty,
@@ -565,7 +631,7 @@ class RiskManager:
                         "entry_price": avg,
                         "exit_price": px,
                         "pnl": float((px - avg) * reduce_qty * cm),
-                        "exit_reason": "dry_run_close",
+                        "exit_reason": exit_reason, # "dry_run_close",
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }
 
@@ -590,17 +656,6 @@ class RiskManager:
         if open_record is not None:
             self.trade_history.append(open_record)
             return {"opened": open_record}
-
-            # emit a synthetic closed record too
-            # if getattr(self, "emit_closed_on_hold", False) and False:
-            #     closed_for_ui = dict(open_record)
-            #     closed_for_ui["exit_price"] = px
-            #     closed_for_ui["pnl"] = 0.0
-            #     closed_for_ui["exit_reason"] = "ui_mirror"
-            #     closed_for_ui["status"] = "closed"
-            #     self.trade_history.append(closed_for_ui)
-
-            # return open_record
         
         self.logger.info("paper_fill(): mode=%r id=%s price=%s", getattr(self, "instant_close", None), id(self), price)
         # fallback
@@ -837,7 +892,7 @@ class RiskManager:
             return
         try:
             with self._hist_lock:
-                os.makedirs(os.path.dirname(path), exist_ok=true)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(self.trade_history, f, ensure_ascii=False, indent=2)
         except Exception:
@@ -849,10 +904,10 @@ class RiskManager:
 
     def load_history(self, path: str | None = None):
         path = path or self.history_path
-        if not patgh:
+        if not path:
             return
         with self._hist_lock:
-            if os.path.exist(path):
+            if os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 if isinstance(data, list):
@@ -882,15 +937,20 @@ class RiskManager:
 
         # keys in self.positions are whatever you used when recording (looks like ES)
         pos = self.positions.get(sym) or self.positions.get(symbol)
-        return int((pos or {}).get("qty") or 0)
-        # if pos:
-        #     return int(pos.get("qty") or 0)
+        if not pos:
+            return 0
+        return int(pos.get("qty") or 0)
 
-        # # fallback: try prefix match (e.g., "ES" might correspond to "ESH6")
-        # for k, p in self.positions.items():
-        #     if (k or "").upper().startswith(sym):
-        #         return int(p.get("qty") or 0)
 
-        # return 0 
+    def get_open_position(self, symbol: str) -> dict | None:
+        sym = (symbol or "").upper()
+        pos = self.positions.get(sym) or self.positions.get(symbol)
+        if not pos:
+            return None
+        # fallback
+        if int(pos.get("qty") or 0) == 0:
+            return None
+
+        return pos
 
         

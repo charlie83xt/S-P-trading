@@ -171,44 +171,55 @@
    ],
  
    "positions.tab": [
-     "span.lm_title >> text=Positions",
-     "#content .lm_tabs .lm_tab .lm_title:has-text('Positions')"
-   ],
-   "orders.tab": [
-     "span.lm_title >> text=Orders",
-     "#content .lm_tabs .lm_tab .lm_title:has-text('Orders')"
+     "#content .lm_tabs .lm_tab:has(.lm_title:has-text('Positions'))",
+     ".lm_tabs .lm_tab:has(.lm_title:has-text('Positions'))",
+     ".lm_tab:has(.lm_title:has-text('Positions'))",
+     ".lm_tabdropdown_list .lm_title:has-text('Positions')",
+     ".lm_tabdropdown_list .lm_item:has-text('Positions')"
    ],
    "positions.table": [
+     "#content .lm_item_container:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",
+     "#content .lm_content:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",
+     "#content .lm_stack:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",
+     ".public_fixedDataTable_main",
      "[data-test-id='positions-table']",
      ".module.module-dom .positions-table",
      ".module .module-dom .positions-table",
-
-     ".public_fixedDataTable_main",
      ".module.positions.data-table .public_fixedDataTable_main",
      ".module.positions.data-table .fixedDataTableLayout_main",
      ".module.positions.data-table",
-     ".fixedDataTableLayout_main",
-     ".fixedDataTableLayout_rowsContainer",
-     "[class*='fixedDataTable']",
-     "[class*='FixedDataTable']",
      ".positions-table",
      "#content .positions-table"
    ],
+   "positions.tab_active": [
+    "#content .lm_tabs .lm_tab.lm_active:has(.lm_title:has-text('Positions'))",
+    ".lm_tab.lm_active:has(.lm_title:has-text('Positions'))"
+   ],
+   "orders.tab": [
+    "#content .lm_tabs .lm_tab:has(.lm_title:has-text('Orders'))",
+    ".lm_tabs .lm_tab:has(.lm_title:has-text('Orders'))",
+    ".lm_tab:has(.lm_title:has-text('Orders'))",
+    ".lm_tabdropdown_list .lm_title:has-text('Orders')",
+    ".lm_tabdropdown_list .lm_item:has-text('Orders')"
+   ],
    "orders.table": [
+     "#content .lm_stack:has(.lm_title:has-text('Orders')) .public_fixedDataTable_main",
+     "#content .lm_item_container:has(.lm_title:has-text('Orders')) .public_fixedDataTable_main",
+     "#content .lm_content:has(.lm_title:has-text('Orders')) .public_fixedDataTable_main",
      "[data-test-id='orders-table']",
+     ".orders-table",
+     "#content .orders-table",
      ".module.module-dom .orders-table",
      ".module .module-dom .orders-table",
-
-     ".public_fixedDataTable_main",
      ".module.orders.data-table .public_fixedDataTable_main",
      ".module.orders.data-table .fixedDataTableLayout_main",
      ".module.orders.data-table",
-     ".fixedDataTableLayout_main",
-     ".fixedDataTableLayout_rowsContainer",
-     "[class*='fixedDataTable']",
-     "[class*='FixedDataTable']",
-     ".orders-table",
-     "#content .orders-table"
+     ".fixedDataTableLayout_rowsContainer"
+   ],
+   "orders.tab_active": [
+    "#content .lm_tabs .lm_tab.lm_active:has(.lm_title:has-text('Orders'))",
+    ".lm_tabs .lm_tab.lm_active:has(.lm_title:has-text('Orders'))",
+    ".lm_tab.lm_active:has(.lm_title:has-text('Orders'))"
    ],
  
    "account.balance_pane": [
@@ -227,5 +238,10 @@
    "price.last": [
      ".module.chart .last-price-info .number",
      ".chart-wrapper .last-price-info .number"
+   ],
+   "tabs.dropdown_button": [
+    "#content .lm_header .lm_tabdropdown",
+    ".lm_header .lm_tabdropdown",
+    ".lm_tabdropdown"
    ]
  }
