@@ -27,6 +27,7 @@ import re
 import json
 import asyncio, threading
 import traceback, sys
+from contextlib import contextmanager
 
 # Import your shared interface
 # If our interface name/module differs, we will adjust this import
@@ -36,7 +37,7 @@ from playwright.async_api import async_playwright, Error as PWError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 logger = logging.getLogger(__name__)
-logger.info("Loaded tradovate_web_ui_api from: %", __file__)
+logger.info("Loaded tradovate_web_ui_api from: %s", __file__)
 
 CLICKABLE = ":is(button, div.btn, [role=button], a[role=button], span.btn)"
 TRACE_PRICES = False
@@ -89,21 +90,21 @@ class TradovateWebUIAPI(TradingAPIInterface):
         self._sel = {}
         self.clickable = CLICKABLE
         self.TRACE_PRICES = TRACE_PRICES
+
+        self._ui_lock = getattr(self, "_ui_lock", threading.RLock())
         
         try:
             self._load_selectors()
         except Exception:
             # minimal defaults using your current page hints
             self._sel = {
-                 "order.buy_market": [".market-buttons >> text=Buy Mkt"],
+                "order.buy_market": [".market-buttons >> text=Buy Mkt"],
                 "order.sell_market": [".market-buttons >> text=Sell Mkt"],
                 "order.qty_input": [
                     ".info-column-qty input.form-control",
                     ".info-column-qty .select-input input",
                     "xpath=//small[contains(.,'Quantity')]/following::input[1]"
                 ],
-                "orders.tab": ["ul.lm_tabs .lm_title:has-text('Orders')"],
-                "positions.tab": ["ul.lm_tabs .lm_title:has-text('Positions')"],
                 "account.balance_pane": [".account-info-inline .balance-view .balance-row"],
                 "app.logged_in_marker.any": [
                     ".market-buttons .btn.btn-success",".market-buttons .btn.btn-danger",".last-price-info .number"
@@ -112,7 +113,74 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 "symbol.search_input": ["input[placeholder*='Search']", "input[type='search']"],
                 "symbol.first_result": [".search-list .item, .list .item, .rc-virtual-list-holder-inner .rc-select-item-option-content"]
             }
+            logger.exception("selector load failed; using fallback selectors")
+            # self._sel.update({
+            #     "positions.table": [
+            #         "#content [role=table]",
+            #         "#content .fixedDataTableLayout_main",
+            #         "#content table",
+            #         ".fixedDataTableLayout_main",
+            #         "[role=table]",
+            #         "table"
+            #     ],
+            #     "orders.table": [
+            #         "#content [role=table]",
+            #         "#content .fixedDataTableLayout_main",
+            #         "#content table",
+            #         ".fixedDataTableLayout_main",
+            #         "[role=table]",
+            #         "table"
+            #     ],
+            #     "positions.tab": [
+            #         "#content .lm_tabs .lm_title:has-text('Positions')",
+            #         "ul.lm_tabs .lm_title:has-text('Positions')",
+            #         ".lm_tab:has-text('Positions')"
+            #     ],
+            #     "orders.tab": [
+            #         "#content .lm_tabs .lm_title:has-text('Orders')",
+            #         "ul.lm_tabs .lm_title:has-text('Orders')",
+            #         ".lm_tab:has-text('Orders')"
+            #     ],
+            #     }
+            # )
+            self._sel.update({
+                # Tabs: click the TAB CONTAINER, not the title span
+                "positions.tab": [
+                    "#content .lm_tabs .lm_tab:has(.lm_title:has-text('Positions'))",
+                    ".lm_tabs .lm_tab:has(.lm_title:has-text('Positions'))",
+                    ".lm_tab:has(.lm_title:has-text('Positions'))",
+                ],
+                "orders.tab": [
+                    "#content .lm_tabs .lm_tab:has(.lm_title:has-text('Orders'))",
+                    ".lm_tabs .lm_tab:has(.lm_title:has-text('Orders'))",
+                    ".lm_tab:has(.lm_title:has-text('Orders'))",
+                ],
 
+                # Tab active checks (optional but recommended)
+                "positions.tab_active": [
+                    "#content .lm_tabs .lm_tab.lm_active:has(.lm_title:has-text('Positions'))",
+                    ".lm_tab.lm_active:has(.lm_title:has-text('Positions'))",
+                ],
+                "orders.tab_active": [
+                    "#content .lm_tabs .lm_tab.lm_active:has(.lm_title:has-text('Orders'))",
+                    ".lm_tab.lm_active:has(.lm_title:has-text('Orders'))",
+                ],
+
+                # Tables: keep them scoped to the module that owns the title.
+                # Do NOT use [role=table] here.
+                "positions.table": [
+                    "#content .lm_item_container:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",
+                    "#content .lm_content:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",
+                    "#content .lm_stack:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",
+                    ".public_fixedDataTable_main",
+                ],
+                "orders.table": [
+                    "#content .lm_stack:has(.lm_title:has-text('Orders')) .public_fixedDataTable_main",
+                    "#content .lm_item_container:has(.lm_title:has-text('Orders')) .public_fixedDataTable_main",
+                    "#content .lm_content:has(.lm_title:has-text('Orders')) .public_fixedDataTable_main",
+                    ".public_fixedDataTable_main",
+                ],
+            })
     # ------------------- TradingAPIInterface: Lifecycle --------------------
 
     def connect(self) -> bool:
@@ -243,43 +311,144 @@ class TradovateWebUIAPI(TradingAPIInterface):
             return []
 
     
-    def get_positions(self) -> List[Dict[str, Any]] | None:
+    def get_positions(self, root_symbol: str | None = None, ui_symbol: str | None = None) -> List[Dict[str, Any]] | None:
         """
         Returns:
         - [] if we are confidently flat (positions table exists but no non-zero NET POS rows)
         - [{symbol, qty, ...}, ...] for ALL rows we can parse (qty may be 0 too, for debugging)
         - None if we cannot determine (UI not found / scrape failed)
         """
+        now = time.time()
+
+        # Throttle + cache to avoid scrapping repeatedly ad to survive brief UI glitches
+        cache = getattr(self, "_pos_cache", None)
+        cache_ts = getattr(self, "_pos_cache_ts", 0.0)
+        if cache is not None and (now - cache_ts) < 0.8:
+            return cache
+
         try:
             self._ensure_page()
             self.cleanup_backdrops(timeout_ms=1500)
 
+            # expand the configured table selectors (our selector map)
+            table_selectors = self._expand("positions.table")
+
+            # 1) TABLE-FIRST: if the positions table is already visible, parse immediately
+            tab_active = False
+            try:
+                tab_active = bool(self._first_visible_selector(self._expand("positions.tab_active")))
+            except Exception:
+                tab_active = False
+            
+            if tab_active:
+                table_sel = self._first_visible_selector(table_selectors)
+                if table_sel:
+                    table = self._page.locator(table_sel).first
+                    if self._looks_like_positions_table(table):
+                        logger.info("get_positions: table-first hit selector=%s", table_sel)
+                        result = self._parse_positions_table(table, root_symbol=root_symbol, ui_symbol=ui_symbol)
+                        self._pos_cache = result
+                        self._pos_cache_ts = now
+                        return result
+                    else:
+                        logger.info("get_positions: table-first selector found but does NOT look like Positions table -> ignore")
+
+            # 2) If not table visible, attempt to go to Positions tab
             # Go to positions tab (using selector map)
-            self._click_any("positions.tab", timeout_ms=3000)
+            # Below replaced:
+            # self._click_any("positions.tab", timeout_ms=8000)
+            
+            # By...
+            # tab_sel = self._expand("positions.tab") # likely a list
+            # # try each candidate selector until one works
+            clicked = self._click_any_first_visible("positions.tab", timeout_ms=8000)
+            if clicked:
+                logger.info("get_positions: clicked positions.tab")
+            # for s in (tab_sel if isinstance(tab_sel, list) else [tab_sel]):
+            #     if self._click_first_visible_sync(s, timeout_ms=8000):
+            #         clicked = True
+            #         logger.info("get_positions: clicked positions.tab via selector=%s", s)
+            #         active = self._wait_any(self._expand("positions.tab_active"), timeout_ms=2000)
+            #         logger.info("get_positions: tab_active after click=%s", bool(active))
+            #         break
+            if not clicked:
+                logger.warning("get_positions: could not click Positions tab (no visible+enabled match)")
+                return self._cache_fallback(now)
+
             self.cleanup_backdrops(timeout_ms=1500)
             
+            # 3) Wait for the table ( a bit longer than 2500ms to reduce flakness)
             # Wait for positions table container (using selector map)
-            table_sel = self._wait_any(self._expand("positions.table"), timeout_ms=2500)
+            table_sel = self._wait_any(table_selectors, timeout_ms=8000)
             if not table_sel:
-                logger.warning("get_positions: positions.table not found/visible")
-                return None
+                logger.warning("get_positions: positions.table not found/visible after tab click")
+                return self._cache_fallback(now)
 
             table = self._page.locator(table_sel).first
             logger.info("get_positions: using table selector=%s", table_sel)
 
-            # --- Try a few common patterns inside the table ---
+            result = self._parse_positions_table(table, root_symbol=root_symbol, ui_symbol=ui_symbol)
+            self._pos_cache = result
+            self._pos_cache_ts = now
+            return result
 
+        except Exception as e:
+            logger.warning("get_positions failed: %s", e)
+            return self._cache_fallback(now)
+
+
+    def _cache_fallback(self, now: float) -> List[Dict[str, Any]] | None:
+        """Return cached positions if recent, else None."""
+        cache = getattr(self, "_pos_cache", None)
+        cache_ts = getattr(self, "_pos_cache_ts", 0.0)
+        age = now - cache_ts
+        if cache is not None and age < 5.0:
+            logger.warning("get_positions: using cached positions age=%.2fs", age)
+            return cache
+
+        return None
+
+
+    def _first_visible_selector(self, selectors: List[str]) -> Optional[str]:
+        """Return the first selector that exist in DOM (count>0)."""
+        for sel in selectors:
             try:
-                empty_markers = [
-                    "text=/no positions/i",
-                    "text=/flat/i",
-                    "text=/you have no positions/i",
-                ]
-                for em in empty_markers:
+                loc = self._page.locator(sel)
+                cnt = self._run(loc.count(), timeout=0.6) or 0
+                if cnt > 0:
+                    # we don't require visible; DOM presence is enough because virtual tables may be 'present'
+                    return sel
+            except Exception:
+                continue
+        return None
+
+
+    def _parse_positions_table(self, table: Any, root_symbol: str | None = None, ui_symbol: str | None = None) -> List[Dict[str, Any]] | None:
+        """
+        Parse the already-located positions table locator.
+        Returns [] / list[...] / None using the same rules as your current get_positions().
+        """
+        # --- Empty markers ---
+        # --- Try a few common patterns inside the table ---
+
+        try:
+            empty_markers = [
+                "text=/no positions/i",
+                "text=/flat/i",
+                "text=/you have no positions/i",
+            ]
+
+            # table = self._page.locator(table_sel).first
+            # if self._run(table.count(), timeout=1.0) == 0:
+            #     return None
+            for em in empty_markers:
+                try:
                     if self._run(table.locator(em).count(), timeout=0.8):
                         return []
-            except Exception:
-                pass
+                except Exception:
+                    continue
+            # except Exception:
+            #     pass
 
             # Better row patterns (virtualised lists / div tables)
             row_candidates = [
@@ -289,11 +458,6 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 "[role=row]",
                 "tbody tr",
                 "tr",                                   # classic table rows
-                # ".table-row",
-                # ".row",                                 # div-table style
-                # ".rc-virtual-list-holder-inner > div",  # common virtual list
-                # "[data-test-id*='position']",           # if tradovate uses test ids
-                # ".position-row",
             ]
 
             # Cell locators
@@ -304,7 +468,6 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 "[role=cell]",
                 "td"
             ]
-
 
             # 5) Helper: what counts as a tradable instrument symbol?
             # Prefer futures-style: ES, NQ, YM, RTY plus optional month code + digit (ESH6).
@@ -330,8 +493,8 @@ class TradovateWebUIAPI(TradingAPIInterface):
             
             if rows is None:
                 # Table exist but no rows found -> confidently flat
-                logger.info("get_positions: table found but no rows matched row locators")
-                return []
+                logger.info("positions table present but no rows matched ->  UNKNOWN (virtualization)")
+                return None
 
             logger.info("get_positions: using row selector=%s", used_row_sel)
 
@@ -348,8 +511,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                         continue
 
                     row_txt = self._run(r.inner_text(), timeout=1.0) or ""
-                    row_txt_norm = " ".join(row_txt.split())
-                    
+                    row_txt_norm = " ".join(row_txt.split()) 
                     # Skip empty/headers
                     if not row_txt_norm:
                         continue
@@ -393,7 +555,16 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     
                     if not sym:
                         continue # not a position row we understand
+                    
+                    if sym and sym.upper().startswith("ES"):
+                        logger.info("POS CELL DUMP sym=%s cells=%s row=%s", sym, cell_texts, row_txt_norm)
 
+                    if ui_symbol:
+                        if sym.upper() != ui_symbol.upper():
+                            continue
+                    elif root_symbol:
+                        if not sym.upper().startswith(root_symbol.upper()):
+                            continue
 
                     # 2) Extract qty (NET POS)
                     qty: Optional[int] = None
@@ -405,26 +576,60 @@ class TradovateWebUIAPI(TradingAPIInterface):
                             qty = int(mnp.group(1))
                         except Exception:
                             qty = None
+                    
+                    # --- Special-case: rows that encode direction in the symbol cell like "ESH6 Long" / "ESH6 Short"
+                    if qty is None and cell_texts:
+                        hdr = (cell_texts[0] or "").strip().lower() # e.g. "esh6 long"
+                        if (" long" in hdr) or hdr.endswith(" long"):
+                            # common layout: [<sym long>, <net>, <bought>, <sold>, ...]
+                            if len(cell_texts) > 1 and re.fullmatch(r"-?\d+", (cell_texts[1] or "").strip()):
+                                qty = int(cell_texts[1])
+                                logger.info("POS DEBUG (long/short) sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
+
+                        elif (" short" in hdr) or hdr.endswith(" short"):
+                            if len(cell_texts) > 1 and re.fullmatch(r"-?\d+", (cell_texts[1] or "").strip()):
+                                qty = -int(cell_texts[1])
+                                logger.info("POS DEBUG (long/short) sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
 
                     # Fallback: if cells look like [Symbol, NetPos, Bought, Sold, ...]
                     if qty is None and cell_texts:
-                        # Try to locate the symbol cell index
-                        sym_idx = None
-                        for idx, ct in enumerate(cell_texts):
-                            if ct.upper() == sym:
-                                sym_idx = idx
-                                break
-                        # Common: Symbol is first column, Net Pos is second
-                        cand_idxs = []
-                        if sym_idx is not None:
-                            cand_idxs.append(sym_idx + 1)
-                        cand_idxs.append(1) # Typical net pos column
-                        for k in cand_idxs:
-                            if 0 <= k < len(cell_texts):
-                                t = cell_texts[k]
-                                if re.fullmatch(r"-?\d+", t):
-                                    qty = int(t)
-                                    break
+                        # 1) If the second cell is an integer, treat it as NET POS (most common layout)
+                        if len(cell_texts) > 1:
+                            t1 = (cell_texts[1] or "").strip()
+                            if re.fullmatch(r"-?\d+", t1):
+                                qty = int(t1)
+                                logger.info("POS DEBUG (col1 netpos) sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
+
+                        # 2) If still unknown, use guarded heuristic, but DO NOT prefer bought/sold totals over netpos=0
+                        if qty is None:
+                            candidates: list[tuple[int, int]] = []
+                            # Try to locate the symbol cell index
+                            # sym_idx = None
+                            for idx, ct in enumerate(cell_texts):
+                                ct = (ct or "").strip()
+                                if not re.fullmatch(r"-?\d+", ct):
+                                    continue
+                                try:
+                                    v = int(ct)
+                                except Exception:
+                                    continue
+                                # guardrail: position size range
+                                if abs(v) <= 100:
+                                    candidates.append((idx, v))
+
+                            if candidates:
+                                # prefer the smallest absolute size (usually NET POS) and if tie, earliest column
+                                # Replace This #######
+                                candidates.sort(key=lambda x: (abs(x[1]), x[0]))
+                                qty = candidates[0][1]
+                                # With this #########
+                                # Prefer non-zero values firts; only accept 0 if it's the only plausible candidate
+                                nonzero_candidates = [c for c in candidates if c[1] != 0]
+                                pick_from = nonzero_candidates or candidates
+                                pick_from.sort(key=lambda x: (abs(x[1]), x[0]))
+                                qty = pick_from[0][1]
+                                #######
+                                logger.info("POS DEBUG sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
 
 
                     # Last resort: avoiding price fragments by excluding decimals
@@ -441,27 +646,12 @@ class TradovateWebUIAPI(TradingAPIInterface):
                                 break
 
 
-                    # Find instrument symbol
-                    # m = sym_re.search(t)
-                    # if not m:
-                    #     continue
-                    # sym = m.group(0)
-
-                    # Quantity: try to find a signed or unsigned int near the symbol
-                    # Fallback to "first int"
-                    # qty_m = re.search(r"\b-?\d+\b", t)
-                    # ints = re.findall(r"\b-?\d+\b", t)
-                    # filter out "price-like" big ints (e.g. 6947)
-                    # small_ints = [x for x in ints if len(x.lstrip("-")) <= 2] # 1 -2 digits
-                    # qty = int(small_ints[0]) if small_ints else 0
-
-
                     if qty is None:
                         qty_parse_failed = True
                         # # we found a symbol row but couldn't parse NET POS -> NOT confidently flat
-                        # logger.warning("get_positions: qty parse failed for sym=%s row=%s", sym, row_txt_norm)
+                        logger.warning("get_positions: qty parse failed for sym=%s row=%s cells=%s", sym, row_txt_norm, cell_texts)
                         # return None
-                        qty = 0 # keep row for debugging
+                        qty = None # keep row for debugging
 
                     out.append({
                         "symbol": sym, 
@@ -484,9 +674,12 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # If we saw symbol rows but couldn't parse qty reliably, state is UNKNOWN (not flat)
             if qty_parse_failed and out:
                 # we found a symbol row but couldn't parse NET POS -> NOT confidently flat
-                logger.warning("get_positions: qty parse failed for at least one row; returning None (unknown)")
-                # Temporary row_text for check purposes
-                self.logger.info("PRINTING ROW_TEXT=%s", out[0].get("row_text"))
+                # logger.warning("get_positions: qty parse failed for at least one row; returning None (unknown)")
+                # try:
+                    # Temporary row_text for check purposes
+                    # self.logger.info("PRINTING ROW_TEXT=%s", out[0].get("row_text"))
+                # except Exception:
+                    # pass
                 return None
 
             return []
@@ -1723,6 +1916,109 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
     
     # -------------------------- Frame-aware helpers ----------------------
+    def _first_visible_enabled_selector(self, selectors: List[str]) -> Optional[str]:
+        """Return first selector that is visible + enabled (usable for clicks / active checks)."""
+        for sel in selectors:
+            try:
+                loc = self._page.locator(sel).first
+                cnt = self._run(loc.count(), timeout=0.6) or 0
+                if cnt == 0:
+                    continue
+                if not self._run(loc.is_visible(), timeout=0.6):
+                    continue
+                aria = self._run(loc.get_attribute("aria-disabled"), timeout=0.6)
+                dis = self._run(loc.get_attribute("disabled"), timeout=0.6)
+                if dis and aria == "true":
+                    continue
+                return sel
+            except Exception:
+                continue
+        return None
+
+    def _is_tab_active(self, key: str) -> bool:
+        try:
+            sels = self._expand(key)
+            if not isinstance(sels, list):
+                sels = [sels]
+            return bool(self._first_visible_enabled_selector(sels))
+        except Exception:
+            return False
+
+    def _switch_to(self, tab_key: str, active_key: str, timeout_ms: int = 8000) -> bool:
+        # If already active, nothing to do
+        if self._is_tab_active(active_key):
+            return True
+
+        # 1) normal tab click
+        if self._click_any_first_visible(tab_key, timeout_ms=timeout_ms):
+            self.cleanup_backdrops(timeout_ms=1500)
+            self._wait_any(self._expand(active_key), timeout_ms=2000)
+            return True
+
+        # 2) dropdown path (GoldenLayout tab overflow)
+        if self._click_any_first_visible("tabs.dropdown_button", timeout_ms=2000):
+            # wait until dropdown list is visible
+            # optional: wait for active indicator
+            self.cleanup_backdrops(timeout_ms=800)
+            self._wait_visible_any(".lm_tabdropdown_list", timeout_ms=2000)
+            if self._click_any_first_visible(tab_key, timeout_ms=timeout_ms):
+                self.cleanup_backdrops(timeout_ms=1500)
+                self._wait_any(self._expand(active_key), timeout_ms=2000)
+                return True
+
+        return False
+
+
+    @contextmanager
+    def _with_positions_view(self):
+        ok = self._switch_to("positions.tab", "positions.tab_active")
+        try:
+            yield ok
+        finally:
+            # nothing extra
+            pass
+
+    @contextmanager
+    def _with_orders_view(self):
+        # Always return to Positions afterwards (bot health > convenience)
+        prev_was_positions = self._is_tab_active("positions.tab_active")
+
+        ok = self._switch_to("orders.tab", "orders.tab_active")
+        try:
+            yield ok
+        finally:
+            if prev_was_positions:
+                self._switch_to("positions.tab", "positions.tab_active")
+
+
+    def _looks_like_positions_table(self, table) -> bool:
+        # The real Positions table usually has a "NET POS" label somewhere
+        try:
+            if (self._run(table.locator("text=/NET\\s*POS/i").count(), timeout=0.6) or 0) > 0:
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _looks_like_orders_table(self, table) -> bool:
+        # Similar idea to _looks_like_positions_table()
+        try:
+            # Look for a couple of strong markers that only Orders has
+            markers = [
+                r"\bACTION\b",
+                r"\bCONTRACT\b",
+                r"\bAVG\s*FILL\s*PRICE\b",
+                r"\bORD\s*STATUS\b",
+                r"\bCREATE\s*TIME\b",
+            ]
+            hit = 0
+            for pat in markers:
+                if (self._run(table.locator(f"text=/{pat}/i").count(), timeout=0.6) or 0) > 0:
+                    hit += 1
+            return hit >= 2 # require 2 hits so we don't misclassify other tables
+        except Exception:
+            return False
+
     async def _find_confirm_popover(self, target: str, max_wait_ms: int):
         """
         Return the best matc hing confirmation popover locator, or None.
@@ -1865,6 +2161,22 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     return True
         except Exception:
             return False
+        return False
+
+
+    def _click_first_visible_sync(self, selector: str, timeout_ms: int = 8000) -> bool:
+        loc = self._page.locator(selector)
+        return bool(self._run(self._click_first_visible(loc, timeout_ms=timeout_ms), timeout=timeout_ms/1000 + 5))
+
+
+    def _click_any_first_visible(self, keys_or_selectors, timeout_ms: int = 8000) -> bool:
+        sels = self._expand(keys_or_selectors) if not isinstance(keys_or_selectors, list) else keys_or_selectors
+        for sel in sels:
+            try:
+                if self._click_first_visible_sync(sel, timeout_ms=timeout_ms):
+                    return True
+            except Exception:
+                continue
         return False
 
 
@@ -2145,7 +2457,54 @@ class TradovateWebUIAPI(TradingAPIInterface):
             return float(str(v))
         except:
             return float("nan")
+ 
+    def snapshot_orders_rows(self, limit: int = 30) -> set[str]:
+        """
+        Return a set of normalised row_text (uppercased) for currently visible Orders rows.
+        Used as baseline to detect newly added rows after submitting an order
+        """
+        with self._ui_lock:
+            with self._with_orders_view() as ok:
+                if not ok:
+                    return set()
 
+                try:
+                    self._ensure_page()
+                    self.cleanup_backdrops(timeout_ms=1500)
+
+                    # Reuse selectors / table-first logic the same way as get_latest_filled_order
+                    orders_table_sels = self._expand("orders.table")
+                    if not isinstance(orders_table_sels, list):
+                        orders_table_sels = [orders_table_sels]
+
+                    table_sel = self._first_visible_selector(orders_table_sels)
+                    if not table_sel:
+                        # clicked = self._click_any_first_visible("orders.tab", timeout_ms=4000)
+                        # if clicked:
+                        #     self.cleanup_backdrops(timeout_ms=1500)
+                        table_sel = self._wait_any(orders_table_sels, timeout_ms=6000)
+
+                    if not table_sel:
+                        return set()
+
+                    table = self._page.locator(table_sel).first
+                    if not self._looks_like_orders_table(table):
+                        return set()
+
+                    rows = table.locator(".fixedDataTableRowLayout_rowWrapper")
+                    cnt = self._run(rows.count(), timeout=1.0) or 0
+
+                    out = set()
+                    for i in range(min(cnt, limit)):
+                        r = rows.nth(i)
+                        if not self._run(r.is_visible(), timeout=0.5):
+                            continue
+                        txt = " ".join((self._run(r.inner_text(), timeout=1.0) or "").split())
+                        if txt:
+                            out.add(txt.upper())
+                    return out
+                except Exception:
+                    return set()
 
     def _wait(self, selector: str, timeout: int = 10000):
         return self._run(self._page.wait_for_selector(selector, timeout=timeout), timeout=timeout/1000+5)
@@ -2414,7 +2773,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             pass
 
 
-    def get_latest_filled_order(self, symbol: str, side: str, since_ts: float | None = None) -> dict | None:
+    def get_latest_filled_order(self, symbol: str, side: str, since_ts: float | None = None, *, baseline_rows: set[str] | None = None) -> dict | None:
         """
         Scrape Tradovate Orders table and return the newest FILLED order matching (symbol, side)
         after `since_ts` (epoch seconds). Best-effort.
@@ -2422,151 +2781,341 @@ class TradovateWebUIAPI(TradingAPIInterface):
             {"symbol": str, "side": str, "avg_fill": float, "filled_qty": int|float, "ts": str|None, "row_text": str}
             or None if not found.
         """
-        try:
-            self._ensure_page()
-            self.cleanup_backdrops(timeout_ms=1500)
-
-            # 1) Go to orders tab
-            self._click_any("orders.tab", timeout_ms=3000)
-            self.cleanup_backdrops(timeout_ms=1500)
-
-            # 2) Wait for Orders table container
-            table_sel = self._wait_any(self._expand("orders.table"), timeout_ms=2500)
-            if not table_sel:
-                logger.warning("get_latest_filled_order: orders.table not found/visible")
-                return None
-
-            table = self._page.locator(table_sel).first
-
-            # 3) Locate rows (same style as get_positions)
-            row_candidates = [
-                ".fixedDataTableRowLayout_rowWrapper",
-                ".public_fixedDataTableRow_main",
-                "[class*='fixedDataTableRow]",
-                "[role=row]",
-                "tbody tr",
-                "tr",
-            ]
-
-            rows = None
-            for rsel in row_candidates:
-                try:
-                    loc = table.locator(rsel)
-                    cnt = self._run(loc.count(), timeout=1.0) or 0
-                    if cnt > 0:
-                        rows = loc
-                        break
-                except Exception:
-                    continue
-
-            if rows is None:
-                return None
-
-            want_sym = (symbol or "").upper()
-            want_side = (side or "").upper()
-
-            # helper parsers
-            def _to_float_safe(txt: str | None):
-                if not txt:
-                    return None
-                t = " ".join(txt.split()).replace(",", "")
-                # extract first float-ish token
-                m = re.search(r"[-+]?\d+(?:\.\d+)?", t)
-                if not m:
-                    return None
-                try:
-                    return float(m.group(0))
-                except Exception:
+        with self._ui_lock:
+            with self._with_orders_view() as ok:
+                if not ok:
                     return None
 
-            def _to_qty_safe(txt: str | None):
-                f = _to_float_safe(txt)
-                if f is None:
-                    return None
-                # most features qty are ints
+                now = time.time()
+                
+                # ---throtle/cache (orders are bursty right after submit) ---
+                cache = getattr(self, "_orders_cache", None)
+                cache_ts = getattr(self, "_orders_cache_ts", 0.0)
+                if cache is not None and (now - cache_ts) < 0.4:
+                    return cache
+
                 try:
-                    if abs(f - int(f)) < 1e-9:
-                        return int(f)
-                except Exception:
-                    pass
-                return f
+                    self._ensure_page()
+                    self.cleanup_backdrops(timeout_ms=1500)
 
-            best = None
-            cnt = self._run(rows.count(), timeout=1.0) or 0
-            max_rows = min(cnt, 60)
 
-            for i in range(max_rows):
-                r = rows.nth(i)
-                try:
-                    if not self._run(r.is_visible(), timeout=0.5):
-                        continue
-                    row_txt = self._run(r.inner_text(), timeout=1.0) or ""
-                    row_txt_norm = " ".join(row_txt.split())
-                    if not row_txt_norm:
-                        continue
+                    want_sym = (symbol or "").upper()
+                    want_side = (side or "").upper()
 
-                    # Must contain symbol and side
-                    if want_sym and want_sym not in row_txt_norm.upper():
-                        continue
+                    # ---- local helpers ----
+                    def norm(s: str) -> str:
+                        return " ".join((s or "").split())
 
-                    # Side matching: usually "Buy" / " Sell"
-                    up = row_txt_norm.upper()
-                    if want_side == "BUY" and "BUY" not in up:
-                        continue
-                    if want_side == "SELL" and "SELL" not in up:
-                        continue
-                    
-                    # Must look FILLED (or "Filled")
-                    if "FILLED" not in up:
-                        continue
+                    # futures-ish symbol token (ES, ESH6, ESZ6, etc.)
+                    sym_re = re.compile(r"\b(?:ES|NQ|YM|RTY|MES|MNQ|MYM|M2K)(?:[FGHJKMNQUVXZ]\d{1,2})?\b", re.I) # \s*FILL|AVG|FILL\s*PRICE)\s*[:\s]*([-+]?\d+
 
-                    # Try to pull an avg fill price from the text
-                    # Common labels: "Avg Fill", "Avg", "Fill Price", etc.
-                    avg_fill = None
-                    m = re.search(r"(AVG\s*FILL|AVG|FILL\s*PRICE)\s*[:\s]*([-+]?\d+(?:\.\d+)?)", up, re.I)
-                    if m:
+                    # helper parsers
+                    def parse_float_token(txt: str | None):
+                        if not txt:
+                            return None
+                        # t = " ".join(txt.split()).replace(",", "")
+                        t = txt.replace(",", "").strip()
+                        # extract first float-ish token
+                        m = re.search(r"[-+]?\d+(?:\.\d+)?", t)
+                        if not m:
+                            return None
                         try:
-                            avg_fill = float(m.group(2))
+                            return float(m.group(0))
                         except Exception:
-                            avg_fill = None
+                            return None
 
-                    # fallback: pick the last float in the row (often avg fill is near end)
-                    if avg_fill is None:
-                        floats = re.findall(r"[-+]?\d+(?:\.\d+)?", row_txt_norm.replace(",", ""))
-                        if floats:
+                    def is_price_like(x: float) -> bool:
+                        # crude but effective for ES/NQ range; can be tune per instrument later
+                        return 500 <= x <= 100000
+
+                    row_candidates = [
+                        ".fixedDataTableRowLayout_rowWrapper",
+                        ".public_fixedDataTableRow_main",
+                        "[class*='fixedDataTableRow']",
+                        "[role=row]",
+                        "tbody tr",
+                        "tr",
+                    ]
+
+                    cell_candidates = [
+                        ".public_fixedDataTableCell_cellContent",
+                        "[class*='Cell_cellContent']",
+                        ".fixedDataTableCellLayout_main .public_fixedDataTableCell_cellContent",
+                        "[role=cell]",
+                        "td"
+                    ]
+
+
+                    # ---------- helper: parse table rows ----------
+                    def scan_orders_table(table) -> dict | None:
+                        if not self._looks_like_orders_table(table):
+                            return None
+
+                        rows = None
+                        for rsel in row_candidates:
                             try:
-                                avg_fill = float(floats[-1])
+                                loc = table.locator(rsel)
+                                cnt = self._run(loc.count(), timeout=1.0) or 0
+                                if cnt > 0:
+                                    rows = loc
+                                    break
                             except Exception:
+                                continue
+
+
+                        if rows is None:
+                            return None
+
+                        cnt = self._run(rows.count(), timeout=1.0) or 0
+                        max_rows = min(cnt, 60)
+
+                        matches: list[dict] = [] # <-- NEW
+
+                        # best = None
+
+                        for i in range(max_rows):
+                            r = rows.nth(i)
+                            try:
+                                if not self._run(r.is_visible(), timeout=0.5):
+                                    continue
+
+                                row_txt = norm(self._run(r.inner_text(), timeout=1.0) or "")
+                                # row_txt_norm = " ".join(row_txt.split())
+                                if not row_txt:
+                                    continue
+                                
+                                # optional: skip anything seen in baseline snapshot
+                                if baseline_rows is not None:
+                                    sig =row_txt.upper()
+                                    if sig in baseline_rows:
+                                        continue
+
+                                # cell first
+                                cell_texts = []
+                                for csel in cell_candidates:
+                                    try:
+                                        c = r.locator(csel)
+                                        ccount = self._run(c.count(), timeout=0.6) or 0
+                                        if ccount > 0:
+                                            for j in range(min(ccount, 30)):
+                                                ct = norm(self._run(c.nth(j).inner_text(), timeout=0.6) or "")
+                                                cell_texts.append(ct)
+                                            break
+                                    except Exception:
+                                        continue
+
+
+                                # Side matching: usually "Buy" / " Sell"
+                                up_row = row_txt.upper()
+                                up_cells = [c.upper() for c in cell_texts]
+
+                                # symbol match (prefer token match over substring)
+                                row_syms = []
+                                for blob in ([row_txt] + cell_texts):
+                                    m = sym_re.search(blob or "")
+                                    if m:
+                                        row_syms.append(m.group(0).upper())
+                                row_sym = row_syms[0] if row_syms else None
+
+
+                                # Must contain symbol and side
+                                if want_sym:
+                                    # allow root symbol "ES" to match "ESH6" etc.
+                                    if row_sym is None:
+                                        continue
+                                    if not (row_sym == want_sym or row_sym.startswith(want_sym)):
+                                        continue
+                                
+                                # Must match side
+                                if want_side == "BUY":
+                                    if not ("BUY" in up_row or any("BUY" in c for c in up_cells)):
+                                        continue
+                                elif want_side == "SELL":
+                                    if not ("SELL" in up_row or any("SELL" in c for c in up_cells)):
+                                        continue
+
+
+                                # Must look FILLED (or "Filled")
+                                if not ("FILLED" in up_row or any(c == "FILLED" for c in up_cells) or any(" FILLED" in c for c in up_cells)):
+                                    continue
+
+
+                                # Try to pull an avg fill price from the text
+                                # Common labels: "Avg Fill", "Avg", "Fill Price", etc.
+                                # 1) BEST
                                 avg_fill = None
+                                try:
+                                    u = [c.strip().upper() for c in cell_texts]
+                                    # find a cell that is exactly FILLED or starts with FILLED
+                                    idx = next((k for k, t in enumerate(u) if t == "FILLED" or t.startswith("FILLED")), None)
+                                    if idx is not None and idx > 0:
+                                        v = parse_float_token(cell_texts[idx - 1])
+                                        if v is not None and is_price_like(v):
+                                            avg_fill = v
+                                except Exception:
+                                    pass
+                                
+                                # 2) Backup
+                                if avg_fill is None:
+                                    m = re.search(r"\bAVG\s*FILL\b[:\s]*([-+]?\d+(?:\.\d+)?)", row_txt, re.I)
+                                    # m = re.search(r"(AVG\s*FILL|AVG|FILL\s*PRICE)\s*[:\s]*([-+]?\d+(?:\.\d+)?)", row_txt_norm, re.I)
+                                    if m:
+                                        avg_fill = float(m.group(1))
 
-                    if avg_fill is None:
-                        continue
+                                # 3)
+                                # fallback: pick the last float in the row (often avg fill is near end)
+                                if avg_fill is None:
+                                    floats = []
+                                    # floats = [float(x) for x in re.findall(r"[-+]?\d+(?:\.\d+)?", row_txt_norm.replace(",", ""))]
+                                    for ct in cell_texts:
+                                        v = parse_float_token(ct)
+                                        if v is not None and is_price_like(v):
+                                            floats.append(v)
+                                    if floats:
+                                        avg_fill = floats[-1]
+
+                                # 4)
+                                if avg_fill is None:
+                                    floats = [float(x) for x in re.findall(r"[-+]?\d+(?:\.\d+)?", row_txt.replace(",", ""))]
+                                    # guard: filter out obvious time parts 0-59 that appear next to ":" patterns
+                                    # simplest guard: prefer "large" prices in ES scale
+                                    candidates = [f for f in floats if is_price_like(f)] # ES will be in the thousands
+                                    if candidates:
+                                        avg_fill = candidates[-1]
+
+                                if avg_fill is None:
+                                    continue
+                                
+                                # Try to parse filled qty (optional)
+                                filled_qty = None
+                                mq = re.search(r"(FILLED|QTY|SIZE)\b[:\s]*(-?\d+(?:\.\d+)?)", row_txt, re.I)
+                                if mq:
+                                    qv = parse_float_token(mq.group(2))
+                                    if qv is not None:
+                                        filled_qty = int(qv) if abs(qv - int(qv)) < 1e-9 else qv
 
 
-                    # Try to parse filled qty (optional)
-                    filled_qty = None
-                    mqty = re.search(r"(FILLED|QTY|SIZE)\s*[:\s]*(-?\d+(?:\.\d+)?)", up, re.I)
-                    if mqty:
-                        filled_qty = _to_qty_safe(mqty.group(2))
+                                candidate =  {
+                                    "symbol": row_sym or want_sym,
+                                    "side": want_side,
+                                    "avg_fill": float(avg_fill),
+                                    "filled_qty": filled_qty,
+                                    "ts": datetime.utcnow().isoformat(),
+                                    "row_text": row_txt,
+                                }
 
-                    candidate =  {
-                        "symbol": want_sym,
-                        "side": want_side,
-                        "avg_fill": avg_fill,
-                        "filled_qty": filled_qty,
-                        "ts": datetime.utcnow().isoformat(),
-                        "row_text": row_txt_norm,
-                    }
+                                matches.append(candidate)
 
-                    # If since_ts is supplied, prefer "newest" rows (we don't have perfect timestamps, so keep first match)
-                    best = candidate
-                    break
+                                # table ordering is usually newest-first; return first match
+                                # return candidate
 
-                except Exception:
-                    continue
-            
-            return best
+                            except Exception:
+                                continue
 
-        except Exception as e:
-            logger.warning("get_latest_filled_order failed: %s", e)
-            return None
+                        # I nothing matched, dump a few rows so we can see what Tradovate is actually rendering
+                        if not matches:
+                            try:
+                                for k in range(min(max_rows, 5)):
+                                    rt = norm(self._run(rows.nth(k).inner_text(), timeout=0.8) or "")
+                                    logger.info("ORDERS ROW[%d]=%s", k, rt)
+                            except Exception:
+                                pass 
+                            return None
+                        
+                        # If ordering is unclear, safest is: return the last match we saw
+                        return matches[-1]
+
+                    # --- selectors ---
+                    orders_table_sels = self._expand("orders.table")
+                    if not isinstance(orders_table_sels, list):
+                        orders_table_sels = [orders_table_sels]
+
+                    scoped = [s for s in orders_table_sels if "has(.lm_title:has-text('Orders'))" in s]
+
+                    # -------- 0) ULTRA TABLE-FIRST: if any Orders table is already visible, scan it WITHOUT cicking tabs --------
+                    pre_sel = self._first_visible_selector(scoped) if scoped else None
+                    if pre_sel:
+                        table = self._page.locator(pre_sel).first
+                        found = scan_orders_table(table)
+                        if found:
+                            self._orders_cache = found
+                            self._orders_cache_ts = now
+                            return found
+
+                    # -------- 1) table-first if Orders tab already active --------
+                    tab_active = False
+                    try:
+                        tab_active = bool(self._first_visible_selector(self._expand("orders.tab_active")))
+                    except Exception:
+                        tab_active = False
+
+
+                    if tab_active:
+                        table_sel = self._first_visible_selector(scoped)  or self._first_visible_selector(orders_table_sels)
+                        if table_sel:
+                            table = self._page.locator(table_sel).first
+                            logger.warning("get_latest_filled_order: table-first hit selector=%s", table_sel)
+                            found = scan_orders_table(table)
+                            if found:
+                                self._orders_cache = found
+                                self._orders_cache_ts = now
+                                logger.info("get_latest_filled_order: orders tab active but scan returned no match -> will wait/refresh")
+                                return found
+                        else:    
+                            logger.info("get_latest_filled_order: orders tab active but table not visible -> will wait/refresh")
+
+
+                    # -------- 2) click Orders tab robustly --------
+                    # clicked = self._click_any_first_visible("orders.tab", timeout_ms=8000)
+                    # if not clicked:
+                    #     return None
+
+                    # tab_sels = self._expand("orders.tab")
+                    # if not isinstance(tab_sels, list):
+                    #     tab_sels = [tab_sels]
+
+                    # for s in tab_sels:
+                    #     if self._click_first_visible_sync(s, timeout_ms=8000):
+                    #         clicked = True
+                    #         break
+
+                    # if not clicked:
+                    #     logger.warning("get_latest_filled_order: could not click Orders tab (no visible+enabled match)")
+                    #     return None
+
+                    # logger.info("get_latest_filled_order: clicked orders.tab")
+                    # self.cleanup_backdrops(timeout_ms=1500)
+                        
+                    # -------- 3) wait for Orders table longer --------
+                    # table_sel = self._wait_any(orders_table_sels, timeout_ms=8000)
+                    table_sel = self._wait_any(self._expand("orders.table"), timeout_ms=8000)
+                    if not table_sel:
+                        logger.warning("get_latest_filled_order: orders.table not found/visible after tab click")
+                        return None
+
+
+                    # logger.info("get_latest_filled_order: using table selector=%s", table_sel)
+                    table = self._page.locator(table_sel).first
+                    found = scan_orders_table(table)
+
+                    self._orders_cache = found
+                    self._orders_cache_ts = now
+                    return found
+
+
+                except Exception as e:
+                    logger.warning("get_latest_filled_order failed: %s", e)
+                    return None
+
+
+# def _to_qty_safe(txt: str | None):
+#                     f = _to_float_safe(txt)
+#                     if f is None:
+#                         return None
+#                     # most features qty are ints
+#                     try:
+#                         if abs(f - int(f)) < 1e-9:
+#                             return int(f)
+#                     except Exception:
+#                         pass
+#                     return f

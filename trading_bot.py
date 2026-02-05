@@ -506,6 +506,7 @@ class TradingBot:
         Returns:
             True if trade executed successfully, False otherwise
         """
+        
         try:
             side = (signal.get("type") or signal.get("side") or "").upper()
             sym = signal.get("symbol") or self.symbol
@@ -526,9 +527,20 @@ class TradingBot:
             # 3-state -> bool
             acct_mode = cfg_dry_acct
 
+            self.logger.info(
+                "INTENT att=%s sig=%s side=%s sym=%s qty=%d px=%.2f reason=%s",
+                attempt_id,
+                signal_id, 
+                side,
+                sym,
+                qty,
+                px,
+                signal.get("reason")
+            )
+
             if is_dry:
                 # paper: drive UI up to the final submit (no confirm click)
-                self.logger.info("DRY_RUN %s %s x%s @ %s", side, sym, qty, px)
+                # self.logger.info("DRY_RUN %s %s x%s @ %s", side, sym, qty, px)
                 if api:
                     try:
                         if hasattr(api, "ensure_symbol_loaded"):
@@ -558,13 +570,13 @@ class TradingBot:
                 self.logger.error("Cannot execute live trade: API UI is disabled.")
                 return False
 
-            self.logger.info(
-                "LIVE order via UI for %s %s qty=%d @ $%.2f.",
-                sym,
-                side,
-                qty,
-                px
-            )
+            # self.logger.info(
+            #     "LIVE order via UI for %s %s qty=%d @ $%.2f.",
+            #     sym,
+            #     side,
+            #     qty,
+            #     px
+            # )
 
             try:
                 ui_sym = None
@@ -582,7 +594,7 @@ class TradingBot:
 
                 try:
                     if hasattr(api, "get_positions"):
-                        pos = api.get_positions()
+                        pos = api.get_positions(root_symbol=sym, ui_symbol=ui_sym)
                 except Exception:
                     pos = None
 
@@ -630,6 +642,12 @@ class TradingBot:
                 )
                 
                 api.set_quantity(qty)
+
+                baseline_rows = set()
+                if hasattr(api, "snapshot_orders_rows"):
+                    br = api.snapshot_orders_rows(limit=40)
+                    baseline_rows = br if br else None 
+
                 
                 # 2) Click Buy Mkt / Sell Mkt
                 # If get_positions() cannot be trusted, treat "None" as unknown.
@@ -639,8 +657,10 @@ class TradingBot:
                     return False
 
                 if isinstance(pos, list) and len(pos) == 0:
+                    self.logger.warning("Broker Positions flat (empty list) -> allowing.")
                     # confidently flat -> allow
-                    broker_row = None
+                    # broker_row = None
+                    # return False
                     # pass
                 else:
                     broker_row = _find_broker_row(pos, sym, ui_sym)
@@ -687,9 +707,16 @@ class TradingBot:
                 #     return False
 
                 self.logger.info(
-                    "ATT %s sig=%s outer_click side=%s sym=%s qty=%d",
-                    attempt_id, signal_id, side, sym, qty
+                    "LIVE order via UI for %s %s qty=%d @ $%.2f.",
+                    sym,
+                    side,
+                    qty,
+                    px
                 )
+                # self.logger.info(
+                #     "ATT %s sig=%s outer_click side=%s sym=%s qty=%d",
+                #     attempt_id, signal_id, side, sym, qty
+                # )
 
                 clicked = api.click_market_button(side.lower(), symbol=sym, skip_position_checks=True)
                 if not clicked:
@@ -725,14 +752,29 @@ class TradingBot:
                 # wait briefly for Orders table to update
                 fill_px = None
                 if hasattr(api, "get_latest_filled_order"):
-                    try:
-                        o = api.get_latest_filled_order(symbol=sym, side=side, since_ts=t0)
-                        if o and o.get("avg_fill") is not None:
-                            fill_px = float(o["avg_fill"])
-                    except Exception:
-                        fill_px = None
+                    deadline = time.time() + 4.0
+                    while time.time() < deadline:
+                        try:
+                            o = api.get_latest_filled_order(symbol=sym, side=side, since_ts=t0, baseline_rows=baseline_rows)
+                            if o and o.get("avg_fill") is not None:
+                                fill_px = float(o["avg_fill"])
+                                self.logger.info("EXEC PX from orders table: %.2f (was %.2f) row=%s", fill_px, px, o.get("row_text"))
+                                break
+                        except Exception as e:
+                            # fill_px = None
+                            self.logger.warning("Orders-table exec px scrape failed: %s", e)
+                        time.sleep(0.25)
+
+                    if fill_px is None:
+                        self.logger.info("Orders-table: no matching FILLED row found (sym=%s side=%s)", sym, side)
 
                 px_exec = fill_px if fill_px is not None else px # fallback
+
+                # Temporary logging info
+                self.logger.info(
+                    "POST-CNF Will record fill now (sig=%s att=%s side=%s sym=%s)",
+                    signal_id, attempt_id, side, sym
+                )
 
                 # 4) Only now do we record the fill
                 self.logger.info(
@@ -752,7 +794,7 @@ class TradingBot:
                 try:
                     match = None
                     for attempt in range(3):
-                        pos_rows = api.get_positions() if hasattr(api, "get_positions") else None
+                        pos_rows = api.get_positions(root_symbol=sym, ui_symbol=ui_sym) if hasattr(api, "get_positions") else None
                         if not isinstance(pos_rows, list):
                             broker_qty = None
                         else:
@@ -894,17 +936,6 @@ class TradingBot:
             if not balance_info:
                 return 0.0
             
-            # Get balance for the base currency (usually USD or USDT)
-            # for currency in ['USD', 'USDT', 'BUSD']:
-            #     if currency in balance_info:
-            #         return balance_info[currency].get('total', 0.0)
-            
-            # # If no standard currency found, return first available balance
-            # if balance_info:
-            #     first_currency = list(balance_info.keys())[0]
-            #     return balance_info[first_currency].get('total', 0.0)
-            
-            # return 0.0
             
         except Exception as e:
             self.logger.error(f"Error getting account balance: {e}")

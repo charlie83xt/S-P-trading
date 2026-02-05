@@ -937,7 +937,9 @@ class RiskManager:
 
         # keys in self.positions are whatever you used when recording (looks like ES)
         pos = self.positions.get(sym) or self.positions.get(symbol)
-        return int((pos or {}).get("qty") or 0)
+        if not pos:
+            return 0
+        return int(pos.get("qty") or 0)
 
 
     def get_open_position(self, symbol: str) -> dict | None:
