@@ -11,6 +11,7 @@ from datetime import datetime
 import logging, os
 import traceback
 import sys
+import os
 
 from trading_bot import TradingBot
 from config import Config
@@ -19,16 +20,209 @@ from minute_bar_builder import MinuteBarBuilder
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 # DASHBOARD_FILE = os.path.join(APP_DIR, "dashboard.html")
-
 log = logging.getLogger("startup")
+# ---- ADD THIS BLOCK HERE ----
+import trading_bot, risk_manager, api_factory, config
+import tradovate_web_ui_api  # wherever it is imported from
+
+from heartbeat_local import LocalSessionKeepAlive
+
+class UIWatchdog:
+    """
+    Monitors critical UI elements and provides health status.
+    Runs in background thread, checks UI every 30 seconds.
+    """
+    
+    def __init__(self, bot_instance, check_interval=30):
+        self.bot = bot_instance
+        self.interval = check_interval
+        self.running = False
+        self.thread = None
+        
+        # Health status
+        self.status = {
+            'last_check': None,
+            'last_check_ts': 0.0,
+            'elements_ok': {},
+            'consecutive_failures': 0,
+            'last_error': None,
+            'recovery_actions': []
+        }
+        
+        # Critical elements to monitor
+        self.critical_elements = [
+            'order.buy_market',
+            'order.sell_market', 
+            'order.qty_input',
+            'positions.table',
+            'orders.table'
+        ]
+    
+    def start(self):
+        """Start watchdog monitoring thread"""
+        if self.running:
+            return
+        
+        self.running = True
+        self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
+        self.thread.start()
+        logging.getLogger(__name__).info("UI Watchdog started")
+    
+    def stop(self):
+        """Stop watchdog monitoring"""
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=5)
+        logging.getLogger(__name__).info("UI Watchdog stopped")
+    
+    def _monitor_loop(self):
+        """Main monitoring loop - runs in background thread"""
+        logger = logging.getLogger(__name__)
+        
+        while self.running:
+            try:
+                self._check_ui_health()
+                time.sleep(self.interval)
+            except Exception as e:
+                logger.error(f"Watchdog check failed: {e}")
+                self.status['last_error'] = str(e)
+                time.sleep(self.interval)
+    
+    def _check_ui_health(self):
+        """Probe all critical UI elements"""
+        from datetime import datetime
+        
+        logger = logging.getLogger(__name__)
+        
+        # Get API adapter
+        api = None
+        try:
+            dm = getattr(self.bot, "data_manager", None)
+            api = getattr(dm, "api", None) if dm else None
+        except:
+            api = None
+        
+        # Skip check if no API or no Playwright page
+        if not api or not hasattr(api, 'page'):
+            self.status['last_error'] = "No API or page available"
+            return
+        
+        # Update check timestamp
+        self.status['last_check'] = datetime.now().isoformat()
+        self.status['last_check_ts'] = time.time()
+        
+        # Check each critical element
+        all_ok = True
+        for elem_key in self.critical_elements:
+            try:
+                is_ok = self._check_element_visible(api, elem_key)
+                self.status['elements_ok'][elem_key] = is_ok
+                
+                if not is_ok:
+                    all_ok = False
+                    logger.warning(f"UI element '{elem_key}' not visible")
+                    
+            except Exception as e:
+                self.status['elements_ok'][elem_key] = False
+                all_ok = False
+                logger.warning(f"Error checking '{elem_key}': {e}")
+        
+        # Update failure counter
+        if all_ok:
+            if self.status['consecutive_failures'] > 0:
+                logger.info("UI health recovered")
+            self.status['consecutive_failures'] = 0
+            self.status['last_error'] = None
+        else:
+            self.status['consecutive_failures'] += 1
+            self.status['last_error'] = f"{sum(not v for v in self.status['elements_ok'].values())} elements failed"
+            
+            # Trigger recovery actions
+            if self.status['consecutive_failures'] == 3:
+                self._attempt_recovery("log_warning")
+            elif self.status['consecutive_failures'] == 5:
+                self._attempt_recovery("page_refresh")
+            elif self.status['consecutive_failures'] >= 8:
+                self._attempt_recovery("pause_bot")
+    
+    def _check_element_visible(self, api, selector_key):
+        """Check if a UI element is visible using selectors"""
+        try:
+            # Get selectors from API's loaded selectors
+            selectors_dict = getattr(api, 'selectors', {})
+            selectors = selectors_dict.get(selector_key, [])
+            
+            if not selectors:
+                return False
+            
+            # Try first 2 selectors (avoid timeout on all)
+            page = api.page
+            for sel in selectors[:2]:
+                try:
+                    locator = page.locator(sel).first
+                    if locator.is_visible(timeout=2000):
+                        return True
+                except:
+                    continue
+            
+            return False
+            
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"Element check error: {e}")
+            return False
+    
+    def _attempt_recovery(self, action):
+        """Execute recovery action"""
+        logger = logging.getLogger(__name__)
+        
+        self.status['recovery_actions'].append({
+            'action': action,
+            'ts': datetime.now().isoformat()
+        })
+        
+        # Keep only last 10 recovery actions
+        if len(self.status['recovery_actions']) > 10:
+            self.status['recovery_actions'] = self.status['recovery_actions'][-10:]
+        
+        if action == "log_warning":
+            logger.warning(f"UI health degraded: {self.status['consecutive_failures']} consecutive failures")
+        
+        elif action == "page_refresh":
+            logger.warning("Attempting page refresh due to UI failures")
+            try:
+                api = getattr(getattr(self.bot, "data_manager", None), "api", None)
+                if api and hasattr(api, 'page'):
+                    api.page.reload(wait_until="networkidle", timeout=30000)
+                    time.sleep(5)  # Wait for page to settle
+                    logger.info("Page refresh completed")
+            except Exception as e:
+                logger.error(f"Page refresh failed: {e}")
+        
+        elif action == "pause_bot":
+            logger.error("Pausing bot due to persistent UI failures")
+            try:
+                self.bot.pause()
+                self.status['last_error'] = "Bot auto-paused due to UI failures"
+            except Exception as e:
+                logger.error(f"Failed to pause bot: {e}")
+    
+    def get_status_dict(self):
+        """Return status as dictionary for API response"""
+        return {
+            'active': self.running,
+            'last_check': self.status['last_check'],
+            'seconds_since_check': time.time() - self.status['last_check_ts'] if self.status['last_check_ts'] > 0 else None,
+            'elements': self.status['elements_ok'],
+            'consecutive_failures': self.status['consecutive_failures'],
+            'health': 'good' if self.status['consecutive_failures'] == 0 else 
+                     'degraded' if self.status['consecutive_failures'] < 5 else 'critical',
+            'last_error': self.status['last_error'],
+            'recent_actions': self.status['recovery_actions'][-5:]  # Last 5 actions
+        }
 
 app = Flask(__name__, static_folder=None)
 app.logger.info("=== web_app boot ===")
 app.secret_key = 'trading_bot_secret_key_2024'
-
-# ---- ADD THIS BLOCK HERE ----
-import trading_bot, risk_manager, api_factory, config
-import tradovate_web_ui_api  # wherever it is imported from
 
 log.info("Loaded trading_bot from: %s", trading_bot.__file__)
 log.info("Loaded api_factory from: %s", api_factory.__file__)
@@ -40,6 +234,16 @@ log.info("CWD: %s", os.getcwd())
 cfg = Config()
 api = APIFactory.create_api(cfg) # uses TRADING_PLATFORM=tradovate_ui
 bot = TradingBot(config=cfg)
+
+# ADD THESE LINES: print("=" * 80) 
+print("🔍 DEBUG: Bot created") 
+print(f"🔍 bot.data_manager = {bot.data_manager}") 
+print(f"🔍 bot.data_manager.live = {bot.data_manager.live}") 
+print(f"🔍 type(bot.data_manager.live) = {type(bot.data_manager.live)}") 
+print("=" * 80)
+
+# Initialise UI watchdog
+_watchdog = UIWatchdog(bot, check_interval=30) # Check every 30 seconds
 
 #### ---- Adding this thing here ------- ####
 # bot.risk_manager.dry_run_mode = "hold"
@@ -102,6 +306,7 @@ _thread_connected = threading.Event()
 _thread_error = None
 _last_strategy_name = None
 _last_strategy_params = {}
+keepalive = None
 
 
 # Global bot instance
@@ -127,16 +332,17 @@ def _snap_status(from_trading_thread: bool = False):
             _status["symbol"] = getattr(bot, "symbol", None) or getattr(cfg, "DEFAULT_SYMBOL", "ES")
             _status["strategy"] = type(s_obj).__name__ if s_obj else None
 
-
+            ########### --- ##################
             # keep a current_price even if heartbeat hasn’t filled it yet
-            _status.setdefault("current_price", None)
-            if _status["current_price"] in (None, 0, 0.0) and api and hasattr(api, "get_current_price"):
-                try:
-                    p = api.get_current_price(_status["symbol"])  # if your method is get_current_price, use that
-                except Exception:
-                    p = None
-                if p is not None:
-                    _status["current_price"] = float(p)
+            # _status.setdefault("current_price", None)
+            # if _status["current_price"] in (None, 0, 0.0) and api and hasattr(api, "get_current_price"):
+            #     try:
+            #         p = api.get_current_price(_status["symbol"])  # if your method is get_current_price, use that
+            #     except Exception:
+            #         p = None
+            #     if p is not None:
+            #         _status["current_price"] = float(p)
+            ########### --- ##################
 
 
             # strategy params (sandboxed so errors here don't break counters)
@@ -223,7 +429,7 @@ def _snap_status(from_trading_thread: bool = False):
             wins = 0
             # wins = sum(1 for t in trade_hist if float(t.get("pnl", 0.0) or 0.0) > 0.0)
             closed = 0 
-            for trade in trade_hist:
+            for t in trade_hist:
                 # consider it "closed" if we actually have an exit_price
                 if t.get("exit_price") is not None:
                     closed += 1
@@ -248,7 +454,7 @@ def _snap_status(from_trading_thread: bool = False):
 
             _status["risk_metrics"] = {
                 # "daily_pnl": float(getattr(rm, "daily_pnl", daily_realized) or daily_realized),
-                "daily_pnl": float(daily_realized),
+                "daily_pnl": float(getattr(rm, "daily_pnl", daily_realized)),
                 "win_rate": float(win_rate),
                 # "win_rate": float(getattr(bot, "win_rate", win_rate) or win_rate),
                 "realized_total": float(getattr(rm, "realized_pnl", 0.0) or 0.0),
@@ -256,32 +462,6 @@ def _snap_status(from_trading_thread: bool = False):
                 "unrealized_total": float(unreal_total),
                 "open_positions_count": int(len(positions)),
             }
-
-            # # Signals: use bot.signals_generated if you maintain it; else fall back to bot.signal_history length if you have it
-            # _status["total_signals"] = int(getattr(bot, "signals_generated", 0) or len(getattr(bot, "signal_history", [])))
-
-
-            # # Trades executed: prefer bot.trades_executed, else count risk_manager.trades (closed trades)
-            # trades_in_rm = getattr(rm, "trades", None)
-            # _status["executed_trades"] = int(getattr(bot, "trades_executed", 0) or (len(trades_in_rm) if isinstance(trades_in_rm, (list, dict)) else 0))
-
-
-            # # Open positions: expose both top-level and inside risk_metrics for backward/forward compatibility
-            # positions = getattr(rm, "positions", {}) or {}
-            # open_cnt = len(positions)
-            # _status["open_positions_count"] = int(open_cnt)
-
-
-            # # Risk metrics block (keep open_positions_count mirrored here too)
-            # realized = float(getattr(rm, "realized_pnl", 0.0)) if rm else 0.0
-            # unreal = float(sum((p or {}).get("unrealized", 0.0) for p in positions.values())) if positions else 0.0
-            # _status["risk_metrics"] = {
-            #     "daily_pnl": float(getattr(rm, "daily_pnl", 0.0)) if rm else 0.0,
-            #     "win_rate": float(getattr(bot, "win_rate", 0.0)),
-            #     "realized_total": realized,
-            #     "unrealized_total": unreal,
-            #     "open_positions_count": int(open_cnt),
-            # }
 
 
         # outside lock, update current_price from heartbeat or latest_analysis if available
@@ -363,6 +543,7 @@ def not_found(e):
 def _trading_main():
     """Owns Playwright (TradovateWebUIAPI) and runs the bot. All UI actions happen here"""
     global cfg, api, bot, _thread_error, _trading_thread, _last_strategy_name, _last_strategy_params
+    global keepalive
     _trading_thread = threading.current_thread()
     _thread_error = None
     _thread_ready.set()
@@ -383,11 +564,35 @@ def _trading_main():
                 try:
                     sym = getattr(bot, "symbol", getattr(cfg, "DEFAULT_SYMBOL", "ES"))
                     price = api.get_current_price(sym)
+
                     if price is not None and price == price:
+                        # 🔥 THE FIX: Update mark-to-Market with fresh price
+                        rm = getattr(bot, "risk_manager", None)
+                        if rm:
+                            try:
+                                rm.mark_to_market(sym, price)
+                            except Exception as mtm_err:
+                                app.logger.debug(f"mark_to_market error:", {mtm_err})
+
+                        # Update _status with fresh prince
                         with _status_lock:
                             s = getattr(bot, "strategy", None)
                             _status["current_price"] = float(price)
                             _status["strategy"] = type(s).__name__ if s else None
+
+                            # 🔥 ALSO UPDATE: Recalculate PnL from fresh positions
+                            if rm:
+                                unreal_total = 0.0
+                                for pos in rm.positions.values():
+                                    try:
+                                        unreal_total += float(pos.get("unrealized", 0.0) or 0.0)
+                                    except:
+                                        pass
+
+                                # Update daily PnL (realized + unrealized)
+                                realized = float(getattr(rm, "realized_pnl", 0.0))
+                                _status["risk_metrics"]["daily_pnl"] = realized + unreal_total
+                                _status["risk_metrics"]["unrealized_total"] = unreal_total
 
                         # Keep the analysis snapshot in sync so api/market_analysis shows it
                         try:
@@ -430,6 +635,8 @@ def _trading_main():
         try:
             if cmd == "shutdown":
                 try:
+                    if keepalive is not None:
+                        keepalive.stop()
                     if getattr(bot, "is_running", False):
                         bot.stop()
                     if api:
@@ -442,26 +649,27 @@ def _trading_main():
             if cmd == "connect":
                 platform = payload.get("platform") or cfg.TRADING_PLATFORM
                 symbol = payload.get("symbol") or getattr(cfg, "DEFAULT_SYMBOL", "ES")
+                
 
                 # Rebuild config+API+bot to requested platform inside THIS thread
                 cfg = Config()
                 cfg.TRADING_PLATFORM = platform
-                api = APIFactory.create_api(cfg)
-                bot = TradingBot(config=cfg)
+                # api = APIFactory.create_api(cfg)
+                # bot = TradingBot(config=cfg)
                 bot.symbol = symbol
 
                 # re-apply last requested strategy (from UI) after bot recreation
-                if _last_strategy_name:
-                    try:
-                        bot.set_strategy(_last_strategy_name, _last_strategy_params or {})
-                        app.logger.info("Thread: reapplied strategy %s %s after connect", _last_strategy_name, _last_strategy_params)
-                    except Exception as e:
-                        app.logger.exception("Reapply strategy failed: %s", e)
+                # if _last_strategy_name:
+                #     try:
+                #         bot.set_strategy(_last_strategy_name, _last_strategy_params or {})
+                #         app.logger.info("Thread: reapplied strategy %s %s after connect", _last_strategy_name, _last_strategy_params)
+                #     except Exception as e:
+                #         app.logger.exception("Reapply strategy failed: %s", e)
 
-                try:
-                    bot.data_manager.api = api
-                except Exception:
-                    pass
+                # try:
+                #     bot.data_manager.api = api
+                # except Exception:
+                #     pass
 
                 ok = True
                 if api and not api.is_connected():
@@ -469,6 +677,16 @@ def _trading_main():
                 if ok:
                     # connected = True
                     _thread_connected.set()
+
+                    try:
+                        if keepalive is not None:
+                            keepalive.stop()
+                        keepalive = LocalSessionKeepAlive(api, interval_minutes=15)
+                        keepalive.start()
+                        app.logger.info("✅ session keepalive started")
+                    except Exception as e:
+                        app.logger.warning(f"Keepalive start failed: {e}")
+
                     try:
                         if hasattr(api, "ensure_symbol_loaded"):
                             api.ensure_symbol_loaded(symbol)
@@ -501,6 +719,7 @@ def _trading_main():
 
 
                 if name:
+                    app.logger.info("🔥 SETTING STRATEGY: name=%s params=%s", name, params)
                     try:
                         bot.set_strategy(name, params)
                         app.logger.info("Thread: strategy set to %s with %s", name, params)
@@ -521,6 +740,14 @@ def _trading_main():
             elif cmd == "stop":
                 if getattr(bot, "is_running", False):
                     bot.stop()
+                
+                if keepalive is not None:
+                    try:
+                        keepalive.stop()
+                        app.logger.info("✅ session keepalive stopped")
+                    except Exception as e:
+                        app.logger.warning(f"keepalive stop failed: {e}")
+
                 try:
                     bot.is_running = False
                 except Exception:
@@ -620,6 +847,7 @@ def _ensure_trading_thread():
     _trading_thread = threading.Thread(target=_trading_main, daemon=True)
     _trading_thread.start()
     _thread_ready.wait(timeout=5) # thread booted
+    _start_watchdog_if_needed()
 
 
 def _persist_state():
@@ -644,7 +872,13 @@ def _persist_state():
         except Exception as e:
             app.logger.debug("persist positions failed: %s", e)
     except Exception as e:
-            app.logger.debug("persist_state outer failed: %s", e)       
+            app.logger.debug("persist_state outer failed: %s", e)
+
+def _start_watchdog_if_needed():
+    """Start UI watchdog if not already running"""
+    global _watchdog
+    if _watchdog and not _watchdog.running:
+        _watchdog.start()
 
 # Start trading thread early so heartbeat keeps status fresh
 # @app.before_first_request()
@@ -886,7 +1120,7 @@ def get_market_analysis():
         app.logger.exception("get_market_analysis failed: %s", e)
         return jsonify({'success': False, 'message': f'Error getting market analysis: {str(e)}'})
 
-@app.route('/api/config')
+@app.route('/api/config', methods=['GET'])
 def get_config():
     """Get current configuration."""
     return jsonify({
@@ -894,11 +1128,15 @@ def get_config():
         'current_platform': cfg.TRADING_PLATFORM,
         'default_symbol': getattr(cfg, "DEFAULT_SYMBOL", "ES"),
         'opening_range_minutes': getattr(cfg, "OPENING_RANGE_MINUTES", 30),
-        'breakout_threshold': getattr(cfg, "BREAKOUT_THRESHOLD", 0.1),
+        'breakout_threshold_percent': getattr(cfg, "BREAKOUT_THRESHOLD_PERCENT", 0.05),
+        'breakout_threshold': getattr(cfg, "BREAKOUT_THRESHOLD_PERCENT", 0.05), # Alias for compatibility
         'max_position_size': getattr(cfg, "MAX_POSITION_SIZE", 1),
         'stop_loss_percentage': getattr(cfg, "STOP_LOSS_PERCENTAGE", 2.0),
         'take_profit_percentage': getattr(cfg, "TAKE_PROFIT_PERCENTAGE", 4.0),
-        'max_daily_trades': getattr(cfg, "MAX_DAILY_TRADES", 10)
+        'max_daily_trades': getattr(cfg, "MAX_DAILY_TRADES", 10),
+        'breakout_points': getattr(cfg, "BREAKOUT_POINTS", 2.0),
+        'stop_loss_points': getattr(cfg, "STOP_LOSS_POINTS", 2.0),
+        'take_profit_points': getattr(cfg, "TAKE_PROFIT_POINTS", 2.0)
     })
 
 @app.route('/api/test_connection', methods=['POST'])
@@ -965,11 +1203,27 @@ def ui_dryrun_market():
     return jsonify(res), (200 if res.get("success") else 500)
 
 
+@app.route("/api/watchdog/status")
+def get_watchdog_status():
+    """Get UI watchdog health status"""
+    global _watchdog
+
+    if not _watchdog:
+        return jsonify({
+            "active": False,
+            "message": "Watchdog not initialized"
+        })
+    
+    return jsonify(_watchdog.get_status_dict())
+
+
 def _log_routes():
     print("\nRegistered routes:")
     for r in app.url_map.iter_rules():
         print(f" {r.rule:30s} -> {','.join(sorted(r.methods))}")
     print()
+
+
 
 import atexit
 atexit.register(lambda: _persist_state())

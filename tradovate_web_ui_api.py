@@ -92,6 +92,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
         self.TRACE_PRICES = TRACE_PRICES
 
         self._ui_lock = getattr(self, "_ui_lock", threading.RLock())
+
+        self._last_positions_rows = None
+        self._last_positions_ts = 0.0
         
         try:
             self._load_selectors()
@@ -114,35 +117,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 "symbol.first_result": [".search-list .item, .list .item, .rc-virtual-list-holder-inner .rc-select-item-option-content"]
             }
             logger.exception("selector load failed; using fallback selectors")
-            # self._sel.update({
-            #     "positions.table": [
-            #         "#content [role=table]",
-            #         "#content .fixedDataTableLayout_main",
-            #         "#content table",
-            #         ".fixedDataTableLayout_main",
-            #         "[role=table]",
-            #         "table"
-            #     ],
-            #     "orders.table": [
-            #         "#content [role=table]",
-            #         "#content .fixedDataTableLayout_main",
-            #         "#content table",
-            #         ".fixedDataTableLayout_main",
-            #         "[role=table]",
-            #         "table"
-            #     ],
-            #     "positions.tab": [
-            #         "#content .lm_tabs .lm_title:has-text('Positions')",
-            #         "ul.lm_tabs .lm_title:has-text('Positions')",
-            #         ".lm_tab:has-text('Positions')"
-            #     ],
-            #     "orders.tab": [
-            #         "#content .lm_tabs .lm_title:has-text('Orders')",
-            #         "ul.lm_tabs .lm_title:has-text('Orders')",
-            #         ".lm_tab:has-text('Orders')"
-            #     ],
-            #     }
-            # )
+            
             self._sel.update({
                 # Tabs: click the TAB CONTAINER, not the title span
                 "positions.tab": [
@@ -292,8 +267,11 @@ class TradovateWebUIAPI(TradingAPIInterface):
     def get_open_orders(self) -> List[Dict[str, Any]]:
         try:
             self._ensure_page()
-            self._click("[data-test-id='orders-tab']") # REPLACING
-            rows = self._all("[data-test-id='orders-row']") # REPLACING
+            # self._click("[data-test-id='orders-tab']") # REPLACING
+            # rows = self._all("[data-test-id='orders-row']") # REPLACING
+            with self._with_orders_view() as ok:
+                if not ok:
+                    return []
             out = []
             for r in rows:
                 out.append({
@@ -311,7 +289,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             return []
 
     
-    def get_positions(self, root_symbol: str | None = None, ui_symbol: str | None = None) -> List[Dict[str, Any]] | None:
+    def get_positions(self, root_symbol: str | None = None, ui_symbol: str | None = None, include_zero_rows: bool = False) -> List[Dict[str, Any]] | None:
         """
         Returns:
         - [] if we are confidently flat (positions table exists but no non-zero NET POS rows)
@@ -319,6 +297,18 @@ class TradovateWebUIAPI(TradingAPIInterface):
         - None if we cannot determine (UI not found / scrape failed)
         """
         now = time.time()
+
+        with self._ui_lock:
+            self._ensure_page()
+            self.cleanup_backdrops(timeout_ms=1500)
+            try:
+                self._switch_to(
+                    "positions.tab",
+                    "positions.tab_active",
+                    timeout_ms=4000,
+                )
+            except Exception:
+                logger.warning("get_positions: failed to enforce Positions tab")
 
         # Throttle + cache to avoid scrapping repeatedly ad to survive brief UI glitches
         cache = getattr(self, "_pos_cache", None)
@@ -346,7 +336,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     table = self._page.locator(table_sel).first
                     if self._looks_like_positions_table(table):
                         logger.info("get_positions: table-first hit selector=%s", table_sel)
-                        result = self._parse_positions_table(table, root_symbol=root_symbol, ui_symbol=ui_symbol)
+                        result = self._parse_positions_table(table, root_symbol=root_symbol, ui_symbol=ui_symbol, include_zero_rows=include_zero_rows)
                         self._pos_cache = result
                         self._pos_cache_ts = now
                         return result
@@ -373,6 +363,22 @@ class TradovateWebUIAPI(TradingAPIInterface):
             #         break
             if not clicked:
                 logger.warning("get_positions: could not click Positions tab (no visible+enabled match)")
+
+                table_sel = self._first_visible_selector(table_selectors)
+                if table_sel:
+                    table = self._page.locator(table_sel).first
+                    if self._looks_like_positions_table(table):
+                        logger.info("get_positions: recovered via table-first despite inactive tab")
+                        result = self._parse_positions_table(
+                            table,
+                            root_symbol=root_symbol,
+                            ui_symbol=ui_symbol,
+                            include_zero_rows=include_zero_rows
+                        )
+                        self._pos_cache = result
+                        self._pos_cache_ts = now
+                        return result
+
                 return self._cache_fallback(now)
 
             self.cleanup_backdrops(timeout_ms=1500)
@@ -423,7 +429,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         return None
 
 
-    def _parse_positions_table(self, table: Any, root_symbol: str | None = None, ui_symbol: str | None = None) -> List[Dict[str, Any]] | None:
+    def _parse_positions_table(self, table: Any, root_symbol: str | None = None, ui_symbol: str | None = None, include_zero_rows: bool = False) -> List[Dict[str, Any]] | None:
         """
         Parse the already-located positions table locator.
         Returns [] / list[...] / None using the same rules as your current get_positions().
@@ -583,12 +589,14 @@ class TradovateWebUIAPI(TradingAPIInterface):
                         if (" long" in hdr) or hdr.endswith(" long"):
                             # common layout: [<sym long>, <net>, <bought>, <sold>, ...]
                             if len(cell_texts) > 1 and re.fullmatch(r"-?\d+", (cell_texts[1] or "").strip()):
-                                qty = int(cell_texts[1])
+                                v = int(cell_texts[1]) # NEW
+                                qty = v if v > 0 else abs(v) # NEW normalise long to +, previously: int(cell_texts[1])
                                 logger.info("POS DEBUG (long/short) sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
 
                         elif (" short" in hdr) or hdr.endswith(" short"):
                             if len(cell_texts) > 1 and re.fullmatch(r"-?\d+", (cell_texts[1] or "").strip()):
-                                qty = -int(cell_texts[1])
+                                v = int(cell_texts[1]) # NEW
+                                qty = v if v < 0 else -abs(v) # NEW normalise short to -, previously: -int(cell_texts[1])
                                 logger.info("POS DEBUG (long/short) sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
 
                     # Fallback: if cells look like [Symbol, NetPos, Bought, Sold, ...]
@@ -670,6 +678,10 @@ class TradovateWebUIAPI(TradingAPIInterface):
             nonzero = [r for r in out if int(r.get("qty") or 0) != 0]
             if nonzero:
                 return out # return ALL rows; caller filters
+
+            # NEW: if caller wants the rows even when flat, return them
+            if include_zero_rows and out:
+                return out
 
             # If we saw symbol rows but couldn't parse qty reliably, state is UNKNOWN (not flat)
             if qty_parse_failed and out:
@@ -1447,6 +1459,12 @@ class TradovateWebUIAPI(TradingAPIInterface):
         In DRY_RUN we *do not* click any confirm sunbmit
         """
         try:
+            # HARD REQUIREMENT: Positions must be the active panel
+            try:
+                self._switch_to("positions.tab", "positions.tab_active")
+            except Exception:
+                pass
+            
             side = (side or "").strip().lower()
             buy = side.startswith("b")
             t_ms = self._norm_timeout_ms(timeout=timeout, timeout_ms=timeout_ms, default_ms=getattr(self, "timeout_ms", 3000))
@@ -3106,6 +3124,71 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 except Exception as e:
                     logger.warning("get_latest_filled_order failed: %s", e)
                     return None
+
+    def ensure_trading_panels_ready(self, timeout_ms: int = 12000) -> bool:
+        """
+        Ensure the UI is in a good state for scraping and trading:
+        - Clear backdrops/modals
+        - Make Positions tab visible (and its table detectable)
+        - Optionally touch Orders tab so orders-table scrapes also work later
+
+
+        Returns True if Positions table becomes detectable, else False.
+        """
+        try:
+            self._ensure_page()
+            try:
+                self.cleanup_backdrops(timeout_ms=1500)
+            except Exception:
+                pass
+
+
+            # --- Force Positions tab ---
+            clicked = False
+            try:
+                clicked = bool(self._click_any_first_visible("positions.tab", timeout_ms=min(timeout_ms, 8000)))
+            except Exception:
+                clicked = False
+
+
+            if not clicked:
+                logger.warning("ensure_trading_panels_ready: could not click positions.tab")
+            else:
+                logger.info("ensure_trading_panels_ready: clicked positions.tab")
+
+
+            try:
+                self.cleanup_backdrops(timeout_ms=1500)
+            except Exception:
+                pass
+
+
+            # Wait for a positions table selector to appear (DOM presence is enough)
+            table_selectors = self._expand("positions.table")
+            sel = self._wait_any(table_selectors, timeout_ms=timeout_ms)
+            if not sel:
+                logger.warning("ensure_trading_panels_ready: positions.table not detectable after click")
+                return False
+
+
+            logger.info("ensure_trading_panels_ready: positions.table ready selector=%s", sel)
+
+
+            # --- Warm Orders tab too (optional but helps later scrapes) ---
+            try:
+                self._click_any_first_visible("orders.tab", timeout_ms=2500)
+                logger.info("ensure_trading_panels_ready: clicked orders.tab (warm)")
+                # then go back to positions so steady state is Positions
+                self._click_any_first_visible("positions.tab", timeout_ms=2500)
+                logger.info("ensure_trading_panels_ready: returned to positions.tab")
+            except Exception:
+                pass
+
+
+            return True
+        except Exception as e:
+            logger.warning("ensure_trading_panels_ready failed: %s", e)
+            return False
 
 
 # def _to_qty_safe(txt: str | None):

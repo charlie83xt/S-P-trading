@@ -7,13 +7,14 @@ from typing import Dict, List, Optional, Tuple, Any
 import logging
 import os, json
 import threading
+from config import Config
 
 class RiskManager:
     """
     Risk management system for controlling trading exposure and losses.
     """
     
-    def __init__(self, max_position_size: float = 0.1, stop_loss_pct: float = 2.0,
+    def __init__(self, config: Config, max_position_size: float = 0.1, stop_loss_pct: float = 2.0,
                  take_profit_pct: float = 4.0, max_daily_trades: int = 10,
                  max_daily_loss: float = 5.0, cooldown_period: int = 300):
         """
@@ -33,6 +34,7 @@ class RiskManager:
         self.max_daily_trades = max_daily_trades
         self.max_daily_loss = max_daily_loss
         self.cooldown_period = cooldown_period
+        self.config = config
         
         # Trading state tracking
         self.daily_trades = 0
@@ -65,6 +67,7 @@ class RiskManager:
 
         self.wins = 0
         self.losses = 0
+        self.vol = {}
     
     def _check_new_day(self):
         """Check if it's a new trading day and reset daily counters."""
@@ -124,6 +127,71 @@ class RiskManager:
             return False, "Calculated position size is zero or negative", 0.0
         
         return True, "Trade validated", suggested_quantity
+
+    def update_volatility(self, symbol: str, price:float, alpha: float = 0.05) -> float:
+        """
+        EMMA of absolute price changes in *points* (ATR-ish from ticks/loop prices).
+        Returns current volatility estimate in points
+        """
+
+        # sym = self._norm_sym(symbol)
+        sym = (symbol or "").upper()
+        px = float(price)
+
+        st = self.vol.get(sym)
+        if not st:
+            self.vol[sym] = {"last_px": px, "ewma_abs": 0.0}
+            return 0.0
+
+        last_px = float(st["last_px"])
+        abs_move = abs(px - last_px)
+
+        ewma = float(st["ewma_abs"])
+        ewma = (1 - alpha) * ewma + alpha * abs_move
+
+        st["last_px"] = px
+        st["ewma_abs"] = ewma
+        return ewma
+
+    def calculate_dynamic_stops(self, symbol: str, current_price: float) -> tuple[float, float]:
+        """ 
+        Calculate adaptive stop/take points based on recent volatility. 
+        Returns: (stop_points, take_points)
+        """
+
+        # Get current volatility (already calculated by update_volatility)
+        vol = self.update_volatility(symbol, current_price, alpha=0.05) 
+        # Configuration (these could come from config.py later) 
+        stop_loss_base_points = getattr(self.config, "STOP_LOSS_BASE_POINTS", 4.0) 
+        take_profit_base_points = getattr(self.config, "TAKE_PROFIT_BASE_POINTS", 6.0)
+        volatility_stop_multiplier = getattr(self.config, "VOLATILITY_STOP_MULTIPLIER", 2.5)
+        volaility_take_multiplier = getattr(self.config, "VOLATILITY_TAKE_MULTIPLIER", 4.0)
+        max_stop_loss_points = getattr(self.config, "MAX_STOP_LOSS_POINTS", 12.0)
+        min_stop_loss_point = getattr(self.config, "MIN_STOP_LOSS_POINTS", 2.0)
+        max_take_profit_points = getattr(self.config, "MAX_TAKE_PROFIT_POINTS", 20.0)
+        min_take_profit_points  = getattr(self.config, "MIN_TAKE_PROFIT_POINTS", 4.0)
+        # # Calculate adaptive stops with bounds
+        stop_pts = max( 
+            min_stop_loss_point, 
+            min( 
+                max_stop_loss_points, 
+                max(stop_loss_base_points, vol * volatility_stop_multiplier) 
+            ) 
+        )
+
+        take_pts = max( 
+            min_take_profit_points, 
+            min( 
+                max_take_profit_points, 
+                max(take_profit_base_points, vol * volaility_take_multiplier) 
+            ) 
+        )
+
+        # Ensure minimum risk/reward ratio (target >= 1.2x stop) 
+        if take_pts < stop_pts * 1.2: 
+            take_pts = stop_pts * 1.5 
+        return stop_pts, take_pts
+
     
     def _calculate_position_size(self, account_balance: float, current_price: float, signal: Dict) -> float:
         """
@@ -272,8 +340,8 @@ class RiskManager:
             'stop_loss', 'take_profit', or None
         """
 
-        stop_pts = getattr(self, "STOP_LOSS_POINTS", None)
-        take_pts = getattr(self, "TAKE_PROFIT_POINTS", None)
+        stop_pts = getattr(self.config, "STOP_LOSS_POINTS", None)
+        take_pts = getattr(self.config, "TAKE_PROFIT_POINTS", None)
 
         # if our config defines points, prefer them
         if stop_pts is not None and take_pts is not None:
@@ -411,9 +479,13 @@ class RiskManager:
         # return self.current_positions.get(symbol)
 
     ### --- extra-helper methods --- ####
+    def _norm_sym(self, symbol: str) -> str:
+        return (symbol or "").upper().strip()
+
     def check_exit_points(self, symbol: str, current_price: float, stop_points: float, take_points: float) -> str | None:
-        sym = (symbol or "").upper() 
-        pos = self.positions.get(sym) or self.positions.get(symbol) # From paper_fill
+        sym = self._norm_sym(symbol)
+        # sym = (symbol or "").upper() 
+        pos = self.positions.get(sym) or self.positions.get(sym) # From paper_fill
         if not pos:
             return None
 
@@ -465,15 +537,16 @@ class RiskManager:
         if mode == "instant_close":
             return self._paper_fill_instant_close(symbol, side, qty, price, dry_run)
 
+        sym = self._norm_sym(symbol)
         side = (side or "").upper()
         qty = int(qty)
         # pos = self.positions.setdefault(symbol, {"qty": 0, "avg_price": 0.0, "unrealized": 0.0})
         px = float(price)
-        cm = float(self.contract_multipliers.get(symbol, 1.0))
+        cm = float(self.contract_multipliers.get(sym, 1.0))
         # side = side.upper()
         # ts = ts or datetime.utcnow().isoformat(timespec="seconds")
 
-        pos = self.positions.setdefault(symbol, {"qty": 0, "avg_price": 0.0, "last_px": px, "unrealized": 0.0})
+        pos = self.positions.setdefault(sym, {"qty": 0, "avg_price": 0.0, "last_px": px, "unrealized": 0.0})
         meta = {"fill_id": fill_id, "signal_id": signal_id, "attempt_id": attempt_id}
 
         cur_qty = int(pos["qty"])
@@ -635,10 +708,17 @@ class RiskManager:
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }
 
+        # Log to analytics
+        try:
+            from trade_analytics import TradeAnalytics
+            analytics = TradeAnalytics()
+            analytics.log_trade(trade_record)
+        except Exception:
+            pass # Don't break trading if logging fails
 
         # update last price & unrealized
         pos["last_px"] = px
-        self.mark_to_market(symbol, last_price=px)
+        self.mark_to_market(sym, last_price=px)
 
         # realize P&L & append trade if we closed/reduced
         if trade_record is not None:
@@ -674,10 +754,11 @@ class RiskManager:
         We still keep self.positions[...] in case the UI wants to show “current positions”,
         but we zero it right after closing.
         """
+        sym = self._norm_sym(symbol)
         side = (side or "").upper()
         qty = int(qty)
         px = float(price)
-        cm = float(self.contract_multipliers.get(symbol, 1.0))
+        cm = float(self.contract_multipliers.get(sym, 1.0))
 
 
         # 1) “open” record (for completeness — some UIs like to know the original side)
@@ -729,8 +810,8 @@ class RiskManager:
         # 4) keep positions shape the UI expects, but flat
         # web_app /api/positions is reading rm.positions[sym] -> {qty, avg_price, unrealized}
         # so we write it, then zero it
-        self.positions.setdefault(symbol, {})
-        self.positions[symbol] = {
+        self.positions.setdefault(sym, {})
+        self.positions[sym] = {
             "qty": 0,
             "avg_price": 0.0,
             "last_px": px,
@@ -751,93 +832,6 @@ class RiskManager:
 
         return close_record
 
-        # remaining = qty # IMPORTANT: consume this as we close/open
-
-        # mult = self._mult(symbol)
-
-        # if side_u == "BUY":
-        #     # 1) if we are short, this BUY first closest short
-        #     if pos["qty"] < 0 and remaining > 0:
-        #         close_qty = min(remaining, -pos["qty"])
-        #         realized_this += (pos["avg_price"] - px) * close_qty * cm # short PnL
-        #         pos["qty"] += close_qty
-        #         remaining -= close_qty
-        #         if pos["qty"] == 0:
-        #             pos["avg_price"] = 0.0 # flat
-            
-        #     # 2) Any remaining increases / opens long 
-        #     if remaining > 0:
-        #         new_qty = pos["qty"] + remaining
-        #         if new_qty > 0:
-        #             pos["avg_price"] = ((pos["avg_price"] * pos["qty"]) + (px * remaining)) / new_qty
-        #         else:
-        #             # shouldn't happen on BUY, but keep safe
-        #             pos["qty"] = 0.0
-        #         pos["qty"] = new_qty
-
-        # elif side_u == "SELL":
-        #     # 1) if we are long, this SELL first closes longs
-        #     if pos["qty"] > 0 and remaining > 0:
-        #         # selling out long
-        #         close_qty = min(remaining, pos["qty"])
-        #         realized_this += (px - pos["avg_price"]) * close_qty * cm # long PnL
-        #         # self.realized_pnl += realized_this
-        #         # trade["realized_pnl"] += (price - pos["avg_price"]) * close_qty * mult 
-        #         pos["qty"] -= close_qty
-        #         remaining -= close_qty
-        #         if pos["qty"] == 0:
-        #             pos["avg_price"] = 0.0 # flat
-
-        #     # 2) Any remaining increases / opens short
-        #     if remaining > 0:
-        #         # increasing a short (or opening)
-        #         new_qty = pos["qty"] - remaining
-        #         # Weighted avg for shorts uses abs() to keep arimethic simple
-        #         if new_qty < 0:
-        #             pos["avg_price"] = ((abs(pos["qty"]) * pos["avg_price"]) + (px * remaining)) / abs(new_qty)
-        #         else:
-        #             # shouldn't happen on SELL increasing shorts, but keep safe
-        #             pos["avg_price"] = 0.0
-        #         pos["qty"] = new_qty # more negative
-
-        # else:
-        #     # Unrealized will be set by mark_to_market; we still return a record now.
-        #     sec = {"symbol": symbol, "side": side_u, "qty": qty, "price": px, "error": "unsupported_side"}
-        #     return rec
-
-        # # NOTE: unrealized will be updated by mark_to_market
-        # record = {
-        #     "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        #     "symbol":symbol, 
-        #     "side": side_u, 
-        #     "qty": qty, 
-        #     "price": px,
-        #     "realized_delta": float(realized_this),
-        #     # "realized_total": float(self.realized_pnl + realized_this), # include this trade immediately
-        #     "realized_total": float(self.realized_pnl),
-        #     "position_qty": int(pos["qty"]), 
-        #     "avg_price": float(pos["avg_price"]),
-        #     "dry_run": bool(dry_run),
-        # }
-
-        # # persist exactly once
-        # if hasattr(self, "trade_history"):
-        #     self.trade_history.append(record)
-        #     try:
-        #         self.save_history()
-        #     except Exception:
-        #         pass
-
-        # # try:
-        # #     self.logger.info("RM APPEND: %s", record)
-        # # except Exception:
-        # #     pass
-
-        # # Update class-level realized now that we've recorded it
-        # self.realized_pnl += realized_this
-
-        # return record
-
 
     def mark_to_market(self, symbol: str, last_price: float | None = None):
         """Update unrealised PnL for one symbol, and refresh daily_pnl."""
@@ -845,14 +839,15 @@ class RiskManager:
         if hasattr(self, "reset_if_new_day"):
             self.reset_if_new_day()
 
-        pos = self.positions.get(symbol)
+        sym = self._norm_sym(symbol)
+        pos = self.positions.get(sym)
         if not pos:
             return
 
         px = float(last_price) if last_price is not None else float(pos.get("last_px", 0.0))
         pos["last_px"] = px
 
-        cm = float(self.contract_multipliers.get(symbol, 1.0))
+        cm = float(self.contract_multipliers.get(sym, 1.0))
         qty = int(pos["qty"])
 
         # unrealized (long: (px - avg)*qty*cm; short: (avg - px)*|qty|*cm)
@@ -933,13 +928,17 @@ class RiskManager:
             self.save_history(new_path)
 
     def get_position_qty(self, symbol: str) -> int:
-        sym = (symbol or "").upper()
+        sym = self._norm_sym(symbol)
+        # sym = (symbol or "").upper()
 
         # keys in self.positions are whatever you used when recording (looks like ES)
-        pos = self.positions.get(sym) or self.positions.get(symbol)
+        pos = self.positions.get(sym) or self.positions.get(sym)
         if not pos:
             return 0
-        return int(pos.get("qty") or 0)
+        try:
+            return int(pos.get("qty") or 0)
+        except Exception:
+            return 0
 
 
     def get_open_position(self, symbol: str) -> dict | None:

@@ -15,6 +15,7 @@ from opening_range_strategy import OpeningRangeStrategy
 from risk_manager import RiskManager
 from api_factory import APIFactory
 from strategy_factory import create as create_strategy
+from trade_analytics import TradeAnalytics
 
 # ================= tiny helpers =====================
 import uuid
@@ -50,7 +51,7 @@ class TradingBot:
             "OpeningRange",
             data_manager = self.data_manager,
             opening_range_minutes = self.config.OPENING_RANGE_MINUTES,
-            breakout_threshold = self.config.BREAKOUT_THRESHOLD
+            breakout_threshold = self.config.BREAKOUT_THRESHOLD_PERCENT
         )
         self.risk_manager = RiskManager(
             self.config.MAX_POSITION_SIZE,
@@ -59,11 +60,13 @@ class TradingBot:
             self.config.MAX_DAILY_TRADES,
             cooldown_period=self.config.COOLDOWN_PERIOD
         )
+        # Initialise analytics
+        self.analytics = TradeAnalytics(db_path='market_data.db') # <= Wired for analytics
+
         
         self.risk_manager.instant_close = getattr(self.config, "INSTANT_CLOSE_TRADES", "hold")
         self.risk_manager.emit_closed_on_hold = getattr(self.config, "RM_EMIT_CLOSED_ON_HOLD", True)
         self.risk_manager.dry_run_mode = getattr(self.config, "DRY_RUN_ACCOUNTING", True)
-
         self.risk_manager.contract_multipliers = getattr(self.config, "CONTRACT_MULTIPLIERS", {"ES": 50.0 })
         
         # Bot state
@@ -90,6 +93,9 @@ class TradingBot:
 
         # Avoid spamming exits repeatedly
         self._last_exit_ts: dict[str, float] = {}
+
+        #startup grace
+        self._startup_ts = time.time()
         
     def _setup_logging(self):
         """Setup logging configuration."""
@@ -139,6 +145,10 @@ class TradingBot:
         Returns:
             True if started successfully, False otherwise
         """
+        ###### NEW STUFF NEED REMOVING #############
+        
+        ###### NEW STUFF NEED REMOVING #############
+
         symbol = symbol or self.symbol or getattr(self.config, "DEFAULT_SYMBOL", "ES")
 
         if not getattr(self.data_manager, "is_connected", lambda: False)():
@@ -153,6 +163,20 @@ class TradingBot:
                 api.ensure_symbol_loaded(symbol)
         except Exception:
             self.logger.debug("ensure_symbol_loaded failed (non-fatal)", exc_info=True)
+
+        
+        # UI PRE-FLIGHT: force Positions/Orders panels into a known-good state 
+        try:
+            if api and hasattr(api, "ensure_trading_panels_ready"):
+                ok = api.ensure_trading_panels_ready(timeout_ms=12000)
+                self.logger.info("UI preflight panels ready=%s", ok)
+        except Exception:
+            self.logger.debug("UI preflight failed (non-fatal)", exc_info=True)
+
+        try:
+            self._sync_rm_from_broker(symbol)
+        except Exception:
+            self.logger.debug("SYNC-RM failed (non-fatal)", exc_info=True)
 
         self.is_running = True
         self.is_paused = False
@@ -186,6 +210,17 @@ class TradingBot:
                 # 1) Pull a price (this also feeds the tick buffer in DataManager after our patch)
                 price = self.data_manager.get_current_price(symbol)
 
+                ########################
+                # Feed ticks to bar store:
+                if price is not None:
+                    try:
+                        self.data_manager.live.ingest_tick(symbol, time.time(), price)
+                    except Exception as e:
+                        self.logger.warning(f"failed to ingest tick: {e}")
+                ########################
+
+                self.logger.info(f"🎯 BOT GOT PRICE: {price}") # ADD THIS
+                
                 ## ---- NEW ----
                 if price is None:
                     misses += 1
@@ -212,6 +247,19 @@ class TradingBot:
                         self.risk_manager.mark_to_market(symbol=symbol, last_price=float(price))
                 except Exception:
                     # Never let P&L calc break the loop
+                    pass
+
+                try:
+                    rm = self.risk_manager
+                    unreal_total = 0.0
+                    for p in rm.positions.values():
+                        unreal_total += float(p.get("unrealized") or 0.0)
+
+                    from web_app import _status, _status_lock
+                    with _status_lock:
+                        _status.setdefault("risk_metrics", {})
+                        _status["risk_metrics"]["unrealized_total"] = float(unreal_total)
+                except Exception:
                     pass
 
                 try:
@@ -268,6 +316,12 @@ class TradingBot:
                     except Exception:
                         # never let UI hiccups kill the loop
                         pass
+                
+                # Check exits FIRST
+                try:
+                    self._maybe_exit_position(symbol, price)
+                except Exception as e:
+                    self.logger.exception("Exit check failed: %s", e)
 
 
                 # 2) Ask strategy for a signal
@@ -282,6 +336,16 @@ class TradingBot:
                 if sig:
                     self.logger.info("Signal: %s", sig)
                     self._process_signal(sig, price)   # your existing order-routing (respects DRY_RUN)
+                    self.analytics.log_signal(
+                        signal_id=sig.get("_signal_id", "sig_unknown"),
+                        symbol=symbol,
+                        signal_type=sig["type"],
+                        price=sig["price"],
+                        executed=True,
+                        or_bounds=getattr(self.strategy, "or_bounds", None),
+                        volatility=getattr(self.risk_manager, "vol", {}).get(symbol, {}).get("ewma_abs", None),
+                        strategy_name=type(self.strategy).__name__
+                    )
 
 
                 # 4) Optional: update analysis cache (for /api/market_analysis)
@@ -493,6 +557,19 @@ class TradingBot:
                 
         except Exception as e:
             self.logger.error(f"Error processing signal: {e}")
+
+    
+    def _handle_signal(self, signal: dict):
+        sym = signal["symbol"]
+        qty = self.risk_manager.get_position_qty(sym)
+
+        # If in a position, ignore strategy entry signals unless we explicitly want flips
+        if qty != 0 and not signal.get("is_exit") and not signal.get("allow_flip"):
+            self.logger.info("Signal ignored (in position): %s", signal)
+            return
+
+        self._execute_trade(signal, signal.get("qty", 1), signal.get("price"))
+
     
     def _execute_trade(self, signal: Dict, quantity: float, current_price: float) -> bool:
         """
@@ -594,6 +671,7 @@ class TradingBot:
 
                 try:
                     if hasattr(api, "get_positions"):
+                        api._switch_to("positions.tab", "positions.tab_active")
                         pos = api.get_positions(root_symbol=sym, ui_symbol=ui_sym)
                 except Exception:
                     pos = None
@@ -653,8 +731,21 @@ class TradingBot:
                 # If get_positions() cannot be trusted, treat "None" as unknown.
                 # If you choose to also block on "non-empty", uncomment that check too.
                 if pos is None:
-                    self.logger.warning("Broker Positions unknown (scrapped failed) -> blocking.")
-                    return False
+                    # During the first ~20 seconds after startup, UI can be mid-layout / wrong tab.
+                    # Allow orders ONLY if internal RM thinks we're flat AND direction is not stacking.
+                    grace = (time.time() - getattr(self, "_startup_ts", 0.0)) < 20.0
+
+                    internal_qty_pre = 0
+                    try:
+                        internal_qty_pre = int(self.risk_manager.get_position_qty(sym))
+                    except Exception:
+                        internal_qty_pre = 0
+
+                    if grace and internal_qty_pre == 0:
+                        self.logger.warning("Broker Positions unknown -> STARTUP GRACE allowing (internal flat).")
+                    else:
+                        self.logger.warning("Broker Positions unknown (scrapped failed) -> blocking.")
+                        return False
 
                 if isinstance(pos, list) and len(pos) == 0:
                     self.logger.warning("Broker Positions flat (empty list) -> allowing.")
@@ -779,12 +870,21 @@ class TradingBot:
                 # 4) Only now do we record the fill
                 self.logger.info(
                     "LIVE %s %s x%s @ %s | sig=%s att=%s",
-                    side, sym, qty, px, signal_id, attempt_id
+                    side, sym, qty, px_exec, signal_id, attempt_id
                 )
                 # self.logger.info("LIVE %s %s x%s @ %s", side, sym, qty, px)
                 # Only after UI worked, record live fill
                 # self._record_fill(sym, side, qty, px, dry_run=(acct_mode != "false"))
                 fill = self._record_fill(sym, side, qty, px_exec, dry_run=False, signal_id=signal_id, attempt_id=attempt_id, exit_reason=signal.get("reason"))
+
+                try:
+                    self.logger.info(
+                        "AFTER-FILL: internal_qty=%s pos=%s",
+                        self.risk_manager.get_position_qty(sym),
+                        (self.risk_manager.get(sym) if hasattr(self.risk_manager, "positions") else None)
+                    )
+                except Exception:
+                    pass
 
                 if not isinstance(fill, dict):
                     self.logger.error("FILL missing after confirmed order: sig=%s att=%s (dedupe or RM error)", signal_id, attempt_id)
@@ -794,7 +894,8 @@ class TradingBot:
                 try:
                     match = None
                     for attempt in range(3):
-                        pos_rows = api.get_positions(root_symbol=sym, ui_symbol=ui_sym) if hasattr(api, "get_positions") else None
+                        api._switch_to("positions.tab", "positions.tab_active")
+                        pos_rows = api.get_positions(root_symbol=sym, ui_symbol=ui_sym, include_zero_rows=True) if hasattr(api, "get_positions") else None
                         if not isinstance(pos_rows, list):
                             broker_qty = None
                         else:
@@ -1048,6 +1149,7 @@ class TradingBot:
         Swap the active strategy at runtime.
         Safe to call before start(), or while paused.
         """
+        self.logger.info(f"🔥 SET_STRATEGY CALLED: name={name} params={params}")
         params = params or {}
 
         # 1) Persist user params on the bot (so the trading loop can read them later)
@@ -1056,19 +1158,32 @@ class TradingBot:
         self.breakout_threshold = float(params.get("breakout_threshold", getattr(self, "breakout_threshold", 0.1)))
         self.stop_loss_percent = float(params.get("stop_loss_percent", getattr(self, "stop_loss_percent", 2.0)))
         self.take_profit_percent = float(params.get("take_profit_percent", getattr(self, "take_profit_percent", 4.0)))
+        self.breakout_points = float(params.get("breakout_points", getattr(self, "breakout_points", getattr(self.config, "BREAKOUT_POINTS", 2.0))))
+        self.min_move_from_or = float(params.get("min_move_from_or", getattr(self, "min_move_from_or", getattr(self.config, "MIN_MOVE_FROM_OR", 1.5))))
 
         old = type(self.strategy).__name__ if hasattr(self, "strategy") else None
 
         # 2) Rebuild the strategy via the factory (pass params through so
         #  strategies that accept them can consume directly)
+        merged = {
+            "opening_range_minutes": self.opening_range_minutes,
+            "breakout_threshold": self.breakout_threshold,
+            "stop_loss_percent": self.stop_loss_percent,
+            "take_profit_percent": self.take_profit_percent,
+            "breakout_points": self.breakout_points,
+            "min_move_from_or": self.min_move_from_or,
+            **params, # explicit params from caller win over defaults move
+        }
+
         self.strategy = create_strategy(
             name,
             data_manager=self.data_manager,
-            **params
+            **merged
         )
+        self.logger.info(f"✅ STRATEGY NOW: {type(self.strategy).__name__}")
 
         # 3) (Optional) also reflect params onto strategy instance for convenience
-        for k in ("opening_range_minutes", "breakout_threshold", "stop_loss_percent", "take_profit_percent"):
+        for k in ("opening_range_minutes", "breakout_threshold", "stop_loss_percent", "take_profit_percent", "breakout_points", "min_move_from_or"):
             try:
                 setattr(self.strategy, k, getattr(self, k))
             except Exception:
@@ -1177,29 +1292,115 @@ class TradingBot:
 
     def _maybe_exit_position(self, symbol: str, current_price: float):
         rm = self.risk_manager
+
         qty = rm.get_position_qty(symbol)
         if qty == 0:
+            self.logger.info("EXIT-CHECK: qty=0 -> skip (sym=%s px=%s)", symbol, current_price)
             return
 
         # prevent exit spam (2s)
         now = time.time()
         if (now - self._last_exit_ts.get(symbol, 0.0)) < 2.0:
+            self.logger.info("EXIT-CHECK: rate-limited -> skip (sym=%s)", symbol)
             return
 
-        # choose points from config (example defaults)
-        stop_pts = getattr(self.config, "STOP_LOSS_POINTS", 6)
-        take_pts = getattr(self.config, "TAKE_PROFIT_POINTS", 8)
+        # Option B: Clean - Use helper from RM)
+        stop_pts, take_pts = rm.calculate_dynamic_stops(symbol, current_price)
+
+        # # choose points from config (example defaults)
+        # # stop_pts = getattr(self.config, "STOP_LOSS_POINTS", 6)
+        # # take_pts = getattr(self.config, "TAKE_PROFIT_POINTS", 8)
+        # vol = rm.update_volatility(symbol, current_price, alpha=0.05)
+
+        # # min/max clamps so it doesn't go crazy
+        # min_stop = 1.0
+        # max_stop = 10.0
+
+        # # choose multipliers
+        # stop_mult = 3.0
+        # take_mult = 6.0
+
+        # stop_pts = max(min_stop, min(max_stop, stop_mult * vol))
+        # take_pts = max(stop_pts, take_mult * vol) # ensure take >= stop
+
+        # logging the position state we are using
+        sym = (symbol or "").upper()
+        pos = rm.positions.get(sym) or {}
+        self.logger.info(
+            "EXIT-CHECK: sym=%s qty=%s px=%s avg=%s stop_pts=%s take_pts=%s", 
+            symbol, qty, current_price, pos.get("avg_price"), stop_pts, take_pts
+        )
         
         reason = rm.check_exit_points(symbol, current_price, stop_pts, take_pts)
         if not reason:
+            self.logger.info("EXIT-CHECK: no trigger (sym=%s)", symbol)
             return
 
         self._last_exit_ts[symbol] = now
 
         close_side = "SELL" if qty > 0 else "BUY"
         self.logger.info("EXIT: reason=%s qty=%s -> sending %s", reason, qty, close_side)
+        # self.logger.info("EXIT-ATR: vol=%.2f stop_pts=%.2f take_pts=%.2f", vol, stop_pts, take_pts)
 
-        exit_signal = {"type": close_side, "symbol": symbol, "reason": reason, "_signal_id": _new_id("exit")}
+        exit_signal = {"type": close_side, "symbol": symbol, "reason": reason, "is_exit": True, "_signal_id": _new_id("exit")}
         self._execute_trade(exit_signal, abs(qty), current_price)
+
+
+    def _sync_rm_from_broker(self, symbol: str):
+        api = getattr(self.data_manager, "api", None)
+        if not api or not hasattr(api, "get_positions"):
+            return
+
+        ui_sym = None
+        try:
+            if hasattr(api, "get_active_contract_symbol"):
+                ui_sym = api.get_active_contract_symbol()
+        except Exception:
+            ui_sym = None
+
+        pos_rows = None
+        try:
+            pos_rows = api.get_positions(root_symbol=symbol, ui_symbol=ui_sym, include_zero_rows=True)
+        except Exception:
+            pos_rows = None
+
+        if not isinstance(pos_rows, list):
+            return
+
+        # find a matching row for ES / ESH6, etc
+        want_root = (symbol or "").upper()
+        want_exact = (ui_sym or "").upper()
+        match = None
+        for r in pos_rows:
+            rs = (r.get("symbol") or "").upper()
+            if want_exact and rs == want_exact:
+                match = r
+                break
+            if want_root and rs.startswith(want_root):
+                match = r
+                break
+
+        if not match:
+            return
+
+        qty = match.get("qty")
+        # if qty is None, do nothing
+        if qty is None:
+            return
+
+        # ✅ IMPORTANT: update RM's current position qty so exit checks work after restart
+        # We'll preserve avg_price if RM already has it; otherwise set avg_price to current price
+        rm = self.risk_manager
+        sym = want_root
+        existing = rm.positions.get(sym) or {}
+        rm.positions[sym] = {
+            "qty": int(qty),
+            "avg_price": float(existing.get("avg_price") or self.data_manager.get_current_price(sym) or 0.0),
+        }
+        self.logger.info("SYNC-RM: sym=%s qty=%s avg=%s", sym, rm.positions[sym]["qty"], rm.positions[sym]["avg_price"])
+
+
+
+
 
     

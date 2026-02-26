@@ -11,7 +11,27 @@ load_dotenv()
 
 class Config:
     """Configuration class for the trading bot."""
-    
+    # -------------------------------------------------------------------
+    # ORB BREAK + RETEST STRATEGY (Cousin's Recommendation)
+    # -------------------------------------------------------------------
+    ORB_RETEST_OR_MINUTES = int(os.getenv("ORB_RETEST_OR_MINUTES", "15"))
+    ORB_RETEST_BREAKOUT_POINTS = float(os.getenv("ORB_RETEST_BREAKOUT_PTS", "2.0"))
+    ORB_RETEST_BREAKOUT_PCT = float(os.getenv("ORB_RETEST_BREAKOUT_PCT", "0.0"))
+    ORB_RETEST_TOLERANCE = float(os.getenv("ORB_RETEST_TOLERANCE", "1.0"))
+    ORB_RETEST_MAX_STOP = float(os.getenv("ORB_RETEST_MAX_STOP", "10.0"))
+    ORB_RETEST_MIN_GAP_SEC = float(os.getenv("ORB_RETEST_MIN_GAP_SEC", "30.0"))
+    ORB_RETEST_MAX_TRADES = int(os.getenv("ORB_RETEST_MAX_TRADES", "2"))
+    ORB_RETEST_ONE_SIDE_ONLY = bool(os.getenv("ORB_RETEST_ONE_SIDE", "true").lower() == "true")
+
+    # Parse trade window times (format: "9,45" → (9, 45))
+    _start_str = os.getenv("ORB_RETEST_START", "9,45")
+    _end_str = os.getenv("ORB_RETEST_END", "12,0")
+    ORB_RETEST_TRADE_START = tuple(map(int, _start_str.split(",")))
+    ORB_RETEST_TRADE_END = tuple(map(int, _end_str.split(",")))
+
+    ORB_RETEST_USE_SMA = bool(os.getenv("ORB_RETEST_USE_SMA", "true").lower() == "true")
+    ORB_RETEST_SMA_TIMEFRAME = os.getenv("ORB_RETEST_SMA_TF", "5m")
+        
     # Trading platform selection
     TRADING_PLATFORM = os.getenv('TRADING_PLATFORM', 'binance').lower()
     
@@ -25,10 +45,13 @@ class Config:
     MAX_POSITION_SIZE = float(os.getenv('MAX_POSITION_SIZE', '0.1'))
     STOP_LOSS_PERCENTAGE = float(os.getenv('STOP_LOSS_PERCENTAGE', '2.0'))
     TAKE_PROFIT_PERCENTAGE = float(os.getenv('TAKE_PROFIT_PERCENTAGE', '4.0'))
+
     
     # Opening range strategy settings
     OPENING_RANGE_MINUTES = int(os.getenv('OPENING_RANGE_MINUTES', '30'))
-    BREAKOUT_THRESHOLD = float(os.getenv('BREAKOUT_THRESHOLD', '0.1'))
+    BREAKOUT_THRESHOLD_PERCENT = float(os.getenv('BREAKOUT_THRESHOLD_PERCENT', '0.05'))
+    BREAKOUT_POINTS = float(os.getenv('BREAKOUT_POINTS', '2.0'))
+    MIN_MOVE_FROM_OR = float(os.getenv('MIN_MOVE_FROM_OR', '1.5')) # Minimum move in points
     
     # Bot control settings
     COOLDOWN_PERIOD = int(os.getenv('COOLDOWN_PERIOD', '300'))  # 5 minutes
@@ -72,9 +95,35 @@ class Config:
     SIM_BALANCE = 50000
     # Exit points. 1 point = $50 per contract (classic ES)
     # 1 tick = 0.25 points = $12.50
-    STOP_LOSS_POINTS = 2
-    TAKE_PROFIT_POINTS = 2 
-    
+    STOP_LOSS_POINTS = float(os.getenv("STOP_LOSS_POINTS", "4.0"))
+    TAKE_PROFIT_POINTS = float(os.getenv("TAKE_PROFIT_POINTS", "6.0"))
+    # Base configuration (our comfort zone)
+    STOP_LOSS_BASE_POINTS = float(os.getenv("STOP_LOSS_BASE_POINTS", "4.0"))         # Minimum stop
+    TAKE_PROFIT_BASE_POINTS = float(os.getenv("TAKE_PROFIT_BASE_POINTS", "6.0"))       # Minimum target
+
+    # Adaptive multipliers
+    VOLATILITY_STOP_MULTIPLIER = 2.5    # Stop = 2.5x recent volatility
+    VOLATILITY_TAKE_MULTIPLIER = 4.0    # Target = 4.0x recent volatility
+
+    # Safety bounds (prevent crazy outliers)
+    MAX_STOP_LOSS_POINTS = float(os.getenv("MAX_STOP_LOSS_POINTS", "12.0"))         # Never wider than 12 points
+    MIN_STOP_LOSS_POINTS = float(os.getenv("MIN_STOP_LOSS_POINTS", "2.0"))          # Never tighter than 2 points
+    MAX_TAKE_PROFIT_POINTS = float(os.getenv("MAX_TAKE_PROFIT_POINTS", "20.0"))       # Cap profit target
+    MIN_TAKE_PROFIT_POINTS = float(os.getenv("MIN_TAKE_PROFIT_POINTS", "4.0"))        # Minimum profit target
+
+    # -------------------------------------------------------------------
+    # VOLUME TRACKING (NEW)
+    # -------------------------------------------------------------------
+    VOLUME_LOOKBACK_BARS = int(os.getenv("VOLUME_LOOKBACK_BARS", "20"))
+    HIGH_VOLUME_THRESHOLD = float(os.getenv("HIGH_VOLUME_THRESHOLD", "1.5"))
+    LOW_VOLUME_THRESHOLD = float(os.getenv("LOW_VOLUME_THRESHOLD", "0.5"))
+
+    # -------------------------------------------------------------------
+    # DATA MANAGEMENT (NEW)
+    # -------------------------------------------------------------------
+    KEEP_BARS = int(os.getenv("KEEP_BARS", "480"))  # 8 hours of 1m bars
+    DATA_REFRESH_INTERVAL = float(os.getenv("DATA_REFRESH_INTERVAL", "1.0"))
+
     @classmethod
     def validate_platform(cls):
         """Validate that the selected platform is supported."""
