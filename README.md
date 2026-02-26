@@ -91,7 +91,7 @@ The bot implements a sophisticated Opening Range Breakthrough strategy:
 
 ### Strategy Parameters
 - `OPENING_RANGE_MINUTES` - Opening range period (default: 30)
-- `BREAKOUT_THRESHOLD` - Minimum breakout percentage (default: 0.1%)
+- `BREAKOUT_THRESHOLD_PERCENT` - Minimum breakout percentage (default: 0.1%)
 - `STOP_LOSS_PERCENTAGE` - Stop loss level (default: 2%)
 - `TAKE_PROFIT_PERCENTAGE` - Take profit level (default: 4%)
 
@@ -123,7 +123,7 @@ COOLDOWN_PERIOD=300            # 5 min cooldown
 
 # Strategy Settings
 OPENING_RANGE_MINUTES=30       # 30 min opening range
-BREAKOUT_THRESHOLD=0.1         # 0.1% breakout threshold
+BREAKOUT_THRESHOLD_PERCENT=0.1         # 0.1% breakout threshold
 ```
 
 ### Platform-Specific Settings

@@ -61,7 +61,7 @@ def api_config():
         "current_platform": cfg.TRADING_PLATFORM,
         "default_symbol": getattr(cfg, "DEFAULT_SYMBOL", "ES"),
         "opening_range_minutes": getattr(cfg, "OPENING_RANGE_MINUTES", 30),
-        "breakout_threshold": getattr(cfg, "BREAKOUT_THRESHOLD", 0.1),
+        "breakout_threshold_percent": getattr(cfg, "BREAKOUT_THRESHOLD_PERCENT", 0.05),
         "stop_loss_percentage": getattr(cfg, "STOP_LOSS_PERCENTAGE", 2.0),
         "take_profit_percentage": getattr(cfg, "TAKE_PROFIT_PERCENTAGE", 4.0),
     })

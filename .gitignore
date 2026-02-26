@@ -7,12 +7,15 @@ venv/
 # Environment variables (Crucial for security!)
 .env
 env
+.env_ENHANCED
 
 # Project specific
 PROJECT_BUNDLE.txt
 *.txt
 *.log
 *.html
+*.png
+
 
 # OS generated
 .DS_Store
@@ -22,5 +25,6 @@ Thumbs.db
 .local
 documentation
 ss
+SS*
 
 

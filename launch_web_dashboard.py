@@ -9,6 +9,7 @@ import webbrowser
 import time
 from threading import Timer
 
+
 port = int(os.getenv("PORT", "5050"))
 def open_browser():
     """Open the web browser to the dashboard URL."""

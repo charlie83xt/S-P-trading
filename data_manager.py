@@ -17,6 +17,23 @@ from api_interface import TradingAPIInterface
 from config import Config
 import time
 
+import sys
+import traceback
+
+_TRACE = True
+
+def trace_call(func):
+    """Decorator to trace function calls"""
+    def wrapper(*args, **kwargs):
+        if _TRACE:
+            print(f"{'='*80}")
+            print(f"🔍 TRACE: {func.__name__} called")
+            print(f"   args: {args[:2]}")  # First 2 args only
+            print(f"   Stack: {traceback.format_stack()[-3:-1]}")
+            print(f"{'='*80}")
+        return func(*args, **kwargs)
+    return wrapper
+
 @dataclass
 class Bar:
     ts_open: float # epoch at bar open
@@ -29,6 +46,7 @@ class LiveBarStore:
     """
     Keeps rolling 1m bars per symbol from streaming Last prices
     """
+    
     def __init__(self, keep: int = 480):
         self.keep = int(keep)
         # self._bars: Dict[str, deque] = defaultdict(lambda: deque(maxlen=self.keep))
@@ -36,13 +54,17 @@ class LiveBarStore:
         # self._per_symbol: Dict[str, Deque[Bar]] = {}
         # deque of Bar(ts_open, open, high, low, close) per symbol
         self._per_symbol: Dict[str, Deque[Bar]] = defaultdict(lambda: deque(maxlen=self.keep))
+        self.logger = logging.getLogger(__name__)
     
     
     def _bucket_start(self, t: float) -> float:
         # minute-aligned timestamp
         return math.floor(t / 60.0) * 60.0
 
+
     def ingest_tick(self, symbol: str, ts: float, price: Optional[float]) -> None:
+        # self.logger.info(f"LiveBarStore.ingest_tick called: symbol={symbol} ts={ts} price={price}")
+
         if price is None or not isinstance(price, (int, float)) or price != price:
             return
         dq = self._per_symbol[symbol] #.setdefault(symbol, deque(maxlen=self.keep))
@@ -50,9 +72,11 @@ class LiveBarStore:
 
         if not dq or dq[-1].ts_open < bstart:
             # start a new bar
+            # self.logger.info(f"Creating new bar for: {symbol} at {bstart}")
             dq.append(Bar(bstart, price, price, price, price))
         else:
             # update current bar
+            # self.logger.info(f"Updating existing bar for {symbol}")
             b = dq[-1]
             b.close = float(price)
             if price > b.high:
@@ -68,31 +92,7 @@ class LiveBarStore:
         return list(dq)[-n:]
 
     def get_bars(self, symbol: str, n: int = 60) -> List[Any]:
-        # include working bar as a provisional last bar
-        # self._ensure_tick_buf()
-        # ticks = list(self._tick_buf.get(symbol, []))[-n:]
-        # if not ticks:
-        #     return []
         return self.get_last_n(symbol, n)
-
-        # simple OHLC "bars" from ticks: 1 tick -> flat bar
-        # class Bar: pass
-        # Bar = type("Bar", (), {})
-        # bars = list(self._bars[symbol])
-        ###########
-        # bars = []
-        # for ts, px in ticks:
-        #     b = Bar()
-        #     b.time = ts
-        #     b.open = px
-        #     b.high = px
-        #     b.low = px
-        #     b.close = px
-        #     bars.append(b)
-        ################
-        # if symbol in self._working:
-        #     bars = bars + [self._working[symbol]]
-        # return bars
 
 
     def get_opening_range(self, symbol: str, minutes: int, session_anchor_ts: float) -> Optional[Tuple[float, float]]:
@@ -117,6 +117,7 @@ class DataManager:
     """Manages market data retrieval and storage across different platforms."""
     
     # def __init__(self, platform: Optional[str] = None):
+    @trace_call
     def __init__(self, config: Config):
         """
         Initialize DataManager.
@@ -133,6 +134,7 @@ class DataManager:
         self._tick_buf = None
 
         self.live = LiveBarStore(keep=480)
+        self.logger.info(f"DataManager initialised: self.live type={type(self.live)}")
 
     
     def _ensure_tick_buf(self):
@@ -148,7 +150,7 @@ class DataManager:
             self.live.ingest_tick(symbol, ts_epoch, price)
         except Exception:
             # keep ingestion robust; never break the caller
-            pass
+            self.logger.exception(f"Tick ingestion failed: {e}") # LOG IT!
 
 
     def get_bars(self, symbol: str, n: int = 60):
@@ -215,6 +217,32 @@ class DataManager:
     def is_connected(self) -> bool:
         """Check if connected to the trading platform."""
         return self.api.is_connected()
+
+    # def get_current_price(self, symbol: str) -> Optional[float]:
+    #     """Get current price and feed to LiveBarStore"""
+    #     try:
+    #         price = self.api.get_current_price(symbol)
+            
+    #         if price is None:
+    #             return None
+            
+    #         # Feed to LiveBarStore IMMEDIATELY
+    #         now_ts = time.time()
+    #         self.live.ingest_tick(symbol, now_ts, float(price))
+
+    #         # DEBUG: Log every 10 calls 
+    #         self._price_call_count = getattr(self, '_price_call_count', 0) + 1 
+    #         if self._price_call_count % 10 == 0: 
+    #             bars = self.live.get_last_n(symbol, n=5) 
+    #             self.logger.info(f"📊 PRICE CALLS: {self._price_call_count} | BARS: {len(bars)}")
+
+            
+    #         return price
+            
+    #     except Exception as e:
+    #         self.logger.error(f"get_current_price failed: {e}")
+    #         return None
+
     
     def get_current_price(self, symbol: str) -> Optional[float]:
         """
@@ -227,6 +255,9 @@ class DataManager:
             Current price
         """
         price = self.api.get_current_price(symbol)
+        # ADD THIS AS FIRST LINE: 
+        self.logger.info(f"🟢 get_current_price() got price={price} from API")
+
         try:
             if price is None:
                 self._null_reads = getattr(self, "_null_reads", 0) + 1
@@ -241,37 +272,44 @@ class DataManager:
             if p <= 0 or p != p:  # <=0 or NaN
                 return price
 
+            # ADD THIS LINE BEFORE TICK INGESTION:
+            self.logger.info(f"🔥 About to ingest tick: symbol={symbol} price={p} live={self.live}")
 
+
+            # self.live.ingest_tick(symbol, time.time(), p)
+            
             # keep a compact tick buffer for ad-hoc analytics
             self._ensure_tick_buf()
             self._tick_buf[symbol].append((datetime.now(timezone.utc), p))
 
-
-            # feed the live bar builder
-            now_ts = time.time()
-
-
             # prefer ingest_tick(symbol, t, price) if available
             now_ts = time.time()
-            # if hasattr(self.live, "ingest_tick"):
-            #     self.live.ingest_tick(symbol, now_ts, p)
-            # elif hasattr(self.live, "update"):
-            #     self.live.update(symbol, now_ts, p)
             ingest = getattr(self.live, "ingest_tick", None)
+
+            self.logger.info(f"🔵 ingest callable check: {callable(ingest)}")
+
             if callable(ingest):
+                self.logger.info(f"🔵 Calling ingest_tick: symbol={symbol} ts={now_ts} price={p}") # ADD THIS
                 ingest(symbol, now_ts, p)
+
+                # VERIFY IT WORKED
+                bars = self.live.get_last_n(symbol, n=5)
+                self.logger.info(f"📊After Ingest: BAR COUNT: {len(bars)}")
             else:
+                self.logger.error(f"X ingest_tick is not callable!")
                 # fallback to update(symbol, ts_epoch, price) if that's what you have
                 upd = getattr(self.live, "update", None)
                 if callable(upd):
+                    self.logger.info(f"🟡 Falling back to update()")
                     upd(symbol, now_ts, p)
 
 
             # occasional debug
             if len(self._tick_buf[symbol]) % 60 == 0:
                 self.logger.debug("TickBuf[%s]: %d", symbol, len(self._tick_buf[symbol]))
-        except Exception:
+        except Exception as e:
             # never break price reads
+            self.logger.exception("X EXCEPTION in get_current_price: {e}")
             pass
 
         return price
@@ -489,40 +527,6 @@ class DataManager:
             cp = self.get_current_price(symbol)
             return (cp, cp)
 
-
-        # self._ensure_tick_buf()
-        # ticks = list(self._tick_buf[symbol])
-        # if not ticks:
-        #     # No ticks yet; fall back to current price
-        #     cp = self.get_current_price(symbol)
-        #     return (cp, cp)
-
-        # # Session open heuristic:
-        # # - If we have ticks from "today", use the earliest tick as the "session open"
-        # # - Otherwise, use the first tick we have
-        # ticks_sorted = sorted(ticks, key=lambda x: x[0])
-        # first_ts = ticks_sorted[0][0]
-        # start_ts = first_ts
-        # end_ts = start_ts + timedelta(minutes=minutes)
-
-        # now = datetime.now(timezone.utc)
-        # if now < end_ts:
-        #     # we're still within the opening window -> use ticks from start -> now
-        #     window = [p for (ts, p) in ticks_sorted if start_ts <= ts <= now]
-        # else:
-        #     # we started mid-session - use the first `minutes` worth of ticks we have
-        #     window = [p for (ts, p) in ticks_sorted if ts <= end_ts]
-
-        # # if very few ticks are available, keep sampling until we have enough.
-        # if len(window) < max(5, minutes): # heuristic: at least 5 samples
-        #     # fall back to "all we have" to avoid blocking strategy
-        #     window =  [p for (_, p) in ticks_sorted]
-
-        # low = min(window) if window else self.get_current_price(symbol)
-        # high = max(window) if window else low
-        
-        # return low, high
-
     
     def get_platform_name(self) -> str:
         """Get the name of the current trading platform."""
@@ -563,4 +567,320 @@ class DataManager:
         
         conn.close()
         return symbols
+
+    def get_last_closed_candles(self, symbol: str, timeframe: str = "5m", 
+                                n: int = 2) -> List[Dict[str, Any]]:
+        """
+        Returns last N CLOSED candles for pattern detection.
+        
+        Required by ORB Retest strategy for:
+        - Engulfing pattern detection (needs 2 candles)
+        - Hammer/shooting star detection
+        - Higher-low break / Lower-high break patterns
+        
+        Args:
+            symbol: Trading symbol
+            timeframe: "1m", "5m", etc.
+            n: Number of candles to return
+            
+        Returns:
+            List of dicts with keys: open, high, low, close, ts, close_ts, volume
+            Ordered oldest -> newest
+            Excludes the current (incomplete) bar
+        """
+        if not hasattr(self, 'live') or self.live is None:
+            return []
+        
+        if timeframe == "5m":
+            # Get last 5*n + 5 minutes of 1m bars (buffer for aggregation)
+            bars_1m = self.live.get_last_n(symbol, n=5 * n + 10)
+            
+            if len(bars_1m) < 5:
+                return []
+            
+            # Exclude the last incomplete bar (current minute)
+            # Then aggregate into 5-minute candles
+            complete_bars = bars_1m[:-1] if bars_1m else []
+            
+            candles_5m = []
+            for i in range(0, len(complete_bars), 5):
+                chunk = complete_bars[i:i+5]
+                if len(chunk) == 5:  # Only use complete 5m periods
+                    candles_5m.append({
+                        "ts": chunk[0].ts_open,
+                        "open": chunk[0].open,
+                        "high": max(b.high for b in chunk),
+                        "low": min(b.low for b in chunk),
+                        "close": chunk[-1].close,
+                        "close_ts": chunk[-1].ts_open + 60,
+                        "volume": sum(getattr(b, 'volume', 0) for b in chunk),
+                    })
+            
+            # Return last n complete 5m candles
+            return candles_5m[-n:] if candles_5m else []
+        
+        elif timeframe == "1m":
+            bars = self.live.get_last_n(symbol, n=n + 1)
+            
+            if len(bars) < 2:
+                return []
+            
+            # Return all but the last bar (which is still building)
+            complete_bars = bars[:-1]
+            
+            return [
+                {
+                    "ts": b.ts_open,
+                    "open": b.open,
+                    "high": b.high,
+                    "low": b.low,
+                    "close": b.close,
+                    "close_ts": b.ts_open + 60,
+                    "volume": getattr(b, 'volume', 0),
+                }
+                for b in complete_bars
+            ][-n:]
+        
+        else:
+            # Unsupported timeframe
+            self.logger.warning(f"Unsupported timeframe: {timeframe}")
+            return []
+
+    def get_sma(self, symbol: str, length: int, timeframe: str = "5m", 
+                offset: int = 0) -> float:
+        """
+        Simple Moving Average over the last `length` closed candles.
+        
+        Required by ORB Retest for trend filtering:
+        - SMA20 for short-term bias
+        - SMA200 for major trend
+        - Offset for slope calculation (SMA now vs SMA 1 bar ago)
+        
+        Args:
+            symbol: Trading symbol
+            length: Number of periods (e.g., 20, 200)
+            timeframe: "1m", "5m", etc.
+            offset: 0 = current, 1 = 1 bar ago (for slope detection)
+            
+        Returns:
+            SMA value, or 0.0 if insufficient data
+        """
+        candles = self.get_last_closed_candles(
+            symbol, 
+            timeframe, 
+            n=length + offset
+        )
+        
+        if len(candles) < (length + offset):
+            return 0.0
+        
+        # Select the range for SMA calculation
+        if offset > 0:
+            # Get bars from -(length+offset) to -offset
+            relevant_candles = candles[-(length + offset):-offset]
+        else:
+            # Get last `length` bars
+            relevant_candles = candles[-length:]
+        
+        if len(relevant_candles) < length:
+            return 0.0
+        
+        closes = [c["close"] for c in relevant_candles]
+        return sum(closes) / len(closes)
+
+    # def get_candles(self, symbol: str, timeframe: str, start_ts: float, 
+    #                 end_ts: float) -> List[Dict[str, Any]]:
+    #     """
+    #     Returns historical candles for a specific time range.
+        
+    #     Required by ORB Retest for computing the opening range
+    #     (e.g., 9:30-9:45 AM ET = 15 minute window).
+        
+    #     Args:
+    #         symbol: Trading symbol
+    #         timeframe: "1m", "2m", "5m"
+    #         start_ts: Start timestamp (epoch seconds)
+    #         end_ts: End timestamp (epoch seconds)
+            
+    #     Returns:
+    #         List of dicts with keys: ts, open, high, low, close, volume
+    #         Ordered oldest -> newest
+    #     """
+    #     if not hasattr(self, 'bar_store') or self.bar_store is None:
+    #         return []
+        
+    #     # Get all available 1m bars
+    #     all_bars = self.bar_store.get_last_n(symbol, n=10000)  # Get as many as we have
+        
+    #     if timeframe == "1m":
+    #         # Filter bars within time range
+    #         result = [
+    #             {
+    #                 "ts": b.ts_open,
+    #                 "open": b.open,
+    #                 "high": b.high,
+    #                 "low": b.low,
+    #                 "close": b.close,
+    #                 "volume": getattr(b, 'volume', 0),
+    #             }
+    #             for b in all_bars
+    #             if start_ts <= b.ts_open < end_ts
+    #         ]
+    #         return result
+        
+    #     elif timeframe in ("2m", "5m"):
+    #         # First, filter 1m bars to the time range
+    #         bars_in_range = [
+    #             b for b in all_bars
+    #             if start_ts <= b.ts_open < end_ts
+    #         ]
+            
+    #         if not bars_in_range:
+    #             return []
+            
+    #         # Aggregate into requested timeframe
+    #         period_minutes = int(timeframe.replace("m", ""))
+    #         candles = []
+            
+    #         for i in range(0, len(bars_in_range), period_minutes):
+    #             chunk = bars_in_range[i:i+period_minutes]
+    #             if chunk:  # Accept partial chunks at the end
+    #                 candles.append({
+    #                     "ts": chunk[0].ts_open,
+    #                     "open": chunk[0].open,
+    #                     "high": max(b.high for b in chunk),
+    #                     "low": min(b.low for b in chunk),
+    #                     "close": chunk[-1].close,
+    #                     "volume": sum(getattr(b, 'volume', 0) for b in chunk),
+    #                 })
+            
+    #         return candles
+        
+    #     else:
+    #         self.logger.warning(f"Unsupported timeframe: {timeframe}")
+    #         return []
+
+
+    def get_candles(self, symbol: str, timeframe: str, start_ts: float, end_ts: float):
+        """Debug version with extensive logging"""
+        
+        # Check 1: Does live exist?
+        if not hasattr(self, 'live'):
+            self.logger.error("❌ live attribute doesn't exist!")
+            return []
+        
+        # Check 2: Is live None?
+        if self.live is None:
+            self.logger.error("❌ live is None!")
+            return []
+        
+        # Check 3: Can we get bars?
+        try:
+            all_bars = self.live.get_last_n(symbol, n=100)
+            self.logger.info(f"✓ Got {len(all_bars)} bars from live for {symbol}")
+        except Exception as e:
+            self.logger.error(f"❌ Failed to get bars: {e}")
+            return []
+        
+        # Check 4: Filter to time range
+        filtered = [b for b in all_bars if start_ts <= b.ts_open < end_ts]
+        self.logger.info(f"✓ Filtered to {len(filtered)} bars in range {start_ts}-{end_ts}")
+        
+        if not filtered:
+            self.logger.warning(f"⚠️  No bars in time range! Got {len(all_bars)} total bars")
+            if all_bars:
+                self.logger.info(f"   First bar: {all_bars[0].ts_open}, Last bar: {all_bars[-1].ts_open}")
+                self.logger.info(f"   Requested: {start_ts} to {end_ts}")
+        
+        # Return formatted
+        result = [
+            {
+                "ts": b.ts_open,
+                "open": b.open,
+                "high": b.high,
+                "low": b.low,
+                "close": b.close,
+                "volume": getattr(b, 'volume', 0),
+            }
+            for b in filtered
+        ]
+        
+        return result
+
+
+
+    def get_volume_profile(self, symbol: str, lookback_bars: int = 20) -> Dict[str, Any]:
+        """
+        Calculate volume statistics for volume-based filtering.
+        
+        Used to confirm breakouts:
+        - High volume breakout = strong conviction
+        - Low volume breakout = false signal
+        
+        Args:
+            symbol: Trading symbol
+            lookback_bars: Number of bars to analyze (default 20)
+            
+        Returns:
+            Dictionary with:
+            - avg_volume: Average volume over lookback
+            - current_volume: Volume of most recent bar
+            - volume_ratio: current / average
+            - is_high_volume: True if ratio > 1.5
+            - is_low_volume: True if ratio < 0.5
+        """
+        if not hasattr(self, 'live') or self.live is None:
+            return {
+                "avg_volume": 0,
+                "current_volume": 0,
+                "volume_ratio": 1.0,
+                "is_high_volume": False,
+                "is_low_volume": False,
+            }
+        
+        bars = self.live.get_last_n(symbol, n=lookback_bars)
+        
+        if not bars:
+            return {
+                "avg_volume": 0,
+                "current_volume": 0,
+                "volume_ratio": 1.0,
+                "is_high_volume": False,
+                "is_low_volume": False,
+            }
+        
+        volumes = [getattr(b, 'volume', 1) for b in bars]
+        avg_vol = sum(volumes) / len(volumes)
+        current_vol = volumes[-1] if volumes else 0
+        
+        ratio = current_vol / avg_vol if avg_vol > 0 else 1.0
+        
+        return {
+            "avg_volume": avg_vol,
+            "current_volume": current_vol,
+            "volume_ratio": ratio,
+            "is_high_volume": ratio > 1.5,
+            "is_low_volume": ratio < 0.5,
+        }
+
+    def get_current_price(self, symbol: str) -> Optional[float]:
+        """
+        Get the most recent price for a symbol.
+        
+        This method should already exist in your DataManager.
+        If not, here's an implementation:
+        """
+        if hasattr(self, 'api') and self.api:
+            try:
+                return self.api.get_current_price(symbol)
+            except Exception as e:
+                self.logger.error(f"Failed to get current price: {e}")
+        
+        # Fallback: get from bar store
+        if hasattr(self, 'live') and self.live:
+            bars = self.live.get_last_n(symbol, n=1)
+            if bars:
+                return bars[-1].close
+        
+        return None
 
