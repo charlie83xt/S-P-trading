@@ -16,6 +16,7 @@ from risk_manager import RiskManager
 from api_factory import APIFactory
 from strategy_factory import create as create_strategy
 from trade_analytics import TradeAnalytics
+from strategy_manager import StrategyManager
 
 # ================= tiny helpers =====================
 import uuid
@@ -47,12 +48,16 @@ class TradingBot:
         self.signals_generated = 0
         # self.data_manager = DataManager(self.config, platform)
         self.data_manager = DataManager(config = self.config)
-        self.strategy = create_strategy(
-            "OpeningRange",
-            data_manager = self.data_manager,
-            opening_range_minutes = self.config.OPENING_RANGE_MINUTES,
-            breakout_threshold = self.config.BREAKOUT_THRESHOLD_PERCENT
+         # Initialise analytics
+        self.analytics = TradeAnalytics(db_path='market_data.db') # <= Wired for analytics
+
+        self.strategy_manager = StrategyManager(
+            self.data_manager,
+            self.config,
+            self.analytics
         )
+        
+        self.strategy = self.strategy_manager.get_active_strategy()
         self.risk_manager = RiskManager(
             self.config.MAX_POSITION_SIZE,
             self.config.STOP_LOSS_PERCENTAGE,
@@ -60,9 +65,14 @@ class TradingBot:
             self.config.MAX_DAILY_TRADES,
             cooldown_period=self.config.COOLDOWN_PERIOD
         )
-        # Initialise analytics
-        self.analytics = TradeAnalytics(db_path='market_data.db') # <= Wired for analytics
-
+        
+        # self.strategy = create_strategy(
+        #     "OpeningRange",
+        #     data_manager = self.data_manager,
+        #     opening_range_minutes = self.config.OPENING_RANGE_MINUTES,
+        #     breakout_threshold = self.config.BREAKOUT_THRESHOLD_PERCENT
+        # )
+        
         
         self.risk_manager.instant_close = getattr(self.config, "INSTANT_CLOSE_TRADES", "hold")
         self.risk_manager.emit_closed_on_hold = getattr(self.config, "RM_EMIT_CLOSED_ON_HOLD", True)
@@ -327,6 +337,8 @@ class TradingBot:
                 # 2) Ask strategy for a signal
                 sig = None
                 try:
+                    # sig = self.strategy.check_breakout(symbol, price)
+                    self.strategy = self.strategy_manager.get_active_strategy()
                     sig = self.strategy.check_breakout(symbol, price)
                 except Exception as e:
                     self.logger.exception("Strategy error: %s", e)
@@ -1398,6 +1410,31 @@ class TradingBot:
             "avg_price": float(existing.get("avg_price") or self.data_manager.get_current_price(sym) or 0.0),
         }
         self.logger.info("SYNC-RM: sym=%s qty=%s avg=%s", sym, rm.positions[sym]["qty"], rm.positions[sym]["avg_price"])
+
+
+    def set_strategy_manual(self, strategy_name: str, params: dict = None):
+        """Manually override auto-switching for special events"""
+        if not hasattr(self, 'strategy_manager'):
+            return False
+    
+        if strategy_name not in self.strategy_manager.strategies:
+            self.logger.error(f"Unknown strategy: {strategy_name}")
+            return False
+    
+        self.strategy_manager.manual_override = True
+        self.strategy_manager.manual_strategy_name = strategy_name
+        self.logger.info(f"🔧 MANUAL OVERRIDE: {strategy_name}")
+        return True
+
+
+    def clear_strategy_override(self):
+        """Return to auto-switching"""
+        if hasattr(self, 'strategy_manager'):
+            self.strategy_manager.manual_override = False
+            self.strategy_manager.manual_strategy_name = None
+            self.logger.info("✅ Returning to auto-switching")
+            return True
+        return False
 
 
 

@@ -287,3 +287,86 @@ class TradeAnalytics:
         }
 
 
+    def get_strategy_performance(self, days: int = 30) -> Dict[str, Any]:
+        """
+        Compare performance across all strategies.
+        Returns dict with strategy names as keys.
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+    
+        cursor.execute('''
+            SELECT
+                s.strategy_name,
+                COUNT(t.trade_id) as total_trades,
+                SUM(CASE WHEN t.pnl > 0 THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN t.pnl < 0 THEN 1 ELSE 0 END) as losses,
+                AVG(t.pnl) as avg_pnl,
+                SUM(t.pnl) as total_pnl,
+                AVG(CASE WHEN t.pnl > 0 THEN t.pnl END) as avg_win,
+                AVG(CASE WHEN t.pnl < 0 THEN t.pnl END) as avg_loss,
+                MAX(t.pnl) as max_win,
+                MIN(t.pnl) as max_loss
+            FROM signals s
+            LEFT JOIN trades_enhanced t ON s.signal_id = t.signal_id
+            WHERE s.executed = 1
+            AND date(s.ts) >= date('now', '-' || ? || ' days')
+            GROUP BY s.strategy_name
+        ''', (days,))
+    
+        results = {}
+        for row in cursor.fetchall():
+            strategy_name = row[0]
+            total, wins, losses = row[1], row[2] or 0, row[3] or 0
+            avg_pnl, total_pnl = row[4] or 0, row[5] or 0
+            avg_win, avg_loss = row[6] or 0, row[7] or 0
+            max_win, max_loss = row[8] or 0, row[9] or 0
+        
+            win_rate = (wins / total * 100) if total > 0 else 0
+            profit_factor = abs(avg_win / avg_loss) if avg_loss != 0 else 0
+        
+            # Calculate Sharpe ratio (simplified)
+            std_dev = self._get_pnl_std(strategy_name, days, conn)
+            sharpe = (avg_pnl / std_dev) if std_dev > 0 else 0
+        
+            results[strategy_name] = {
+                'trades': total,
+                'wins': wins,
+                'losses': losses,
+                'win_rate': round(win_rate, 2),
+                'total_pnl': round(total_pnl, 2),
+                'avg_pnl': round(avg_pnl, 2),
+                'avg_win': round(avg_win, 2),
+                'avg_loss': round(avg_loss, 2),
+                'max_win': round(max_win, 2),
+                'max_loss': round(max_loss, 2),
+                'profit_factor': round(profit_factor, 2),
+                'sharpe_ratio': round(sharpe, 2)
+            }
+    
+        conn.close()
+        return results
+
+
+    def _get_pnl_std(self, strategy_name: str, days: int, conn) -> float:
+        """Calculate standard deviation of PnL for Sharpe ratio"""
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT t.pnl
+            FROM signals s
+            JOIN trades_enhanced t ON s.signal_id = t.signal_id
+            WHERE s.strategy_name = ?
+            AND t.status = 'closed'
+            AND date(s.ts) >= date('now', '-' || ? || ' days')
+        ''', (strategy_name, days))
+    
+        pnls = [row[0] for row in cursor.fetchall() if row[0] is not None]
+    
+        if len(pnls) < 2:
+            return 0.0
+    
+        mean = sum(pnls) / len(pnls)
+        variance = sum((x - mean) ** 2 for x in pnls) / len(pnls)
+        return variance ** 0.5
+
+

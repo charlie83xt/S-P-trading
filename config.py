@@ -14,7 +14,7 @@ class Config:
     # -------------------------------------------------------------------
     # ORB BREAK + RETEST STRATEGY (Cousin's Recommendation)
     # -------------------------------------------------------------------
-    ORB_RETEST_OR_MINUTES = int(os.getenv("ORB_RETEST_OR_MINUTES", "15"))
+    ORB_RETEST_OR_MINUTES = int(os.getenv("ORB_RETEST_OR_MINUTES", "30"))
     ORB_RETEST_BREAKOUT_POINTS = float(os.getenv("ORB_RETEST_BREAKOUT_PTS", "2.0"))
     ORB_RETEST_BREAKOUT_PCT = float(os.getenv("ORB_RETEST_BREAKOUT_PCT", "0.0"))
     ORB_RETEST_TOLERANCE = float(os.getenv("ORB_RETEST_TOLERANCE", "1.0"))
