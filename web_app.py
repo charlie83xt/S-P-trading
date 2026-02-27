@@ -702,6 +702,20 @@ def _trading_main():
                 sym = payload.get("symbol") or getattr(bot, "symbol", getattr(cfg, "DEFAULT_SYMBOL", "ES"))
                 name = (payload.get("strategy") or "").strip()
                 params = payload.get("params") or {}
+                manual_mode = payload.get("manual_mode", False)
+
+                # Handle manual vs auto
+                if manual_mode and name:
+                    if hasattr(bot, 'set_strategy_manual'):
+                        bot.set_strategy_manual(name, params)
+                        app.logger.info(f"🔧 Manual: {name}")
+                    else:
+                        app.logger.warning("Bot doesn't support strategy_manager")
+                else:
+                    if hasattr(bot, 'clear_strategy_override'):
+                        bot.clear_strategy_override()
+                        app.logger.info(f"✅ Auto-switching enabled")
+
 
                 # remember desired strategy in case a later 'connect' recreates the bot
                 # global _last_strategy_name, _last_strategy_params
@@ -718,7 +732,7 @@ def _trading_main():
                         # _snap_status(from_trading_thread=True)
 
 
-                if name:
+                if name and not hasattr(bot, 'strategy_manager'):
                     app.logger.info("🔥 SETTING STRATEGY: name=%s params=%s", name, params)
                     try:
                         bot.set_strategy(name, params)
@@ -916,9 +930,10 @@ def start_bot():
     symbol = data.get("symbol") or getattr(cfg, "DEFAULT_SYMBOL", "ES")
     strategy = data.get("strategy") or "OpeningRange" # Default
     params = data.get("params") or {}
+    manual_mode = data.get("manual_mode", False) # 
 
     # Te3mporary check ---
-    app.logger.info("UI start: strategy=%s params%s platform=%s symbol=%s", strategy, params, platform, symbol)
+    app.logger.info("UI start: strategy=%s manual%s params=%s", strategy, manual_mode, params)
     #####
 
     _ensure_trading_thread()
@@ -926,16 +941,15 @@ def start_bot():
     if not _thread_connected.is_set():
         _cmd_q.put(("connect", {"platform": platform, "symbol": symbol}))
 
-    # queue connect (if not already connected) then start
-    # _cmd_q.put(("connect", {"platform": platform, "symbol": symbol}))
-    # _cmd_q.put(("set_strategy", {"strategy": strategy, "params": params}))
     _cmd_q.put(("start", {
         "symbol": symbol, 
         "strategy": strategy,
-        "params":params
+        "params":params,
+        "manual_mode": manual_mode 
     }))
 
-    return jsonify({'success': True, 'message': f'Bot starting on {platform} / {symbol} with {strategy}...'})
+    msg = f'Manual: {strategy}' if manual_mode else 'Auto-switching'
+    return jsonify({'success': True, 'message': msg})
     # --- robust body parsing ---
     
 
@@ -1216,13 +1230,29 @@ def get_watchdog_status():
     
     return jsonify(_watchdog.get_status_dict())
 
+@app.route("/api/strategy/auto", methods=['POST'])
+def enable_auto():
+    """Clear manual override, return to auto-switching"""
+    if bot and hasattr(bot, 'clear_strategy_override'):
+        bot.clear_strategy_override()
+        return jsonify({"success": True, "mode": "auto"})
+    return jsonify({"success": False})
+
+@app.route("/api/strategy/manual", methods=['POST'])
+def set_manual():
+    """Set manual strategy override"""
+    data = _get_json()
+    strategy = data.get("strategy")
+    if bot and strategy and hasattr(bot, "set_strategy_manual"):
+        bot.set_strategy_manual(strategy)
+        return jsonify({'success': True, 'mode': 'manual', 'strategy': strategy})
+    return jsonify({'success': False})
 
 def _log_routes():
     print("\nRegistered routes:")
     for r in app.url_map.iter_rules():
         print(f" {r.rule:30s} -> {','.join(sorted(r.methods))}")
     print()
-
 
 
 import atexit
