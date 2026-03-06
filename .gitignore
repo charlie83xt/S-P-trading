@@ -15,6 +15,7 @@ PROJECT_BUNDLE.txt
 *.log
 *.html
 *.png
+*.db
 
 
 # OS generated
@@ -26,5 +27,6 @@ Thumbs.db
 documentation
 ss
 SS*
-
+data/*
+!data/.gitkeep
 
