@@ -124,6 +124,12 @@ class Config:
     KEEP_BARS = int(os.getenv("KEEP_BARS", "480"))  # 8 hours of 1m bars
     DATA_REFRESH_INTERVAL = float(os.getenv("DATA_REFRESH_INTERVAL", "1.0"))
 
+    # Mean Reversion Strategy (Afternoon Session)
+    MEAN_REVERSION_LOOKBACK = int(os.getenv("MEAN_REVERSION_LOOKBACK", "20"))
+    MEAN_REVERSION_STD_DEV = float(os.getenv("MEAN_REVERSION_STD_DEV", "2.0"))
+    MEAN_REVERSION_MAX_TRADES = int(os.getenv("MEAN_REVERSION_MAX_TRADES", "4"))
+
+
     @classmethod
     def validate_platform(cls):
         """Validate that the selected platform is supported."""

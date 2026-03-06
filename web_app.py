@@ -1055,21 +1055,6 @@ def get_market_analysis():
         global bot, cfg, _status
         
         analysis = dict(getattr(bot, "_latest_analysis", {}) or {}) # if 'bot' in globals() else None
-        # if snap:
-        #     analysis = dict(snap)
-        # else:
-        #     # resolve API: bot.data_manager.api -> bot.api -> None
-        #     api = None
-        #     if 'bot' in globals() and bot:
-        #         dm = getattr(bot, "data_manager", None)
-        #         api = getattr(dm, "api", None) if dm else getattr(bot, "api", None)
-
-            # Choose a symbol (UI/status first, then config, then ES)
-            # sym = None
-            # if bot is not None and getattr(bot, "_latest_analysis", None):
-            #     analysis = dict(bot._latest_analysis)
-            # else:
-            #     api = getattr(dm, "api", None)
         sym = None
         if isinstance(_status, dict):
             sym = _status.get("symbol") or _status.get("sym")
@@ -1081,12 +1066,6 @@ def get_market_analysis():
         has_price = analysis.get("current_price") is not None
         if not has_price:
             api_local = None
-            # Fallback: show a price even before the loop updates
-            # price = None
-            # analysis = {}
-            # if api and hasattr(api, "get_current_price"):
-            #     try:
-                    # sym = getattr(bot, "symbol", getattr(cfg,"DEFAULT_SYMBOL", "ES"))
             dm = getattr(bot, "data_manager", None)
             if dm:
                 api_local = getattr(dm, "api", None)
@@ -1109,26 +1088,7 @@ def get_market_analysis():
         analysis.setdefault("opening_range", None)
         analysis.setdefault("yesterday_day_range", None)
 
-                # if api:
-                #     sym = getattr(bot, "symbol", getattr(cfg, "DEFAULT_SYMBOL", "ES"))
-                #     price = api.get_current_price(sym)
-            # analysis = {
-            #     "current_price": float(price) if price is not None else None,
-            #     "range_position": "unknown",
-            #     "opening_range": None,
-            #     "yesterday_day_range": None,
-            # }
-        # except Exception:
-        #     analysis = { "current_price": None, "range_position": "unknown"}
-            # pass
-        # else:
         return jsonify({'success': True, 'analysis': analysis })
-            # {
-            #     "current_price": float(price) if price is not None else None,
-            #     "range_position": "unknown",
-            #     "opening_range": None,
-            #     "yesterday_day_range": None,
-            # }})
             
     except Exception as e:
         app.logger.exception("get_market_analysis failed: %s", e)
@@ -1247,6 +1207,31 @@ def set_manual():
         bot.set_strategy_manual(strategy)
         return jsonify({'success': True, 'mode': 'manual', 'strategy': strategy})
     return jsonify({'success': False})
+
+
+@app.route('/api/strategies', methods=['GET'])
+def list_strategies():
+    """
+    Return all available strategies.
+    Frontend uses this to populate dropdown dynamically.
+    """
+    try:
+        from strategy_factory import list_strategies
+        strategies = list_strategies()
+       
+        # Filter to only enabled strategies
+        enabled = [s for s in strategies if s.get('enabled', True)]
+       
+        return jsonify({
+            'success': True,
+            'strategies': enabled
+        })
+    except Exception as e:
+        logger.error(f"Error listing strategies: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
 
 def _log_routes():
     print("\nRegistered routes:")

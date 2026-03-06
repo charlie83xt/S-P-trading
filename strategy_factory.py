@@ -10,6 +10,7 @@ Supported strategies:
 
 from opening_range_strategy import OpeningRangeStrategy
 from minimal_test_strategy import TestStrategy
+from mean_reversion_strategy import MeanReversionStrategy
 from typing import Any, Dict
 
 # Try to import ORB Retest strategy (your cousin's recommendation)
@@ -22,18 +23,29 @@ except ImportError:
 
 
 _STRATEGIES = {
-    "OpeningRange": {
-        "class": OpeningRangeStrategy,
-        "description": "Simple opening range breakout (0-2 trades/day)",
-    },
     "ORBRetest": {
         "class": ORBRetestStrategy,
         "description": "ORB break + retest + pattern confirmation (2-6 trades/day)",
         "available": _HAS_ORB_RETEST,
+        "enabled": True, # Default Strategy
+    },
+    "MeanReversion": {
+        "class": MeanReversionStrategy,
+        "description": "Bollinger Bands mean reversion (12 PM - 4 PM ET)",
+        "available": _HAS_ORB_RETEST,
+        "enabled": True, # Default strategy
+    },
+    "OpeningRange": {
+        "class": OpeningRangeStrategy,
+        "description": "Simple opening range breakout (0-2 trades/day)",
+        "available": True,
+        "enabled": False, # DISABLED - superseded by ORBRetest
     },
     "Test": {
         "class": TestStrategy,
         "description": "Minimal test strategy for debugging",
+        "available": True,
+        "enabled": False, # Only for testing
     },
 }
 
@@ -114,6 +126,18 @@ def create(name: str, *, data_manager, **params):
         )
 
     # ========================================================================
+    # MEAN REVERSION STRATEGY (Afternoon Session)
+    # ========================================================================
+
+    elif name == "MeanReversion":
+        return MeanReversionStrategy(
+            data_manager=data_manager,
+            lookback=int(params.get("lookback", 20)),
+            std_dev=float(params.get("std_dev", 2.0)),
+            max_trades_per_day=int(params.get("max_trades_per_day", 4)),
+        )
+
+    # ========================================================================
     # TEST STRATEGY (Debugging)
     # ========================================================================
     elif name == "Test":
@@ -146,7 +170,8 @@ def create(name: str, *, data_manager, **params):
         available = []
         for strat_name, info in _STRATEGIES.items():
             if isinstance(info, dict):
-                if info.get("available", True):
+                # if info.get("available", True):
+                if info.get("available", True) and info.get("enabled", True):
                     desc = info.get("description", "")
                     available.append(f"{strat_name} - {desc}")
             else:
@@ -173,11 +198,13 @@ def list_strategies():
                 "name": name,
                 "description": info.get("description", ""),
                 "available": info.get("available", True),
+                "enabled": info.get("enabled", True),
             })
         else:
             result.append({
                 "name": name,
                 "description": "",
                 "available": True,
+                "enabled": True,
             })
     return result

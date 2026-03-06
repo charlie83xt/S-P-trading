@@ -645,7 +645,7 @@ class TradingBot:
 
                 
                 # self._record_fill(sym, side, qty, px, dry_run=(acct_mode != "false"))
-                self._record_fill(sym, side, qty, px, dry_run=True)
+                self._record_fill(sym, side, qty, px, dry_run=True, signal_id=signal_id, attempt_id=attempt_id, exit_reason=signal.get("reason"))
                 return True
 
             # LIVE: actually send the order
@@ -1319,21 +1319,6 @@ class TradingBot:
         # Option B: Clean - Use helper from RM)
         stop_pts, take_pts = rm.calculate_dynamic_stops(symbol, current_price)
 
-        # # choose points from config (example defaults)
-        # # stop_pts = getattr(self.config, "STOP_LOSS_POINTS", 6)
-        # # take_pts = getattr(self.config, "TAKE_PROFIT_POINTS", 8)
-        # vol = rm.update_volatility(symbol, current_price, alpha=0.05)
-
-        # # min/max clamps so it doesn't go crazy
-        # min_stop = 1.0
-        # max_stop = 10.0
-
-        # # choose multipliers
-        # stop_mult = 3.0
-        # take_mult = 6.0
-
-        # stop_pts = max(min_stop, min(max_stop, stop_mult * vol))
-        # take_pts = max(stop_pts, take_mult * vol) # ensure take >= stop
 
         # logging the position state we are using
         sym = (symbol or "").upper()

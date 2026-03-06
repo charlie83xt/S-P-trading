@@ -59,15 +59,24 @@ class StrategyManager:
             trade_start_time_et=(9, 45),
             trade_end_time_et=(12, 0)
         )
-       
-        # OpeningRange for London morning (simpler, more signals)
+
+        # MeanReversion for afternoon session (12:00 PM - 4:00 PM ET)
+        strategies["MeanReversion"] = create_strategy(
+            "MeanReversion",
+            data_manager=self.dm,
+            lookback=getattr(self.config, 'MEAN_REVERSION_LOOKBACK', 20),
+            std_dev=getattr(self.config, 'MEAN_REVERSION_STD_DEV', 2.0),
+            max_trades_per_day=getattr(self.config, 'MEAN_REVERSION_MAX_TRADES', 4),
+        )
+        
+        # OpeningRange for early morning (8:00 AM - 9:45 AM ET)
         strategies["OpeningRange"] = create_strategy(
             "OpeningRange",
             data_manager=self.dm,
             opening_range_minutes=30,
-            breakout_threshold=0.5  # More sensitive
         )
-       
+
+        
         # Add more strategies as you build them
         # strategies["MeanReversion"] = create_strategy("MeanReversion", ...)
         # strategies["RangeTrader"] = create_strategy("RangeTrader", ...)
@@ -134,12 +143,12 @@ class StrategyManager:
         - 4:00 PM - 8:00 AM: OFF (overnight - you're sleeping)
         - 8:00 AM - 9:45 AM: OpeningRange (pre-market - simpler strategy)
         """
-        if 9 <= hour_et < 12:
+        if 9 <= hour_et < 12: # 9:45 - 12:00 PM
             return "ORBRetest"
+        elif 12 <= hour_et < 16: # 12:00 PM - 4:00 PM
+            return "MeanReversion"
         elif 8 <= hour_et < 9:
-            return "OpeningRange"
-        # elif 12 <= hour_et < 16:
-        #     return "MeanReversion"  # Add when built
+            return "OpeningRange"  # Add when built
         else:
             # Outside trading hours - use safest/simplest strategy
             return "OpeningRange"
