@@ -12,7 +12,7 @@ import os
 import sys
 
 # Configuration
-DATABASE_PATH = 'trade_history.db'  # Adjust to your actual database location
+DATABASE_PATH = 'market_data.db'  # Adjust to your actual database location
 BACKUP_DIR = 'data/daily_backups'
 WEEKLY_BACKUP_DIR = 'data/weekly_backups'
 
@@ -40,9 +40,9 @@ def export_today_trades():
         
         # Query today's trades
         query = f"""
-            SELECT * FROM trades 
-            WHERE DATE(entry_time) = '{today}'
-            ORDER BY entry_time
+            SELECT * FROM trades_enhanced
+            WHERE DATE(ts_open) = '{today}'
+            ORDER BY ts_open
         """
         
         df = pd.read_sql(query, conn)
@@ -102,10 +102,10 @@ def export_week_summary():
         week_display = f"{week_start.strftime('%b %d')} - {week_end.strftime('%b %d, %Y')}"
         
         query = f"""
-            SELECT * FROM trades 
-            WHERE DATE(entry_time) BETWEEN '{week_start.strftime('%Y-%m-%d')}' 
+            SELECT * FROM trades_enhanced
+            WHERE DATE(ts_open) BETWEEN '{week_start.strftime('%Y-%m-%d')}' 
                                        AND '{week_end.strftime('%Y-%m-%d')}'
-            ORDER BY entry_time
+            ORDER BY ts_open
         """
         
         df = pd.read_sql(query, conn)
@@ -125,8 +125,8 @@ def export_week_summary():
         winning_days = 0
         
         # Group by day
-        if 'entry_time' in df.columns and 'pnl' in df.columns:
-            df['date'] = pd.to_datetime(df['entry_time']).dt.date
+        if 'ts_open' in df.columns and 'pnl' in df.columns:
+            df['date'] = pd.to_datetime(df['ts_open']).dt.date
             daily_pnl = df.groupby('date')['pnl'].sum()
             winning_days = len(daily_pnl[daily_pnl > 0])
         

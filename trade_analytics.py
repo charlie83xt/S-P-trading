@@ -18,11 +18,20 @@ class TradeAnalytics:
     for ML model training and strategy optimization.
     """
     
-    def __init__(self, db_path='market_data.db'):
+    def __init__(self, db_path='market_data.db', use_supabase=True):
         """Use same DB as data_manager for efficiency"""
         self.db_path = db_path
         self.logger = logging.getLogger(__name__)
         self._init_analytics_tables()
+
+        # Remote Supabase (Permanent, accessible)
+        self.supabase_enabled = use_supabase
+        if use_supabase:
+            from supabase import create_client
+            self.supabase = create_client(
+                os.getenv("SUPABASE_URL"),
+                os.getenv("SUPABASE_KEY")
+            )
     
     def _init_analytics_tables(self):
         """Create analytics tables if they don't exist"""

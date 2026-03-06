@@ -308,55 +308,6 @@ class ORBRetestStrategy:
         self.logger.info(f"   🔻 BREAKOUT DOWN if price < {threshold_down:.2f}")
 
 
-    # def _compute_orb_if_ready(self, symbol: str, ts: float) -> None:
-    #     """
-    #     Compute opening range once the OR period has elapsed.
-    #     OR period = opening_range_minutes after session open (default 9:30-9:45 ET).
-    #     """
-    #     self._reset_if_new_session(ts)
-        
-    #     session_open, _ = self._session_open_close_ts(ts)
-    #     or_end = session_open + self.opening_range_minutes * 60.0
-        
-    #     # Still building OR
-    #     if ts < or_end:
-    #         self.state.phase = "WAIT_OR"
-    #         return
-        
-    #     # Already computed
-    #     if self.state.or_computed:
-    #         return
-        
-    #     # Fetch candles for OR period (try 1m first, fallback to 2m/5m)
-    #     start = session_open
-    #     end = or_end
-    #     candles = []
-        
-    #     for tf in ("1m", "2m", "5m"):
-    #         try:
-    #             candles = self.dm.get_candles(symbol, timeframe=tf, start_ts=start, end_ts=end) or []
-    #         except Exception as e:
-    #             self.logger.debug(f"Failed to get {tf} candles: {e}")
-    #             candles = []
-    #         if candles:
-    #             break
-        
-    #     if not candles:
-    #         self.logger.warning("No candles available for OR calculation")
-    #         return
-        
-    #     # Calculate OR boundaries
-    #     lo = min(float(c["low"]) for c in candles)
-    #     hi = max(float(c["high"]) for c in candles)
-        
-    #     self.state.or_low = lo
-    #     self.state.or_high = hi
-    #     self.state.or_ready = True
-    #     self.state.or_computed = True
-    #     self.state.phase = "WAIT_BREAK"
-        
-    #     self.logger.info(f"ORB computed for {symbol}: low={lo:.2f}, high={hi:.2f}")
-
     # ============================================================================
     # FILTERS
     # ============================================================================
@@ -823,6 +774,61 @@ class ORBRetestStrategy:
             "breakout_side": self.state.breakout_side,
             "trades_today": self.state.trades_today,
         }
+
+    def _get_yesterday_context(self) -> dict:
+        """
+        Query yesterday's data from Supabase for context.
+        This is OPTIONAL and doesn't affect core trading logic.
+
+        Returns dict with yesterday's stats or empty dict if unavailable.
+        """
+        if not hasattr(self.dm, 'supabase') or not self.dm.supabase:
+            return {}
+
+        try:
+            if hasattr(self.dm, "query_yesterday_bars"):
+                # New method available - use it!
+                bars = self.dm.query_yesterday_bars (
+                    self.symbol,
+                    start_hour=9, start_min=30,
+                    end_hour=16, end_min=0
+                )
+            else:
+                # Get yesterday's date
+                yesterday = (datetime.now(ET_TZ) - timedelta(days=1)).strftime('%Y-%M-%d')
+
+                # Query Supabase for yesterday's data
+                bars = self.dm.get_historical_bars(
+                    self.symbol,
+                    f'{yesterday} 14:30:00+00',
+                    f'{yesterday} 21:00:00+00'
+                )
+
+            if not bars:
+                self.logger.debug('No yesterday bars available from Supabase')
+                return {}
+
+            # Calculate yesterday's stats
+            highs = [float(b['high']) for b in bars]
+            lows = [float(b['low']) for b in bars]
+
+            stats = {
+                'yesterday_high': max(highs),
+                'yesterday_low': min(lows),
+                'yesterday_range': max(highs) - min(lows),
+                'yesterday_bars': len(bars)
+            }
+
+            self.logger.info(
+                f"📊 Yesterday context: Range={stats['yesterday_range']:.2f} pts,"
+                f"Bars={len(bars)}"
+            )
+
+            return stats
+
+        except Exception as e:
+            self.logger.warning(f"Could not get yesterday context: {e}")
+            return {}
 
     # ============================================================================
     # COMPATIBILITY METHODS FOR trading_bot.py

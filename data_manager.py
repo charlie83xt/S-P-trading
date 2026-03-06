@@ -16,6 +16,7 @@ from api_factory import APIFactory
 from api_interface import TradingAPIInterface
 from config import Config
 import time
+from supabase import create_client, Client
 
 import sys
 import traceback
@@ -135,6 +136,137 @@ class DataManager:
 
         self.live = LiveBarStore(keep=480)
         self.logger.info(f"DataManager initialised: self.live type={type(self.live)}")
+        self.supabase = self._init_supabase()
+
+    def _init_supabase(self):
+        try:
+            url = os.getenv('SUPABASE_URL')
+            key = os.getenv('SUPABASE_KEY')
+
+            if not url or not key:
+                self.logger.info("Supabase not configured (Optional)")
+                return None
+
+            client = create_client(url, key)
+            self.logger.info("✅ Supabase connected for historical data")
+            return client
+
+        except Exception as e:
+            self.logger.warning(f"Supabase not available (non-critical): {e}")
+            return None
+
+    
+    def get_historical_bars(self, symbol: str, start_time: str, end_time: str) -> List[dict]:
+        """
+        Get bars from supabase for backtesting or analysis
+
+        ⚠️ IMPORTANT: Only use for COMPLETED historical data, never for current trading!
+
+        Use cases:
+        - Backtesting
+        - ML training
+        - Analytics
+        - Yesterday's data for context
+
+        DO NOT use for:
+        - Current opening range calculation
+        - Live trading decisions
+        """
+        if not self.supabase:
+            self.logger.debug("Supabase not available, retturning empty")
+            return [] # Fallback to local/live data
+
+        try:
+            start_utc = start_time if '+' in start_time else f'{start_time}+00'
+            end_utc = end_time if '+' in end_time else f'{end_time}+00'
+
+            # Convert to Supabase symbol format
+            supabase_symbol = f'{symbol}_CONTFUT'
+
+            # Query Supabase
+            response = self.supabase.table('market_bars_1m') \
+                .select('*') \
+                .eq('symbol', supabase_symbol) \
+                .gte('ts', start_utc) \
+                .lte('ts', end_utc) \
+                .order('ts', desc=False) \
+                .execute()
+
+            self.logger.info(
+                f"Supabase query {supabase_symbol} {start_utc} to {end_utc} "
+                f"-> {len(response.data)} bars"
+            )
+            return response.data
+
+        except Exception as e:
+            self.logger.error(f"Supabase query failed: {e}")
+            return []    
+
+    def _et_to_utc_timestamp(self, date_str: str, time_str: str) -> str:
+        """
+        Convert ET time to UTC timestamp for Supabase queries.
+        
+        Args:
+            date_str: Date in 'YYYY-MM-DD' format
+            time_str: Time in 'HH:MM:SS' format (ET)
+        
+        Returns:
+            UTC timestamp string with timezone suffix
+        
+        Example:
+            >>> _et_to_utc_timestamp('2026-03-01', '09:30:00')
+            '2026-03-01 14:30:00+00'
+        """
+        from datetime import datetime
+        try:
+            from zoneinfo import ZoneInfo
+            ET_TZ = ZoneInfo("America/New_York")
+        except ImportError:
+            import pytz
+            ET_TZ = pytz.timezone("America/New_York")
+        
+        dt_et = datetime.strptime(f'{date_str} {time_str}', '%Y-%m-%d %H:%M:%S')
+        dt_et = dt_et.replace(tzinfo=ET_TZ)
+        dt_utc = dt_et.astimezone(timezone.utc)
+        
+        return dt_utc.strftime('%Y-%m-%d %H:%M:%S+00')
+
+
+    def query_yesterday_bars(self, symbol: str, start_hour: int = 9, start_min: int = 30, end_hour: int = 16, end_min: int = 0) -> List[dict]:
+        """
+        Thin wrapper: Query yesterday's bars from Supabase.
+        
+        Args:
+            symbol: Trading symbol
+           start_hour: Start hour in ET (default 9)
+            start_min: Start minute in ET (default 30)
+            end_hour: End hour in ET (default 16)
+            end_min: End minute in ET (default 0)
+        
+        Returns:
+            List of yesterday's bars from Supabase
+        
+        Edge cases:
+            - Returns [] if yesterday was weekend/holiday
+            - Returns [] if Supabase unavailable
+            - Handles DST transitions automatically
+        
+        Example:
+            >>> bars = dm.query_yesterday_bars('ES')
+            >>> len(bars)  # ~390 bars for full session
+        """
+        yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+        
+        start_ts = self._et_to_utc_timestamp(
+            yesterday,
+            f'{start_hour:02d}:{start_min:02d}:00'
+        )
+        end_ts = self._et_to_utc_timestamp(
+            yesterday,
+            f'{end_hour:02d}:{end_min:02d}:00'
+        )
+        
+        return self.get_historical_bars(symbol, start_ts, end_ts)
 
     
     def _ensure_tick_buf(self):

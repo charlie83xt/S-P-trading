@@ -256,24 +256,6 @@ class RiskManager:
             price: Entry price
             order_id: Order ID from exchange
         """
-        # self._check_new_day()
-        
-        # trade_record = {
-        #     'symbol': symbol,
-        #     'side': side,
-        #     'quantity': quantity,
-        #     'entry_price': price,
-        #     'entry_time': datetime.now(),
-        #     'order_id': order_id,
-        #     'status': 'open'
-        # }
-        
-        # # Add to current positions
-        # self.current_positions[symbol] = trade_record
-        
-        # # Increment daily trade counter
-        # self.daily_trades += 1
-        # self.last_trade_time = datetime.now()
         
         # self.logger.info(f"Trade entry recorded: {side.upper()} {quantity} {symbol} at {price}")
         self.logger.warning("record_trade_entry() legacy call ignored; use paper_fill()")
@@ -287,43 +269,6 @@ class RiskManager:
             exit_price: Exit price
             exit_reason: Reason for exit ('stop_loss', 'take_profit', 'manual')
         """
-        # if symbol not in self.current_positions:
-        #     self.logger.warning(f"No open position found for {symbol}")
-        #     return
-        
-        # position = self.current_positions[symbol]
-        
-        # # Calculate P&L
-        # entry_price = position['entry_price']
-        # quantity = position['quantity']
-        # side = position['side']
-        
-        # if side.lower() == 'buy':
-        #     pnl = (exit_price - entry_price) * quantity
-        # else:  # sell
-        #     pnl = (entry_price - exit_price) * quantity
-        
-        # # Update position record
-        # position.update({
-        #     'exit_price': exit_price,
-        #     'exit_time': datetime.now(),
-        #     'exit_reason': exit_reason,
-        #     'pnl': pnl,
-        #     'status': 'closed'
-        # })
-        
-        # # Move to trade history
-        # self.trade_history.append(position.copy())
-        
-        # # Remove from current positions
-        # del self.current_positions[symbol]
-        
-        # # Update daily P&L
-        # self.daily_pnl += pnl
-        
-        # # Record loss time for cooldown
-        # if pnl < 0:
-        #     self.last_loss_time = datetime.now()
         
         # self.logger.info(f"Trade exit recorded: {symbol} at {exit_price}, P&L: {pnl:.2f}, Reason: {exit_reason}")
         self.logger.warning("record_trade_exit() legacy call ignored; use paper_fill()")
@@ -552,6 +497,9 @@ class RiskManager:
         cur_qty = int(pos["qty"])
         avg = float(pos["avg_price"])
 
+        # Track if position is fully closed
+        position_fully_closed = False
+
         # helper to recompute avg on adds: (old notional + new notional)/(old qty + new qty)
         def _new_avg(old_qty, old_avg, add_qty, add_px):
             notional = old_qty * old_avg + add_qty * add_px
@@ -597,6 +545,7 @@ class RiskManager:
                     # fully closed short
                     pos["qty"] = 0
                     pos["avg_price"] = 0.0
+                    position_fully_closed = True
                 else:
                     # still short after partial reduce
                     pos["qty"] = cur_qty
@@ -671,6 +620,7 @@ class RiskManager:
                 if cur_qty == 0:
                     pos["qty"] = 0
                     pos["avg_price"] = 0.0
+                    position_fully_closed = True
                 else:
                     pos["qty"] = cur_qty
                     pos["avg_price"] = avg
@@ -712,13 +662,20 @@ class RiskManager:
         try:
             from trade_analytics import TradeAnalytics
             analytics = TradeAnalytics()
-            analytics.log_trade(trade_record)
+            if trade_record:
+                analytics.log_trade(trade_record)
+                self.logger.info(f'✅ Logged trade to analytics: {trade_record.get("signal_id")}')
         except Exception:
-            pass # Don't break trading if logging fails
+            self.logger.error(f"❌ Failed to trade to analytics", exc_info=True) 
+            # pass # Don't break trading if logging fails
 
         # update last price & unrealized
         pos["last_px"] = px
         self.mark_to_market(sym, last_price=px)
+
+        # Remove closed positions from dict
+        if position_fully_closed and sym in self.positions:
+            del self.positions[sym]
 
         # realize P&L & append trade if we closed/reduced
         if trade_record is not None:
