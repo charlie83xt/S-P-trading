@@ -60,9 +60,18 @@ class StrategyManager:
             trade_end_time_et=(12, 0)
         )
 
-        # MeanReversion for afternoon session (12:00 PM - 4:00 PM ET)
+        # MeanReversion for afternoon session (12:00 PM - 4:00 PM ET) in odd days
         strategies["MeanReversion"] = create_strategy(
             "MeanReversion",
+            data_manager=self.dm,
+            lookback=getattr(self.config, 'MEAN_REVERSION_LOOKBACK', 20),
+            std_dev=getattr(self.config, 'MEAN_REVERSION_STD_DEV', 2.0),
+            max_trades_per_day=getattr(self.config, 'MEAN_REVERSION_MAX_TRADES', 4),
+        )
+
+        # MeanReversion (Old) for afternoon session (12:00 PM - 4:00 PM ET) in even days
+        strategies["MeanReversionOld"] = create_strategy(
+            "MeanReversionOld",
             data_manager=self.dm,
             lookback=getattr(self.config, 'MEAN_REVERSION_LOOKBACK', 20),
             std_dev=getattr(self.config, 'MEAN_REVERSION_STD_DEV', 2.0),
@@ -145,8 +154,19 @@ class StrategyManager:
         """
         if 9 <= hour_et < 12: # 9:45 - 12:00 PM
             return "ORBRetest"
-        elif 12 <= hour_et < 16: # 12:00 PM - 4:00 PM
-            return "MeanReversion"
+        elif 12 <= hour_et < 16: 
+            # A/B Test: Temporary alternating between new and old strategy 12:00 PM - 4:00 PM
+            current_day = datetime.now(ET_TZ).day
+
+            if current_day % 2 == 0:
+                # Even days: use old strategy
+                self.logger.debug(f"📊 A/B: Even day {current_day} -> MeanReversionOld")
+                return "MeanReversionOld"
+            else:
+                # Odd days: Use new strategy
+                self.logger.debug(f"📊 A/B: Odd day {current_day} -> MeanReversion")
+                return "MeanReversion"
+
         elif 8 <= hour_et < 9:
             return "OpeningRange"  # Add when built
         else:
