@@ -11,7 +11,9 @@ Supported strategies:
 from opening_range_strategy import OpeningRangeStrategy
 from minimal_test_strategy import TestStrategy
 from mean_reversion_strategy import MeanReversionStrategy
+from mean_reversion_strategy_old import MeanReversionStrategyOld
 from typing import Any, Dict
+from datetime import time
 
 # Try to import ORB Retest strategy (your cousin's recommendation)
 try:
@@ -31,6 +33,12 @@ _STRATEGIES = {
     },
     "MeanReversion": {
         "class": MeanReversionStrategy,
+        "description": "Bollinger Bands mean reversion (12 PM - 4 PM ET)",
+        "available": _HAS_ORB_RETEST,
+        "enabled": True, # Default strategy
+    },
+    "MeanReversionOld": {
+        "class": MeanReversionStrategyOld,
         "description": "Bollinger Bands mean reversion (12 PM - 4 PM ET)",
         "available": _HAS_ORB_RETEST,
         "enabled": True, # Default strategy
@@ -131,6 +139,25 @@ def create(name: str, *, data_manager, **params):
 
     elif name == "MeanReversion":
         return MeanReversionStrategy(
+            data_manager=data_manager,
+            lookback=int(params.get("lookback", 20)),
+            std_dev=float(params.get("std_dev", 2.0)),
+            max_trades_per_day=int(params.get("max_trades_per_day", 4)),
+            qty=int(params.get("qty", 1)),
+            session_start=time(12, 0),
+            session_end=time(16, 0),
+            use_session_filter=True,
+            min_bandwidth_pct=0.0025,
+            cooldown_bars=3,
+            require_reentry_confirmation=True,
+        )
+
+    # ========================================================================
+    # MEAN REVERSION STRATEGY (Afternoon Session)
+    # ========================================================================
+
+    elif name == "MeanReversionOld":
+        return MeanReversionStrategyOld(
             data_manager=data_manager,
             lookback=int(params.get("lookback", 20)),
             std_dev=float(params.get("std_dev", 2.0)),
