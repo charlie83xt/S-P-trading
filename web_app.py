@@ -648,7 +648,15 @@ def _trading_main():
 
             if cmd == "connect":
                 platform = payload.get("platform") or cfg.TRADING_PLATFORM
-                symbol = payload.get("symbol") or getattr(cfg, "DEFAULT_SYMBOL", "ES")
+                # symbol = payload.get("symbol") or getattr(cfg, "DEFAULT_SYMBOL", "ES")
+                symbol = payload.get("symbol")
+                if not symbol:
+                    app.logger.error("❌ Connect: No symbol provided!")
+                    symbol = "MES"  # Emergency fallback - use MES not ES
+                    app.logger.warning(f"   Using emergency fallback: {symbol}")
+
+                symbol = symbol.upper()
+                app.logger.warning(f"🔌 CONNECT COMMAND: symbol={symbol}")
                 
 
                 # Rebuild config+API+bot to requested platform inside THIS thread
@@ -657,19 +665,6 @@ def _trading_main():
                 # api = APIFactory.create_api(cfg)
                 # bot = TradingBot(config=cfg)
                 bot.symbol = symbol
-
-                # re-apply last requested strategy (from UI) after bot recreation
-                # if _last_strategy_name:
-                #     try:
-                #         bot.set_strategy(_last_strategy_name, _last_strategy_params or {})
-                #         app.logger.info("Thread: reapplied strategy %s %s after connect", _last_strategy_name, _last_strategy_params)
-                #     except Exception as e:
-                #         app.logger.exception("Reapply strategy failed: %s", e)
-
-                # try:
-                #     bot.data_manager.api = api
-                # except Exception:
-                #     pass
 
                 ok = True
                 if api and not api.is_connected():
@@ -927,13 +922,48 @@ def start_bot():
     # global cfg, api, bot, bot_thread
     data = _get_json()
     platform = data.get("platform") or cfg.TRADING_PLATFORM
-    symbol = data.get("symbol") or getattr(cfg, "DEFAULT_SYMBOL", "ES")
+    symbol = data.get("symbol") # or getattr(cfg, "DEFAULT_SYMBOL", "ES")
+
+    if not symbol or not symbol.strip():
+        # No symbol provided - reject request
+        return jsonify({
+            'success': False,
+            'message': 'ERROR: No symbol specified. Please select a symbol.'
+        }), 400
+    
+    symbol = symbol.upper().strip() # Normalising to uppercase
+
+    # ADD: Validate symbol
+    # VALID_SYMBOLS = ["ES", "MES", "NQ", "MNQ", "YM", "MYM"]
+    # if symbol not in VALID_SYMBOLS:
+    #     return jsonify({
+    #         'success': False,
+    #         'message': f'ERROR: Invalid symbol {symbol}. Valid: {VALID_SYMBOLS}'
+    #     }), 400
+
+    # ADD: Log clearly
+    app.logger.warning(f"START BOT REQUEST:")
+    app.logger.warning(f"   Platform: {platform}")
+    app.logger.warning(f"   Symbol: {symbol}")
+    app.logger.warning(f"   Contract: {'MICRO ($5/pt)' if symbol.startswith('M') else 'FULL SIZE ($50/pt)'}")
+
+    # ADD Safety check for ES
+    if symbol == "ES":
+        app.logger.error(f"⚠️ WARNING: Starting with FULL SIZE ES contract!")
+        app.logger.warning(f"   Risk: $50 per point (10x larger than MES)")
+
+
+    # ADD: Log Symbol clearly
+    # app.logger.info(f"🎯 START BOT - SYMBOL: {symbol}")
+    # app.logger.warning(f"⚠️ TRADING {symbol} - Contract multiplier: "
+    #                    f"{'$5/pt (MICRO)' if symbol.startswith('M') else '$50/pt (FULL SIZE)'}")
+
     strategy = data.get("strategy") or "OpeningRange" # Default
     params = data.get("params") or {}
     manual_mode = data.get("manual_mode", False) # 
 
     # Te3mporary check ---
-    app.logger.info("UI start: strategy=%s manual%s params=%s", strategy, manual_mode, params)
+    # app.logger.info("UI start: strategy=%s manual%s params=%s", strategy, manual_mode, params)
     #####
 
     _ensure_trading_thread()
@@ -960,7 +990,6 @@ def stop_bot():
     _ensure_trading_thread()
     _cmd_q.put(("stop", {}))
     return jsonify({'success': True, 'message': 'Stop requested'})
-    
 
 
 @app.route('/api/pause', methods=['POST'])

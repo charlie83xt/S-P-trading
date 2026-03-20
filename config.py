@@ -39,7 +39,7 @@ class Config:
     SUPPORTED_PLATFORMS = ['binance', 'tradovate', 'ninjatrader', 'tradovate_ui']
     
     # Default trading symbol
-    DEFAULT_SYMBOL = os.getenv('DEFAULT_SYMBOL', 'BTCUSDT')
+    DEFAULT_SYMBOL = os.getenv('DEFAULT_SYMBOL', 'MES')  # Safer default
     
     # Risk management settings
     MAX_POSITION_SIZE = float(os.getenv('MAX_POSITION_SIZE', '0.1'))

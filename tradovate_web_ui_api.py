@@ -1335,16 +1335,77 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
     
     def _ensure_symbol_loaded(self, symbol: str):
-        self._click_any("symbol.open_search")
-        try:
-            self._fill_first("symbol.search_input", symbol)
-            self._wait_any("symbol.first_result")
-            self._click_any("symbol.first_result")
-        except Exception:
-            pass
+        """Load symbol with detailed step-by-step logging"""
         
-        self._wait_any("order.buy_market", timeout=self.timeout_ms)
-        # self._page_locator(".market-buttons").first().wait_for(timeout=self.timeout_ms) # REPLACING
+        symbol = symbol.upper()
+        self.logger.warning(f"🔍 LOADING SYMBOL: {symbol}")
+        
+        # Step 1: Open symbol search
+        try:
+            self.logger.info(f"   Step 1: Opening symbol search...")
+            self._click_any("symbol.open_search")
+            time.sleep(0.5)
+            self.logger.info(f"   ✅ Step 1: Search opened")
+        except Exception as e:
+            self.logger.error(f"   ❌ Step 1 FAILED: {e}")
+            self.logger.error(f"      Cannot open symbol search!")
+            raise  # Don't continue if search won't open
+        
+        # Step 2: Type symbol in search field
+        try:
+            self.logger.info(f"   Step 2: Typing '{symbol}' in search...")
+            self._fill_first("symbol.search_input", symbol)
+            time.sleep(0.3)
+            self.logger.info(f"   ✅ Step 2: Typed '{symbol}'")
+        except Exception as e:
+            self.logger.error(f"   ❌ Step 2 FAILED: {e}")
+            self.logger.error(f"      Cannot type in search field!")
+            raise
+        
+        # Step 3: Wait for search results to appear
+        try:
+            self.logger.info(f"   Step 3: Waiting for search results...")
+            self._wait_any("symbol.first_result", timeout=2000)
+            self.logger.info(f"   ✅ Step 3: Results appeared")
+        except Exception as e:
+            self.logger.error(f"   ❌ Step 3 FAILED: {e}")
+            self.logger.error(f"      NO RESULTS FOUND FOR '{symbol}'!")
+            self.logger.error(f"      This means:")
+            self.logger.error(f"      1. Symbol not available in your account, OR")
+            self.logger.error(f"      2. Search selectors are wrong, OR")
+            self.logger.error(f"      3. Search results take too long to load")
+            raise
+        
+        # Step 4: Click first result
+        try:
+            self.logger.info(f"   Step 4: Clicking first search result...")
+            self._click_any("symbol.first_result")
+            time.sleep(1.0)
+            self.logger.info(f"   ✅ Step 4: Clicked result")
+        except Exception as e:
+            self.logger.error(f"   ❌ Step 4 FAILED: {e}")
+            self.logger.error(f"      Cannot click search result!")
+            raise
+        
+        # Step 5: Verify DOM is ready
+        try:
+            self.logger.info(f"   Step 5: Waiting for DOM to load...")
+            self._wait_any("order.buy_market", timeout=self.timeout_ms)
+            self.logger.info(f"   ✅ Step 5: DOM ready")
+        except Exception as e:
+            self.logger.warning(f"   ⚠️  Step 5: DOM check timeout (non-fatal)")
+            # Don't raise - DOM might be ready anyway
+        
+        self.logger.warning(f"✅ SYMBOL LOAD COMPLETE: {symbol}")
+        
+        # CRITICAL: Verify it actually loaded
+        time.sleep(0.5)
+        if not self.verify_symbol_loaded(symbol):
+            self.logger.error(f"🚨 VERIFICATION FAILED!")
+            self.logger.error(f"   Requested: {symbol}")
+            self.logger.error(f"   CHECK TRADOVATE BROWSER!")
+            # Don't raise - but log clear warning
+        
         return True
 
     def ensure_symbol_loaded(self, symbol: str) -> bool:
@@ -1357,33 +1418,48 @@ class TradovateWebUIAPI(TradingAPIInterface):
         Always returns True (non-fatal) so the bot keeps running even if we can't confirm.
         """
         try:
-            if not symbol: 
+            if not symbol:
                 return True
+
+            symbol = symbol.upper()
 
             # 1) Use your existing selector-driven method if available
             try:
                 if hasattr(self, "_ensure_symbol_loaded"):
                     self._ensure_symbol_loaded(symbol) # your current implementation
-            except Exception:
+
+                    time.sleep(1.0)
+                    if self.verify_symbol_loaded(symbol):
+                        self.logger.info(f"SYMBOL LOADED: {symbol}")
+                        return True
+                    else:
+                        self.logger.warning(f"Method 1: Loaded but verification failed: {e}")
+            except Exception as e:
+                # self.logger.warning(f"Primary load methods failed: {e}")
+                self.logger.error(f"    Method 1: failed - {e}")
                 # non-fatal, continue with verification/heuristics
-                pass
+                # pass
             # 2) Verify chart header contains symbol (fast check)
             try:
+                self.logger.info("Trying method 2 Chart verification")
                 chart = self._page.locator(f".chart-wrapper:has(.header:has-text('{symbol}'))")
                 cnt = self._run(chart.count(), timeout=1.5)
                 if cnt and cnt > 0:
                     return True
-            except Exception:
-                pass
+                self.logger.info(f"    Method 2: Not found in chart")
+            except Exception as e:
+                self.logger.warning(f"  Method 2: Error - {e}")
+                # pass
 
             # 3) Heuriostic: try a few generic symbol search inputs
+            self.logger.info(f"    Trying Method 3: Generic search")
             search_candidates = [
                 "input[placeholder*='Symbol']",
                 "input[aria-label*='Symbol']",
                 ".symbol-search input",
                 "input[type='search']",
             ]
-            for sel in search_candidates:
+            for i, sel in enumerate(search_candidates):
                 try:
                     self._run(self._page.wait_for_selector(sel, timeout=800, state="visible"), timeout=1.2)
                     loc = self._page.locator(sel).first
@@ -1398,14 +1474,141 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     chart2 = self._page.locator(f".chart-wrapper:has(.header:has-text('{symbol}'))")
                     cnt2 = self._run(chart2.count(), timeout=1.5)
                     if cnt2 and cnt2 > 0:
+                        self.logger.info(f" Method 3.{i + 1}: Success")
                         return True
+
+                    self.logger.info(f" Method 3.{i + 1}: No match found")
                 except Exception:
-                    continue
+                    self.logger.debug(f" Method 3.{i + 1}: {e}")
+                    # continue
+
+            # Final verification check
+            # time.sleep(1.0) 
+
+            # if self.verify_symbol_loaded(symbol):
+            #     self.logger.info(f"SYMBOL VERIFIED: {symbol}")
+            #     return True
+            # else:
+                # Could not verify - log warning but don't crash
+            self.logger.error(f"⚠️ WARNING: Could not verify {symbol} loaded")
+            self.logger.error(f"    Check Tradovate browser - might be wrong symbol!")
+            self.logger.error(f"    Bot will continue but trades might  be on wrong contract!")
 
             # Couldn't confirm, but don't block trading loop
             return True
-        except Exception:
+        except Exception as e:
+            self.logger.error(f"Symbol load error: {e}")
             return True
+
+
+    def verify_symbol_loaded(self, expected_symbol: str) -> bool:
+        """
+        Verify correct symbol is loaded in Tradovate UI.
+        Returns True if verified, False otherwise.
+        """
+        expected_symbol = expected_symbol.upper()
+        
+        self.logger.info(f"🔍 Verifying symbol: {expected_symbol}")
+        
+        try:
+            # Method 1: Check active tabs at top
+            try:
+                # Try multiple tab selectors
+                tab_selectors = [
+                    '.tab.active',
+                    '.lm_tab.lm_active',
+                    '[role="tab"][aria-selected="true"]',
+                    '.chart-tab.active',
+                ]
+                
+                for selector in tab_selectors:
+                    try:
+                        tabs = self._page.locator(selector)
+                        count = tabs.count()
+                        
+                        for i in range(min(5, count)):
+                            tab_text = tabs.nth(i).text_content() or ""
+                            self.logger.debug(f"   Tab check: '{tab_text}'")
+                            
+                            # Check if symbol is in tab text
+                            # Looking for "ESM6", "MESM6", etc.
+                            if expected_symbol in tab_text.upper():
+                                self.logger.warning(f"✅ VERIFIED: Tab shows '{tab_text}'")
+                                return True
+                                
+                    except Exception:
+                        continue
+                        
+            except Exception as e:
+                self.logger.debug(f"Tab verification failed: {e}")
+            
+            # Method 2: Check chart title
+            try:
+                title_selectors = [
+                    '.chart-title',
+                    '.chart-header',
+                    '.instrument-label',
+                    '.symbol-label',
+                ]
+                
+                for selector in title_selectors:
+                    try:
+                        titles = self._page.locator(selector)
+                        count = titles.count()
+                        
+                        for i in range(min(3, count)):
+                            title_text = titles.nth(i).text_content() or ""
+                            self.logger.debug(f"   Chart title: '{title_text}'")
+                            
+                            if expected_symbol in title_text.upper():
+                                self.logger.warning(f"✅ VERIFIED: Chart shows '{title_text}'")
+                                return True
+                                
+                    except Exception:
+                        continue
+                        
+            except Exception as e:
+                self.logger.debug(f"Chart title verification failed: {e}")
+            
+            # Method 3: Check contract description in DOM
+            try:
+                dom_selectors = [
+                    '.contract-name',
+                    '.instrument-name',
+                    '.symbol-display',
+                ]
+                
+                for selector in dom_selectors:
+                    try:
+                        doms = self._page.locator(selector)
+                        count = doms.count()
+                        
+                        for i in range(min(3, count)):
+                            dom_text = doms.nth(i).text_content() or ""
+                            self.logger.debug(f"   DOM text: '{dom_text}'")
+                            
+                            if expected_symbol in dom_text.upper():
+                                self.logger.warning(f"✅ VERIFIED: DOM shows '{dom_text}'")
+                                return True
+                                
+                    except Exception:
+                        continue
+                        
+            except Exception as e:
+                self.logger.debug(f"DOM verification failed: {e}")
+            
+            # Could not verify
+            self.logger.error(f"❌ VERIFICATION FAILED!")
+            self.logger.error(f"   Could not find '{expected_symbol}' in any UI element")
+            self.logger.error(f"   This means either:")
+            self.logger.error(f"   1. Wrong symbol is loaded (still showing ES)")
+            self.logger.error(f"   2. Verification selectors need updating")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Verification error: {e}")
+            return False
+            
 
     def _ensure_loop(self):
         """Start a private asyncio loop on a background thread for Playwright async API."""
