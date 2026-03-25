@@ -77,6 +77,18 @@ class StrategyManager:
             std_dev=getattr(self.config, 'MEAN_REVERSION_STD_DEV', 2.0),
             max_trades_per_day=getattr(self.config, 'MEAN_REVERSION_MAX_TRADES', 4),
         )
+
+        # PreviousDayHL for afternoon session (12:00 PM - 4:00 PM ET) on odd days
+        strategies["PreviousDayHL"] = create_strategy(
+            "PreviousDayHL",
+            data_manager=self.dm,
+            shadow_ratio=2.0,
+            max_other_shadow=0.3,
+            min_body_pct=0.05,
+            tolerance_pct=0.002,
+            max_trades_per_day=4,
+            qty=1,
+        )
         
         # OpeningRange for early morning (8:00 AM - 9:45 AM ET)
         strategies["OpeningRange"] = create_strategy(
@@ -84,7 +96,6 @@ class StrategyManager:
             data_manager=self.dm,
             opening_range_minutes=30,
         )
-
         
         # Add more strategies as you build them
         # strategies["MeanReversion"] = create_strategy("MeanReversion", ...)
@@ -165,7 +176,7 @@ class StrategyManager:
             else:
                 # Odd days: Use new strategy
                 self.logger.debug(f"📊 A/B: Odd day {current_day} -> MeanReversion")
-                return "MeanReversion"
+                return "PreviousDayHL"
 
         elif 8 <= hour_et < 9:
             return "OpeningRange"  # Add when built

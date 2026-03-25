@@ -68,6 +68,14 @@ class RiskManager:
         self.wins = 0
         self.losses = 0
         self.vol = {}
+
+        # Trailing stop settings
+        self.use_trailing_stops = True
+        self.trail_activation_points = 3.0 # Start trailing after 3 points profit
+        self.trail_distance_points = 2.0 # Trail 2 points behind
+
+        # Track highest/lowest price per position
+        self.position_extremes = {}
     
     def _check_new_day(self):
         """Check if it's a new trading day and reset daily counters."""
@@ -298,26 +306,6 @@ class RiskManager:
         if symbol not in self.current_positions:
             return None
         
-        # position = self.current_positions[symbol]
-        # entry_price = position['entry_price']
-        # side = position['side']
-        
-        # Calculate stop loss and take profit levels
-        # stop_loss_level = entry_price * (1 - self.stop_loss_pct / 100) if side.lower() == 'buy' else entry_price * (1 + self.stop_loss_pct / 100)
-        # take_profit_level = entry_price * (1 + self.take_profit_pct / 100) if side.lower() == 'buy' else entry_price * (1 - self.take_profit_pct / 100)
-        
-        # if side.lower() == 'buy':
-        #     if current_price <= stop_loss_level:
-        #         return 'stop_loss'
-        #     elif current_price >= take_profit_level:
-        #         return 'take_profit'
-        # else:  # sell
-        #     if current_price >= stop_loss_level:
-        #         return 'stop_loss'
-        #     elif current_price <= take_profit_level:
-        #         return 'take_profit'
-        
-        # return None
     
     def get_risk_metrics(self) -> Dict:
         """
@@ -427,7 +415,62 @@ class RiskManager:
     def _norm_sym(self, symbol: str) -> str:
         return (symbol or "").upper().strip()
 
+    
+    def update_trailing_stop(self, symbol: str, current_price: float):
+        """Update trailing stop for position"""
+       
+        if symbol not in self.positions:
+            return None
+       
+        pos = self.positions[symbol]
+        qty = pos['qty']
+        entry = pos['avg_price']
+       
+        # Initialize extreme tracking
+        if symbol not in self.position_extremes:
+            self.position_extremes[symbol] = entry
+       
+        # Update extreme (highest for longs, lowest for shorts)
+        if qty > 0:  # LONG
+            if current_price > self.position_extremes[symbol]:
+                self.position_extremes[symbol] = current_price
+               
+            # Check if we're in profit enough to activate trailing
+            profit_points = current_price - entry
+           
+            if profit_points >= self.trail_activation_points:
+                # Calculate trailing stop
+                trail_stop = self.position_extremes[symbol] - self.trail_distance_points
+               
+                # Exit if price drops below trailing stop
+                if current_price <= trail_stop:
+                    return f"trailing_stop (locked_in_profit: {trail_stop - entry:.2f} pts)"
+                   
+        else:  # SHORT
+            if current_price < self.position_extremes[symbol]:
+                self.position_extremes[symbol] = current_price
+               
+            # Check if we're in profit enough to activate trailing
+            profit_points = entry - current_price
+           
+            if profit_points >= self.trail_activation_points:
+                # Calculate trailing stop
+                trail_stop = self.position_extremes[symbol] + self.trail_distance_points
+               
+                # Exit if price rises above trailing stop
+                if current_price >= trail_stop:
+                    return f"trailing_stop (locked_in_profit: {entry - trail_stop:.2f} pts)"
+       
+        return None
+
     def check_exit_points(self, symbol: str, current_price: float, stop_points: float, take_points: float) -> str | None:
+
+        # First check trailing stop
+        if self.use_trailing_stops:
+            trail_reason = self.update_trailing_stop(symbol, current_price)
+            if trail_reason:
+                return trail_reason
+                
         sym = self._norm_sym(symbol)
         # sym = (symbol or "").upper() 
         pos = self.positions.get(sym) or self.positions.get(sym) # From paper_fill

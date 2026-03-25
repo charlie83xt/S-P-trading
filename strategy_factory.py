@@ -12,6 +12,7 @@ from opening_range_strategy import OpeningRangeStrategy
 from minimal_test_strategy import TestStrategy
 from mean_reversion_strategy import MeanReversionStrategy
 from mean_reversion_strategy_old import MeanReversionStrategyOld
+from previous_day_high_low_strategy import PreviousDayHighLowStrategy
 from typing import Any, Dict
 from datetime import time
 
@@ -163,6 +164,23 @@ def create(name: str, *, data_manager, **params):
             std_dev=float(params.get("std_dev", 2.0)),
             max_trades_per_day=int(params.get("max_trades_per_day", 4)),
         )
+
+
+    # ========================================================================
+    # PREVIOUS DAY HIGH/LOW REVERSAL (Afternoon Session)
+    # ========================================================================
+
+    elif name == "PreviousDayHL":
+        return PreviousDayHighLowStrategy(
+            data_manager=data_manager,
+            shadow_ratio=float(params.get("shadow_ratio", 2.0)),
+            max_other_shadow=float(params.get("max_other_shadow", 0.3)),
+            min_body_pct=float(params.get("min_body_pct", 0.05)),
+            tolerance_pct=float(params.get("tolerance_pct", 0.002)),
+            max_trades_per_day=int(params.get("max_trades", 4)),
+            qty=int(params.get("qty", 1)),
+        )
+
 
     # ========================================================================
     # TEST STRATEGY (Debugging)
