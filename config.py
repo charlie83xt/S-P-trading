@@ -23,6 +23,13 @@ class Config:
     ORB_RETEST_MAX_TRADES = int(os.getenv("ORB_RETEST_MAX_TRADES", "2"))
     ORB_RETEST_ONE_SIDE_ONLY = bool(os.getenv("ORB_RETEST_ONE_SIDE", "true").lower() == "true")
 
+    # Previous Day High/Low Reversal Strategy 
+    PREV_DAY_SHADOW_RATIO = float(os.getenv("PREV_DAY_SHADOW_RATIO", "2.0")) 
+    PREV_DAY_MAX_OTHER_SHADOW = float(os.getenv("PREV_DAY_MAX_OTHER_SHADOW", "0.3")) 
+    PREV_DAY_MIN_BODY_PCT = float(os.getenv("PREV_DAY_MIN_BODY_PCT", "0.05")) 
+    PREV_DAY_TOLERANCE_PCT = float(os.getenv("PREV_DAY_TOLERANCE_PCT", "0.002")) 
+    PREV_DAY_MAX_TRADES = int(os.getenv("PREV_DAY_MAX_TRADES", "4"))
+
     # Parse trade window times (format: "9,45" → (9, 45))
     _start_str = os.getenv("ORB_RETEST_START", "9,45")
     _end_str = os.getenv("ORB_RETEST_END", "12,0")
@@ -39,7 +46,7 @@ class Config:
     SUPPORTED_PLATFORMS = ['binance', 'tradovate', 'ninjatrader', 'tradovate_ui']
     
     # Default trading symbol
-    DEFAULT_SYMBOL = os.getenv('DEFAULT_SYMBOL', 'BTCUSDT')
+    DEFAULT_SYMBOL = os.getenv('DEFAULT_SYMBOL', 'MES')
     
     # Risk management settings
     MAX_POSITION_SIZE = float(os.getenv('MAX_POSITION_SIZE', '0.1'))
@@ -82,7 +89,14 @@ class Config:
     LOG_FILE = os.getenv('LOG_FILE', 'trading_bot.log')
 
     # contract multipliers
-    CONTRACT_MULTIPLIERS = {"ES": 50.0}
+    CONTRACT_MULTIPLIERS = {
+        "ES": 50.0, # E-mini S&P 500: S&P: $50 per point
+        "MES": 5.0, # Micro E-mini S&P 500: $5 per point
+        "NQ": 20.0, # E-mini Nasdaq: $20 per point
+        "MNQ": 2.0, # Micro E-mini Nasdaq: $2 per point
+        "YM": 5.0,  # E-mini Dow: $5 per point
+        "MYM": 0.5  # Micro E-mini Dow: $0.50 per point
+    }
 
     INSTANT_CLOSE_TRADES = "hold"
     RM_EMIT_CLOSED_ON_HOLD = False
