@@ -471,7 +471,7 @@ class ORBRetestStrategy:
         #     f"bars_count={bar_count}"
         # )
 
-        self.logger.info(
+        self.logger.debug(
             "🔍 CHECK_SIGNAL: phase=%s or_ready=%s or_computed=%s bars_count=%d", 
             self.state.phase, self.state.or_ready, self.state.or_computed, 
             len(self.dm.live.get_last_n(symbol, n=50))

@@ -138,19 +138,22 @@ class PreviousDayHighLowStrategy:
     
     def _calculate_prev_day_levels(self, symbol: str) -> bool:
         """
-        Calculate previous day's high/low from daily bars.
+        Calculate previous day's high/low from Supabase daily bars.
         Returns True if successful, False otherwise.
         """
         try:
-            # Get last 5 daily bars to ensure we have yesterday's complete bar
-            # Adjust 'timeframe' parameter based on your data_manager implementation
-            daily_bars = self.dm.live.get_last_n(symbol, n=5)
+            # Get daily bars from Supabase (last 5 days)
+            daily_bars = self.dm.get_daily_bars(symbol, days=5)
             
             if len(daily_bars) < 2:
-                self.logger.warning(f"PrevDayHL: Insufficient daily bars ({len(daily_bars)})")
+                self.logger.warning(
+                    f"PrevDayHL: Insufficient daily bars from Supabase ({len(daily_bars)}). "
+                    f"Need at least 2 days (yesterday + today partial)."
+                )
                 return False
             
             # Get yesterday's bar (second to last)
+            # Last bar is today (partial/incomplete), second-to-last is yesterday (complete)
             yesterday_bar = daily_bars[-2]
             
             self.prev_day_high = yesterday_bar.high
@@ -158,13 +161,18 @@ class PreviousDayHighLowStrategy:
             self.prev_day_date = self._today_str()
             
             self.logger.info(
-                f"PrevDayHL: Levels calculated - High={self.prev_day_high:.2f}, "
-                f"Low={self.prev_day_low:.2f}"
+                f"PrevDayHL: ✅ Levels from Supabase - "
+                f"Date={yesterday_bar.timestamp}, "
+                f"High={self.prev_day_high:.2f}, "
+                f"Low={self.prev_day_low:.2f}, "
+                f"Range={self.prev_day_high - self.prev_day_low:.2f} pts"
             )
             return True
             
         except Exception as e:
-            self.logger.error(f"PrevDayHL: Error calculating levels: {e}")
+            self.logger.error(f"PrevDayHL: Error calculating levels from Supabase: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return False
     
     # -------------------------------------------------------------------------
@@ -258,6 +266,14 @@ class PreviousDayHighLowStrategy:
             
             if not self._calculate_prev_day_levels(symbol):
                 return None
+
+        if self.prev_day_high:
+            self.logger.info(
+                f"📊 PrevDayHL Active: High={self.prev_day_high:.2f}, "
+                f"Low={self.prev_day_low:.2f}, "
+                f"Trades={self.trades_today}/{self.max_trades_per_day}"
+            )
+            # Only log this once per minute, not every tick
         
         # Get current price
         current_price = self.dm.get_current_price(symbol)
@@ -265,6 +281,16 @@ class PreviousDayHighLowStrategy:
             return None
         
         current_price = float(current_price)
+
+        distance_to_high = abs(current_price - self.prev_day_high)
+        distance_to_low = abs(current_price - self.prev_day_low)
+
+        if distance_to_high < 5.0:  # Within 5 points of high
+            self.logger.info(f"🔥 Approaching prev high: {distance_to_high:.2f} pts away")
+
+
+        if distance_to_low < 5.0:  # Within 5 points of low
+            self.logger.info(f"❄️  Approaching prev low: {distance_to_low:.2f} pts away")
         
         # Get recent bars to build current candle
         try:

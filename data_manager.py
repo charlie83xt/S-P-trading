@@ -18,6 +18,7 @@ from config import Config
 import time
 from supabase import create_client, Client
 
+
 import sys
 import traceback
 
@@ -200,7 +201,116 @@ class DataManager:
 
         except Exception as e:
             self.logger.error(f"Supabase query failed: {e}")
-            return []    
+            return []
+
+    def get_daily_bars(self, symbol: str, days: int = 5) -> List:
+        """
+        Get daily OHLCV bars by aggregating 1-minute bars from Supabase.
+        
+        Args:
+            symbol: Trading symbol (e.g., 'MES', 'ES')
+            days: Number of days to retrieve (default: 5)
+        
+        Returns:
+            List of daily bar objects with .open, .high, .low, .close, .volume
+            Returns empty list if Supabase unavailable or query fails
+        
+        Usage:
+            daily_bars = dm.get_daily_bars('MES', days=5)
+            yesterday = daily_bars[-2]  # Second to last (last is today partial)
+            prev_high = yesterday.high
+            prev_low = yesterday.low
+        """
+        if not self.supabase:
+            self.logger.warning("Supabase not available - cannot get daily bars")
+            return []
+        
+        try:
+            # Calculate date range
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=days + 1)  # Extra day for safety
+            
+            # Format timestamps for Supabase
+            start_ts = start_date.isoformat()
+            end_ts = end_date.isoformat()
+            
+            self.logger.info(
+                f"Fetching daily bars for {symbol}: {start_date.date()} to {end_date.date()}"
+            )
+            
+            # Use existing get_historical_bars method
+            minute_bars = self.get_historical_bars(symbol, start_ts, end_ts)
+            
+            if not minute_bars:
+                self.logger.warning(f"No Supabase data for {symbol}")
+                return []
+            
+            self.logger.debug(f"Retrieved {len(minute_bars)} 1-minute bars from Supabase")
+            
+            # Group bars by date
+            daily_data = defaultdict(list)
+            
+            for bar in minute_bars:
+                # Parse timestamp
+                ts_str = bar['ts']
+                ts = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                date_key = ts.date()
+                
+                daily_data[date_key].append(bar)
+            
+            # Create daily bar objects
+            class DailyBar:
+                """Simple daily bar object compatible with strategy expectations"""
+                def __init__(self, date, o, h, l, c, v):
+                    self.timestamp = date
+                    self.open = float(o)
+                    self.high = float(h)
+                    self.low = float(l)
+                    self.close = float(c)
+                    self.volume = float(v)
+            
+            daily_bars = []
+            
+            for date in sorted(daily_data.keys()):
+                bars = daily_data[date]
+                
+                # Aggregate OHLCV for this day
+                open_price = bars[0]['open']           # First bar's open
+                high_price = max(b['high'] for b in bars)
+                low_price = min(b['low'] for b in bars)
+                close_price = bars[-1]['close']       # Last bar's close
+                total_volume = sum(b.get('volume', 0) for b in bars)
+                
+                daily_bar = DailyBar(
+                    date=date,
+                    o=open_price,
+                    h=high_price,
+                    l=low_price,
+                    c=close_price,
+                    v=total_volume
+                )
+                
+                daily_bars.append(daily_bar)
+            
+            self.logger.debug(f"Aggregated into {len(daily_bars)} daily bars")
+            
+            # Log the bars for verification
+            if daily_bars:
+                self.logger.info("Daily bars:")
+                for bar in daily_bars[-3:]:  # Last 3 days
+                    self.logger.info(
+                        f"  {bar.timestamp}: O={bar.open:.2f} H={bar.high:.2f} "
+                        f"L={bar.low:.2f} C={bar.close:.2f}"
+                    )
+            
+            return daily_bars
+            
+        except Exception as e:
+            self.logger.error(f"Error getting daily bars from Supabase: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return []
+
 
     def _et_to_utc_timestamp(self, date_str: str, time_str: str) -> str:
         """

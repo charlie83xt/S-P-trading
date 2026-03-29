@@ -1032,13 +1032,15 @@ def get_trades():
             trades = bot.get_trade_history()
             # >>> DEBUG: log count + one sample
             rm = getattr(bot, "risk_manager", None)
-            app.logger.info("TRADES API: %d records | RM id=%s | instant_close=%r", len(trades), id(rm), getattr(rm, "instant_close", None))
+            # app.logger.info("TRADES API: %d records | RM id=%s | instant_close=%r", len(trades), id(rm), getattr(rm, "instant_close", None))
             try:
-                app.logger.info("RM id (flask thread) = %s len=%d",
+                # app.logger.info("RM id (flask thread) = %s len=%d",
                 id(getattr(bot, "risk_manager", None)),
-                len(getattr(getattr(bot, "risk_manager", None), "trade_history", [])))
-                if trades:
-                    app.logger.info("TRADES API SAMPLE: %s", str(trades[-1])[:300])
+                len(getattr(getattr(bot, "risk_manager", None), "trade_history", []))
+                if not trades:
+                    app.logger.warning("No trades found when expected")
+                # if trades:
+                    # app.logger.info("TRADES API SAMPLE: %s", str(trades[-1])[:300])
             except Exception:
                 pass
             return jsonify({'success': True, 'trades': trades})

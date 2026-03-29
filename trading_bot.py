@@ -229,7 +229,7 @@ class TradingBot:
                         self.logger.warning(f"failed to ingest tick: {e}")
                 ########################
 
-                self.logger.info(f"🎯 BOT GOT PRICE: {price}") # ADD THIS
+                self.logger.debug(f"🎯 BOT GOT PRICE: {price}") # ADD THIS
                 
                 ## ---- NEW ----
                 if price is None:
@@ -1307,7 +1307,7 @@ class TradingBot:
 
         qty = rm.get_position_qty(symbol)
         if qty == 0:
-            self.logger.info("EXIT-CHECK: qty=0 -> skip (sym=%s px=%s)", symbol, current_price)
+            self.logger.debug("EXIT-CHECK: qty=0 -> skip (sym=%s px=%s)", symbol, current_price)
             return
 
         # prevent exit spam (2s)
