@@ -30,16 +30,16 @@ class MeanReversionStrategy:
     def __init__(
         self,
         data_manager,
-        lookback: int = 20,
-        std_dev: float = 2.0,
+        lookback: int = 30,
+        std_dev: float = 2.5,
         max_trades_per_day: int = 4,
         qty: int = 1,
         session_timezone: str = "America/New_York",
-        session_start: time = time(12, 0),
-        session_end: time = time(16, 0),
+        session_start: time = time(13, 0),
+        session_end: time = time(15, 0),
         use_session_filter: bool = True,
-        min_bandwidth_pct: float = 0.0025,
-        cooldown_bars: int = 3,
+        min_bandwidth_pct: float = 0.005,
+        cooldown_bars: int = 5,
         require_reentry_confirmation: bool = True,
     ):
         if lookback < 5:

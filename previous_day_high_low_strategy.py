@@ -251,12 +251,49 @@ class PreviousDayHighLowStrategy:
         # Reset on new day
         self._reset_if_new_day()
         
+        # Log strategy status every minute
+        current_time = datetime.now(self.session_timezone)
+        if not hasattr(self, '_last_status_log'):
+            self._last_status_log = current_time
+
+        # Log status once per minute
+        if (current_time - self._last_status_log).total_seconds() >= 60:
+            self._last_status_log = current_time
+            
+            status_parts = []
+            
+            if self.trades_today >= self.max_trades_per_day:
+                status_parts.append(f"MAX TRADES REACHED ({self.trades_today}/{self.max_trades_per_day})")
+            
+            if not self._in_session():
+                status_parts.append("OUT OF SESSION")
+            
+            if self.prev_day_high and self.prev_day_low:
+                current_price = float(self.dm.get_current_price(symbol) or 0)
+                dist_to_high = abs(current_price - self.prev_day_high)
+                dist_to_low = abs(current_price - self.prev_day_low)
+                
+                status_parts.append(
+                    f"Levels: H={self.prev_day_high:.2f} ({dist_to_high:.2f}pts away) "
+                    f"L={self.prev_day_low:.2f} ({dist_to_low:.2f}pts away)"
+                )
+                
+                if self.high_touched:
+                    status_parts.append("HIGH TOUCHED")
+                if self.low_touched:
+                    status_parts.append("LOW TOUCHED")
+            else:
+                status_parts.append("NO LEVELS YET")
+            
+            self.logger.info(f"📊 PrevDayHL Status: {' | '.join(status_parts)}")
+
         # Check trade limit
         if self.trades_today >= self.max_trades_per_day:
             return None
         
         # Check session time
         if not self._in_session():
+            self.logger.warning("PrevDayHL: Outside session hours")
             return None
         
         # Ensure we have previous day levels
@@ -265,6 +302,7 @@ class PreviousDayHighLowStrategy:
             self.prev_day_date != self._today_str()):
             
             if not self._calculate_prev_day_levels(symbol):
+                self.logger.warning("PrevDayHL: Could not calculate levels")
                 return None
 
         if self.prev_day_high:
@@ -314,7 +352,17 @@ class PreviousDayHighLowStrategy:
             close=recent_bar.close,
             volume=getattr(recent_bar, 'volume', 0.0)
         )
+
+        # ✅ ADD: Log when approaching levels
+        dist_to_high = abs(current_candle.high - self.prev_day_high)
+        dist_to_low = abs(current_candle.low - self.prev_day_low)
         
+        if dist_to_high < 5.0 and not self.high_touched:
+            self.logger.info(f"🔥 Approaching prev high: {dist_to_high:.2f}pts away")
+        
+        if dist_to_low < 5.0 and not self.low_touched:
+            self.logger.info(f"❄️  Approaching prev low: {dist_to_low:.2f}pts away")
+
         # Check for SHORT signal: Touch prev high + Shooting Star
         if self._touches_prev_high(current_candle) and not self.high_touched:
             self.high_touched = True

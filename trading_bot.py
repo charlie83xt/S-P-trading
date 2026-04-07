@@ -17,6 +17,7 @@ from api_factory import APIFactory
 from strategy_factory import create as create_strategy
 from trade_analytics import TradeAnalytics
 from strategy_manager import StrategyManager
+from intelligent_entry_filter import IntelligentEntryFilter
 
 # ================= tiny helpers =====================
 import uuid
@@ -65,14 +66,16 @@ class TradingBot:
             self.config.MAX_DAILY_TRADES,
             cooldown_period=self.config.COOLDOWN_PERIOD
         )
+
+         # Logging
+        self.logger = logging.getLogger(__name__)
+        self._setup_logging()
         
-        # self.strategy = create_strategy(
-        #     "OpeningRange",
-        #     data_manager = self.data_manager,
-        #     opening_range_minutes = self.config.OPENING_RANGE_MINUTES,
-        #     breakout_threshold = self.config.BREAKOUT_THRESHOLD_PERCENT
-        # )
-        
+        self.entry_filter = IntelligentEntryFilter(
+            data_manager = self.data_manager,
+            logger = self.logger
+        )
+        self.logger.info("✅ Filter initialised")
         
         self.risk_manager.instant_close = getattr(self.config, "INSTANT_CLOSE_TRADES", "hold")
         self.risk_manager.emit_closed_on_hold = getattr(self.config, "RM_EMIT_CLOSED_ON_HOLD", True)
@@ -85,10 +88,6 @@ class TradingBot:
         self.symbol = self.config.DEFAULT_SYMBOL
         self.monitoring_thread = None
         self.last_price_check = None
-        
-        # Logging
-        self.logger = logging.getLogger(__name__)
-        self._setup_logging()
         
         # Performance tracking
         self.start_time = None
@@ -504,10 +503,38 @@ class TradingBot:
             signal_id = _new_id("sig")
             signal["_signal_id"] = signal_id # attach so downstream has it
 
+            # Attach strategy name
+            strategy_name = type(self.strategy).__name__ if self.strategy else "Unknown"
+            signal["strategy_name"] = strategy_name
+
             self.logger.info(
                 "SIG %s side=%s sym=%s qty=%s px=%.2f reason=%s",
                 signal_id, side, sym, qty, price, signal.get("reason")
             )
+
+            # --- Logic Entry Filter ---
+            if hasattr(self, 'entry_filter'):
+                allow_entry, block_reason = self.entry_filter.should_enter_trade(
+                    symbol=sym,
+                    signal_type=side,
+                    signal_pride=pride,
+                    strategy_name=strategy_name
+                )
+
+                if not allow_entry:
+                    self.logger.warning(f"⛔️ ENTRY BLOCKED: {block_reason}")
+                    self.analytics.log_signal(
+                        signal_id=signal_id,
+                        symbol=sym,
+                        signal_type=side,
+                        price=price,
+                        executed=False,
+                        skip_reason=f"filter_{block_reason}",
+                        strategy_name=strategy_name
+                    )
+                    return # EXIT - Don't execute!
+                
+                self.logger.info(f"✅ ENTRY APPROVED")
 
             # ------------------------
             # DRY-RUN BRANCH
@@ -645,7 +672,7 @@ class TradingBot:
 
                 
                 # self._record_fill(sym, side, qty, px, dry_run=(acct_mode != "false"))
-                self._record_fill(sym, side, qty, px, dry_run=True, signal_id=signal_id, attempt_id=attempt_id, exit_reason=signal.get("reason"))
+                self._record_fill(sym, side, qty, px, dry_run=True, signal_id=signal_id, attempt_id=attempt_id, exit_reason=signal.get("reason"), strategy_name=signal.get("strategy_name"))
                 return True
 
             # LIVE: actually send the order
@@ -887,7 +914,7 @@ class TradingBot:
                 # self.logger.info("LIVE %s %s x%s @ %s", side, sym, qty, px)
                 # Only after UI worked, record live fill
                 # self._record_fill(sym, side, qty, px, dry_run=(acct_mode != "false"))
-                fill = self._record_fill(sym, side, qty, px_exec, dry_run=False, signal_id=signal_id, attempt_id=attempt_id, exit_reason=signal.get("reason"))
+                fill = self._record_fill(sym, side, qty, px_exec, dry_run=False, signal_id=signal_id, attempt_id=attempt_id, exit_reason=signal.get("reason"), strategy_name=signal.get("strategy_name"))
 
                 try:
                     self.logger.info(
@@ -1222,7 +1249,8 @@ class TradingBot:
         # new debug addition
         signal_id=None,
         attempt_id=None,
-        exit_reason: str | None = None
+        exit_reason: str | None = None,
+        strategy_name: str | None = None,
     ):
         fill_id = f"fill_{signal_id}_{attempt_id}" if signal_id and attempt_id else _new_id("fill")
 
@@ -1267,7 +1295,8 @@ class TradingBot:
                 qty=int(qty),
                 price=float(price),
                 dry_run=bool(dry_run),
-                exit_reason=exit_reason
+                exit_reason=exit_reason,
+                strategy_name=strategy_name
             )
             # after = len(rm.trade_history)
             self.logger.info(

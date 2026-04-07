@@ -512,7 +512,19 @@ class RiskManager:
             # keep positions open across days (common in futures), or clear if you prefer
         self._rotate_daily_if_needed()
 
-    def paper_fill(self, symbol: str, side: str, qty: int, price: float, dry_run: bool = True, fill_id: str | None = None, signal_id: str | None = None, attempt_id: str | None = None, exit_reason: str | None = None) -> dict:
+    def paper_fill(
+        self, 
+        symbol: str, 
+        side: str, 
+        qty: int, 
+        price: float,
+        dry_run: bool = True, 
+        fill_id: str | None = None,
+        signal_id: str | None = None, 
+        attempt_id: str | None = None, 
+        exit_reason: str | None = None, 
+        strategy_name: str | None = None
+    ) -> dict:
         """
         Simulate and immediate market fill and update positions & realized PnL.
         Returns a trade record we can append to history
@@ -535,7 +547,7 @@ class RiskManager:
         # ts = ts or datetime.utcnow().isoformat(timespec="seconds")
 
         pos = self.positions.setdefault(sym, {"qty": 0, "avg_price": 0.0, "last_px": px, "unrealized": 0.0})
-        meta = {"fill_id": fill_id, "signal_id": signal_id, "attempt_id": attempt_id}
+        meta = {"fill_id": fill_id, "signal_id": signal_id, "attempt_id": attempt_id, "strategy_name": strategy_name}
 
         cur_qty = int(pos["qty"])
         avg = float(pos["avg_price"])
@@ -743,7 +755,7 @@ class RiskManager:
         return None
 
 
-    def _paper_fill_instant_close(self, symbol: str, side: str, qty: int, price: float, dry_run: bool = True) -> dict:
+    def _paper_fill_instant_close(self, symbol: str, side: str, qty: int, price: float, dry_run: bool = True, strategy_name: str | None = None) -> dict:
         """
         Option B: simulate an immediate market fill and immediately close it at the
         same (or provided) price. This guarantees:
@@ -772,6 +784,7 @@ class RiskManager:
             "ts": opened_at,
             "status": "opened",
             "exit_reason": "dry_run",
+            "strategy_name": strategy_name,
         }
 
 
@@ -795,6 +808,7 @@ class RiskManager:
             "exit_reason": "dry_run",
             "ts": closed_at,
             "status": "closed",
+            "strategy_name": strategy_name,
         }
 
 

@@ -32,7 +32,7 @@ class Config:
 
     # Parse trade window times (format: "9,45" → (9, 45))
     _start_str = os.getenv("ORB_RETEST_START", "9,45")
-    _end_str = os.getenv("ORB_RETEST_END", "12,0")
+    _end_str = os.getenv("ORB_RETEST_END", "10,30")
     ORB_RETEST_TRADE_START = tuple(map(int, _start_str.split(",")))
     ORB_RETEST_TRADE_END = tuple(map(int, _end_str.split(",")))
 
@@ -112,18 +112,18 @@ class Config:
     STOP_LOSS_POINTS = float(os.getenv("STOP_LOSS_POINTS", "4.0"))
     TAKE_PROFIT_POINTS = float(os.getenv("TAKE_PROFIT_POINTS", "6.0"))
     # Base configuration (our comfort zone)
-    STOP_LOSS_BASE_POINTS = float(os.getenv("STOP_LOSS_BASE_POINTS", "4.0"))         # Minimum stop
-    TAKE_PROFIT_BASE_POINTS = float(os.getenv("TAKE_PROFIT_BASE_POINTS", "6.0"))       # Minimum target
+    STOP_LOSS_BASE_POINTS = float(os.getenv("STOP_LOSS_BASE_POINTS", "6.0"))         # Minimum stop
+    TAKE_PROFIT_BASE_POINTS = float(os.getenv("TAKE_PROFIT_BASE_POINTS", "10.0"))       # Minimum target
 
     # Adaptive multipliers
     VOLATILITY_STOP_MULTIPLIER = 2.5    # Stop = 2.5x recent volatility
     VOLATILITY_TAKE_MULTIPLIER = 4.0    # Target = 4.0x recent volatility
 
     # Safety bounds (prevent crazy outliers)
-    MAX_STOP_LOSS_POINTS = float(os.getenv("MAX_STOP_LOSS_POINTS", "12.0"))         # Never wider than 12 points
-    MIN_STOP_LOSS_POINTS = float(os.getenv("MIN_STOP_LOSS_POINTS", "2.0"))          # Never tighter than 2 points
-    MAX_TAKE_PROFIT_POINTS = float(os.getenv("MAX_TAKE_PROFIT_POINTS", "20.0"))       # Cap profit target
-    MIN_TAKE_PROFIT_POINTS = float(os.getenv("MIN_TAKE_PROFIT_POINTS", "4.0"))        # Minimum profit target
+    MAX_STOP_LOSS_POINTS = float(os.getenv("MAX_STOP_LOSS_POINTS", "15.0"))         # Never wider than 12 points
+    MIN_STOP_LOSS_POINTS = float(os.getenv("MIN_STOP_LOSS_POINTS", "4.0"))          # Never tighter than 2 points
+    MAX_TAKE_PROFIT_POINTS = float(os.getenv("MAX_TAKE_PROFIT_POINTS", "25.0"))       # Cap profit target
+    MIN_TAKE_PROFIT_POINTS = float(os.getenv("MIN_TAKE_PROFIT_POINTS", "8.0"))        # Minimum profit target
 
     # -------------------------------------------------------------------
     # VOLUME TRACKING (NEW)
