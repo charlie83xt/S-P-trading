@@ -517,7 +517,7 @@ class TradingBot:
                 allow_entry, block_reason = self.entry_filter.should_enter_trade(
                     symbol=sym,
                     signal_type=side,
-                    signal_pride=pride,
+                    signal_price=price,
                     strategy_name=strategy_name
                 )
 
