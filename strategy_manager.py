@@ -171,11 +171,11 @@ class StrategyManager:
 
             if current_day % 2 == 0:
                 # Even days: use old strategy
-                self.logger.debug(f"📊 A/B: Even day {current_day} -> MeanReversionOld")
-                return "MeanReversionOld"
+                self.logger.debug(f"📊 A/B: Even day {current_day} -> MeanReversion")
+                return "MeanReversion"
             else:
                 # Odd days: Use new strategy
-                self.logger.debug(f"📊 A/B: Odd day {current_day} -> MeanReversion")
+                self.logger.debug(f"📊 A/B: Odd day {current_day} -> PreviousDayHL")
                 return "PreviousDayHL"
 
         elif 8 <= hour_et < 9:

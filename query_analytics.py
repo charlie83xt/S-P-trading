@@ -83,15 +83,15 @@ def get_strategy_comparison():
     """
    
     df = pd.read_sql(query, conn)
-    conn.close()
-   
-    if len(df) == 0:
-        print("📊 No strategy data yet")
 
-        # Fallback: Show trades without strategy linkage
+    # Check if we got data BEFORE closing connection
+    if len(df) == 0:
+        print("📊 No strategy data in signals table, trying trades_enhanced...")
+        
+        # Try to get strategy from trades_enhanced directly
         fallback_query = """
             SELECT
-                'All Strategies' as strategy_name,
+                COALESCE(strategy_name, 'Unknown') as strategy_name,
                 COUNT(*) as trades,
                 SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
                 SUM(pnl) as total_pnl,
@@ -100,13 +100,17 @@ def get_strategy_comparison():
                 MIN(pnl) as max_loss
             FROM trades_enhanced
             WHERE DATE(ts_open) >= date('now', '-30 days')
+            GROUP BY COALESCE(strategy_name, 'Unknown')
         """
         
         df = pd.read_sql(fallback_query, conn)
-        if len(df) == 0 or df.iloc[0]['trades'] == 0:
-            return
 
+    conn.close()
+    
+    if len(df) == 0 or df.iloc[0]['trades'] == 0:
+        print("📊 No trade data available")
         return
+
    
     print(f"\n{'='*70}")
     print(f"📊 STRATEGY COMPARISON - LAST 30 DAYS")

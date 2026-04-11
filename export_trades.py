@@ -40,7 +40,10 @@ def export_today_trades():
         
         # Query today's trades
         query = f"""
-            SELECT * FROM trades_enhanced
+            SELECT 
+                t.*,
+                COALESCE(t.strategy_name, 'Unknown') as strategy
+            FROM trades_enhanced t
             WHERE DATE(ts_open) = '{today}'
             ORDER BY ts_open
         """
@@ -74,6 +77,19 @@ def export_today_trades():
         if winning_trades + losing_trades > 0:
             win_rate = (winning_trades / (winning_trades + losing_trades)) * 100
             print(f"      Win rate: {win_rate:.1f}%")
+
+        # Show Breakdown by Strategy
+        if 'strategy' in df.columns:
+            print(f"\n  📊 By Strategy:")
+            for strategy in df["strategy"].unique():
+                strategy_df = df[df['strategy'] == strategy]
+                strat_wins = len(strategy_df[strategy_df['pnl'] > 0])
+                strat_total =  len(strategy_df)
+                strat_pnl = strategy_df['pnl'].sum()
+                strat_wr = (strat_wins / strat_total * 100) if strat_total > 0 else 0
+
+                print(f"    {strategy}: {strat_total} trades | "
+                      f"WR: {strat_wr:.1f}% | P&L: ${strat_pnl:.2f}")
         
         return filename
         
