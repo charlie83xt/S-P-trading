@@ -16,13 +16,19 @@ from api_factory import APIFactory
 from api_interface import TradingAPIInterface
 from config import Config
 import time
-from supabase import create_client, Client
+try:
+    from supabase import create_client, Client
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    SUPABASE_AVAILABLE = False
+    create_client = None
+    Client = None
 
 
 import sys
 import traceback
 
-_TRACE = True
+_TRACE = False
 
 def trace_call(func):
     """Decorator to trace function calls"""
@@ -129,8 +135,16 @@ class DataManager:
         """
         self.config = config
         # self.api: TradingAPIInterface = APIFactory.create_api(platform)
-        self.api: TradingAPIInterface = APIFactory.create_api(config=self.config)
         self.logger = logging.getLogger(__name__)
+        self.api: TradingAPIInterface = APIFactory.create_api(config=self.config)
+        
+        if self.api is None:
+            raise RuntimeError(
+                f"Failed to create API for platform: {config.TRADING_PLATFORM}. "
+                f"Check your configuration and credentials."
+            )
+        self.logger.info(f"✅ API created successfully: {self.api.get_platform_name()}")
+
         self.db_path = 'market_data.db'
         self._init_database()
         self._tick_buf = None
@@ -221,7 +235,7 @@ class DataManager:
             prev_high = yesterday.high
             prev_low = yesterday.low
         """
-        if not self.supabase:
+        if not SUPABASE_AVAILABLE:
             self.logger.warning("Supabase not available - cannot get daily bars")
             return []
         
@@ -552,7 +566,7 @@ class DataManager:
         except Exception as e:
             # never break price reads
             self.logger.exception("X EXCEPTION in get_current_price: {e}")
-            pass
+            # pass
 
         return price
 

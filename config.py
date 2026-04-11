@@ -75,6 +75,11 @@ class Config:
     TRADOVATE_PASSWORD = os.getenv('TRADOVATE_PASSWORD', '')
     TRADOVATE_DEMO = os.getenv('TRADOVATE_DEMO', 'true').lower() == 'true'
     TRADOVATE_BASE_URL = 'https://demo.tradovateapi.com/v1' if TRADOVATE_DEMO else 'https://live.tradovateapi.com/v1'
+    TRADOVATE_APP_ID = os.getenv('TRADOVATE_APP_ID', '')
+    TRADOVATE_APP_VERSION = os.getenv('TRADOVATE_APP_VERSION', '') # tradovate_app_version
+    TRADOVATE_CID = os.getenv('TRADOVATE_CID', '')# tradovate_cid,
+    TRADOVATE_SEC = os.getenv('TRADOVATE_SEC', '') # tradovate_sec,
+    TRADOVATE_DEMO = os.getenv('TRADOVATE_DEMO', '') # tradovate_demo
     
     # NinjaTrader configuration
     NINJATRADER_API_URL = os.getenv('NINJATRADER_API_URL', 'http://localhost:8080')

@@ -343,9 +343,10 @@ class ORBRetestStrategy:
             sma20_prev = float(self.dm.get_sma(symbol, 20, timeframe=self.sma_timeframe, offset=1))
             slope_up = sma20 >= sma20_prev
             slope_dn = sma20 <= sma20_prev
-        except Exception:
+        except Exception as e:
             # No offset support - assume neutral slope
-            pass
+            self.logger.debug(f"Expected error in [ORBStrategy._sma_permission]: {e}")
+            # pass
         
         # Get current price (last close)
         try:

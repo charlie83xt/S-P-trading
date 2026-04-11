@@ -18,6 +18,7 @@ from strategy_factory import create as create_strategy
 from trade_analytics import TradeAnalytics
 from strategy_manager import StrategyManager
 from intelligent_entry_filter import IntelligentEntryFilter
+from symbol_manager import SymbolManager
 
 # ================= tiny helpers =====================
 import uuid
@@ -60,6 +61,7 @@ class TradingBot:
         
         self.strategy = self.strategy_manager.get_active_strategy()
         self.risk_manager = RiskManager(
+            self.config,
             self.config.MAX_POSITION_SIZE,
             self.config.STOP_LOSS_PERCENTAGE,
             self.config.TAKE_PROFIT_PERCENTAGE,
@@ -85,7 +87,8 @@ class TradingBot:
         # Bot state
         self.is_running = False
         self.is_paused = False
-        self.symbol = self.config.DEFAULT_SYMBOL
+        self.symbol_manager = SymbolManager(self.config)
+        # self.symbol = self.config.DEFAULT_SYMBOL
         self.monitoring_thread = None
         self.last_price_check = None
         
@@ -105,17 +108,48 @@ class TradingBot:
 
         #startup grace
         self._startup_ts = time.time()
+
+
+    def symbol(self):
+        return self.symbol_manager.symbol
+
+    # Method to change symbol:
+    def change_symbol(self, new_symbol: str):
+        """
+        Change trading symbol at runtime.
+    
+        Usage:
+            bot.change_symbol("ES")   # Switch to full-size S&P
+            bot.change_symbol("NQ")   # Switch to Nasdaq
+            bot.change_symbol("MES")  # Switch back to Micro S&P
+        """
+        self.symbol_manager.symbol = new_symbol
+    
+        # Reset strategy for new symbol
+        if hasattr(self.strategy, 'reset_strategy'):
+            self.strategy.reset_strategy()
+    
+        # Clear risk manager positions for new symbol
+        self.risk_manager.positions.clear()
+    
+        self.logger.info(f"✅ Trading symbol changed to: {new_symbol}")
+
         
     def _setup_logging(self):
         """Setup logging configuration."""
-        logging.basicConfig(
-            level=getattr(logging, self.config.LOG_LEVEL),
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(self.config.LOG_FILE),
-                logging.StreamHandler()
-            ]
-        )
+        if not logging.getLogger().handlers:
+            log_level = getattr(logging, self.config.LOG_LEVEL.upper(), logging.INFO)
+            log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+            logging.basicConfig(
+                level=log_level,
+                format=log_format,
+                handlers=[
+                    logging.FileHandler(self.config.LOG_FILE),
+                    logging.StreamHandler()
+                ]
+            )
+        self.logger = logging.getLogger(self.__class__.__name__)
 
     
     def connect(self) -> bool:
@@ -237,14 +271,16 @@ class TradingBot:
                         try:
                             if api and hasattr(api, "ensure_symbol_loaded"):
                                 api.ensure_symbol_loaded(symbol)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            self.logger.debug(f"Expected error in [TradingBot.start]: {e}")
+                            # pass
                     if misses >= 10:
                         self.logger.warning("No ticks for a while; attempting reconnect...")
                         try:
                             self.disconnect()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            self.logger.debug(f"Expected error in [TradingBot.start]: {e}")
+                            # pass
                         if not self.connect():
                             self.logger.error("reconnect failed; will keep trying...")
                         misses = 0
@@ -254,9 +290,10 @@ class TradingBot:
                 try:
                     if price is not None and hasattr(self, "risk_manager") and hasattr(self.risk_manager, "mark_to_market"):
                         self.risk_manager.mark_to_market(symbol=symbol, last_price=float(price))
-                except Exception:
+                except Exception as e:
                     # Never let P&L calc break the loop
-                    pass
+                    self.logger.debug(f"Expected error in [TradingBot.start]: {e}")
+                    # pass
 
                 try:
                     rm = self.risk_manager
@@ -268,8 +305,9 @@ class TradingBot:
                     with _status_lock:
                         _status.setdefault("risk_metrics", {})
                         _status["risk_metrics"]["unrealized_total"] = float(unreal_total)
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.logger.debug(f"Expected error in [TradingBot.start]: {e}")
+                    # pass
 
                 try:
                     rm = getattr(self, "risk_manager", None)
@@ -291,8 +329,9 @@ class TradingBot:
                         for k, v in sc.items():
                             # if k not in analysis:
                             analysis[k] = v
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        self.logger.debug(f"Expected error in [TradingBot.start]: {e}")
+                        # pass
 
                     self._latest_analysis = analysis
 
@@ -304,8 +343,9 @@ class TradingBot:
                     with _status_lock:
                         if price is not None:
                             _status["current_price"] = float(price)
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.logger.debug(f"Expected error in [TradingBot.start]: {e}")
+                    # pass
 
                 try:
                     lp = getattr(self.strategy, "last_price", None)
@@ -315,16 +355,18 @@ class TradingBot:
                             price, 
                             lp, 
                             0.0 if not hasattr(self.strategy, "last_signal_ts") else (time.time() - self.strategy.last_signal_ts))
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.logger.debug(f"Expected error in [TradingBot.start]: {e}")
+                    # pass
 
                 if hasattr(self.strategy, "ingest_tick"):
                     try:
                         # pass epoch seconds (float) for convenience
                         self.strategy.ingest_tick(symbol, time.time(), price)
-                    except Exception:
+                    except Exception as e:
                         # never let UI hiccups kill the loop
-                        pass
+                        self.logger.debug(f"Expected error in [TradingBot.start]: {e}")
+                        # pass
                 
                 # Check exits FIRST
                 try:
@@ -549,14 +591,16 @@ class TradingBot:
                             api.ensure_symbol_loaded(sym)
                         elif hasattr(api, "_ensure_symbol_loaded"):
                             api._ensure_symbol_loaded(sym)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        self.logger.debug(f"Expected error in [TradingBot._process_signal]: {e}")
+                        # pass
                     
                     try:
                         if hasattr(api, "set_quantity"):
                             api.set_quantity(qty)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        self.logger.debug(f"Expected error in [TradingBot._process_signal]: {e}")
+                        # pass
                     
                     try:
                         if hasattr(api, "click_market_button"):
@@ -922,8 +966,9 @@ class TradingBot:
                         self.risk_manager.get_position_qty(sym),
                         (self.risk_manager.get(sym) if hasattr(self.risk_manager, "positions") else None)
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.logger.debug(f"Expected error in [TradingBot._execute_trade]: {e}")
+                    # pass
 
                 if not isinstance(fill, dict):
                     self.logger.error("FILL missing after confirmed order: sig=%s att=%s (dedupe or RM error)", signal_id, attempt_id)
@@ -1225,16 +1270,18 @@ class TradingBot:
         for k in ("opening_range_minutes", "breakout_threshold", "stop_loss_percent", "take_profit_percent", "breakout_points", "min_move_from_or"):
             try:
                 setattr(self.strategy, k, getattr(self, k))
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.debug(f"Expected error in [TradingBot.set_strategy]: {e}")
+                # pass
         
         # 4) Reset strategy internal state if available
         try:
             # Reset internal state if the strategy supports it
             if hasattr(self.strategy, "reset_strategy"):
                 self.strategy.reset_strategy()
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.debug(f"Expected error in [TradingBot.set_strategy]: {e}")
+            # pass
         
         self.logger.info(f"Strategy changed from {old} to {type(self.strategy).__name__} with params={params}")
 

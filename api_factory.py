@@ -85,9 +85,9 @@ class APIFactory:
                 return None
             
             api = BinanceAPI(
-                api_key=config.binance_api_key,
-                api_secret=config.binance_api_secret,
-                testnet=config.binance_testnet
+                api_key=config.BINANCE_API_KEY,
+                api_secret=config.BINANCE_API_SECRET,
+                testnet=config.BINANCE_TESTNET
             )
             
             logger.info("Created Binance API instance")
@@ -102,12 +102,12 @@ class APIFactory:
         """Create Tradovate API instance."""
         try:
             required_fields = [
-                config.tradovate_username,
-                config.tradovate_password,
-                config.tradovate_app_id,
-                config.tradovate_app_version,
-                config.tradovate_cid,
-                config.tradovate_sec
+                config.TRADOVATE_USERNAME,
+                config.TRADOVATE_PASSWORD,
+                config.TRADOVATE_APP_ID,
+                config.TRADOVATE_APP_VERSION,
+                config.TRADOVATE_CID,
+                config.TRADOVATE_SEC
             ]
             
             if not all(required_fields):
@@ -115,13 +115,13 @@ class APIFactory:
                 return None
             
             api = TradovateAPI(
-                username=config.tradovate_username,
-                password=config.tradovate_password,
-                app_id=config.tradovate_app_id,
-                app_version=config.tradovate_app_version,
-                cid=config.tradovate_cid,
-                sec=config.tradovate_sec,
-                demo=config.tradovate_demo
+                username=config.TRADOVATE_USERNAME,
+                password=config.TRADOVATE_PASSWORD,
+                app_id=config.TRADOVATE_APP_ID,
+                app_version=config.TRADOVATE_APP_VERSION,
+                cid=config.TRADOVATE_CID,
+                sec=config.TRADOVATE_SEC,
+                demo=config.TRADOVATE_DEMO
             )
             
             logger.info("Created Tradovate API instance")

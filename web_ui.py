@@ -47,7 +47,7 @@ def _status_loop():
                 _status["trades_executed"] = getattr(bot, "trades_executed", 0)
                 _status["daily_trades"] = getattr(bot, "daily_trades", 0)
                 _status["daily_pnl"] = getattr(bot, "daily_pnl", 0.0)
-        except Exception:
+        except Exception as e:
             pass
         time.sleep(2)
 
