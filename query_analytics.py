@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 
-DB_PATH = 'market_data.db'
+DB_PATH = 'data/db/market_data.db'
 
 
 def get_recent_performance(days=7):

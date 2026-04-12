@@ -88,6 +88,7 @@ class Config:
     
     # Database settings
     DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///trading_bot.db')
+    DATABASE_PATH = 'data/db/market_data.db'
     
     # Logging settings
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

@@ -12,7 +12,7 @@ import os
 import sys
 
 # Configuration
-DATABASE_PATH = 'market_data.db'  # Adjust to your actual database location
+DATABASE_PATH = 'data/db/market_data.db'  # Adjust to your actual database location
 BACKUP_DIR = 'data/daily_backups'
 WEEKLY_BACKUP_DIR = 'data/weekly_backups'
 
