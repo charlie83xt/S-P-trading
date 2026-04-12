@@ -857,6 +857,41 @@ def _trading_main():
                 if payload.get("reply"):
                     payload["reply"].put({"success": ok, "message": "Strategy set" if ok else err})
 
+            elif cmd == "load_symbol":
+                # Load a symbol in the Tradovate UI
+                symbol = payload.get("symbol", "").strip().upper()
+                ok, err = False, None
+                
+                try:
+                    if not symbol:
+                        err = "No symbol provided"
+                    elif not api:
+                        err = "API not initialized"
+                    elif not hasattr(api, "ensure_symbol_loaded"):
+                        err = "API does not support ensure_symbol_loaded"
+                    else:
+                        # This runs in the trading thread, safe to call Playwright
+                        loaded = api.ensure_symbol_loaded(symbol)
+                        ok = bool(loaded)
+                        
+                        if ok:
+                            app.logger.info(f"✅ Symbol loaded in UI: {symbol}")
+                        else:
+                            err = f"Failed to load symbol: {symbol}"
+                
+                except Exception as e:
+                    err = str(e)
+                    app.logger.error(f"Symbol load error: {e}")
+                
+                # Update status
+                _snap_status(from_trading_thread=True)
+                
+                # Send reply if requested
+                if payload.get("reply"):
+                    payload["reply"].put({
+                        "success": ok,
+                        "message": f"Symbol loaded: {symbol}" if ok else err
+                    })
 
         except Exception as e:
             _thread_error = str(e)
@@ -1247,6 +1282,90 @@ def list_strategies():
             'success': False,
             'message': str(e)
         }), 500
+
+
+@app.route('/api/change_symbol', methods=['POST'])
+def change_symbol():
+    """
+    Change the active trading symbol.
+    
+    Payload: {"symbol": "MES"}
+    Returns: {"success": true, "symbol": "MES", "multiplier": 5.0}
+    """
+    try:
+        data = _get_json()
+        new_symbol = data.get("symbol", "").strip().upper()
+        
+        if not new_symbol:
+            return jsonify({"error": "Symbol required"}), 400
+        
+        # Validate symbol against contract multipliers
+        valid_symbols = list(cfg.CONTRACT_MULTIPLIERS.keys())
+        if new_symbol not in valid_symbols:
+            return jsonify({
+                "error": f"Invalid symbol. Valid symbols: {valid_symbols}"
+            }), 400
+        
+        # Get current symbol
+        old_symbol = getattr(bot, "symbol", None)
+        
+        # Change the symbol on bot
+        bot.symbol = new_symbol
+        
+        app.logger.info(f"📊 Symbol changed: {old_symbol} → {new_symbol}")
+        
+        # Get multiplier for response
+        multiplier = cfg.CONTRACT_MULTIPLIERS.get(new_symbol, 1.0)
+        
+        # Update status dict
+        with _status_lock:
+            _status["symbol"] = new_symbol
+        
+        # Load symbol in Tradovate UI (send command to trading thread)
+        _ensure_trading_thread()
+        
+        # If bot is running, we need to load the symbol in UI
+        if _thread_connected.is_set():
+            # Send command to trading thread to load symbol
+            # The trading thread will handle the UI interaction
+            try:
+                # We'll add a "load_symbol" command handler in the trading thread
+                _cmd_q.put(("load_symbol", {"symbol": new_symbol}))
+                app.logger.info(f"✅ Symbol load command queued: {new_symbol}")
+            except Exception as e:
+                app.logger.warning(f"⚠️  Could not queue symbol load: {e}")
+        
+        # Reset strategy for new symbol if bot is running
+        if getattr(bot, "is_running", False):
+            if hasattr(bot, 'strategy') and hasattr(bot.strategy, 'reset_strategy'):
+                try:
+                    bot.strategy.reset_strategy()
+                    app.logger.info(f"🔄 Strategy reset for {new_symbol}")
+                except Exception as e:
+                    app.logger.warning(f"⚠️  Strategy reset failed: {e}")
+        
+        # Check for open positions (warning)
+        position_warning = None
+        if hasattr(bot, 'risk_manager'):
+            positions = getattr(bot.risk_manager, "positions", {})
+            if positions and any(p.get("qty", 0) != 0 for p in positions.values()):
+                position_warning = f"Warning: Active positions exist: {list(positions.keys())}"
+                app.logger.warning(f"⚠️  {position_warning}")
+        
+        return jsonify({
+            "success": True,
+            "symbol": new_symbol,
+            "old_symbol": old_symbol,
+            "multiplier": multiplier,
+            "tick_value": multiplier / 4,  # 4 ticks per point
+            "message": f"Symbol changed to {new_symbol}",
+            "warning": position_warning
+        })
+    
+    except Exception as e:
+        app.logger.error(f"Change symbol error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 def _log_routes():
     print("\nRegistered routes:")
