@@ -926,8 +926,9 @@ class RiskManager:
     def load_history_silent(self, path: str | None = None):
         try:
             self.load_history(path)
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.debug(f"Expected error in [RiskManager.load_history_silent]: {e}")
+            # pass
 
 
     def _rotate_daily_if_needed(self):

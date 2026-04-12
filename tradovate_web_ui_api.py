@@ -169,8 +169,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 if not txt:
                     # not fatal, still consider connected - UI scrape will retry
                     pass
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Expected error in [TradovateWebUIAPI.connect]: {e}")
+                # pass
             self._connected = True
             return True
         except Exception as e:
@@ -789,8 +790,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                         if getattr(self, "TRACE_PRICES", False):
                             logger.info("get_current_price(%s) -> %s", symbol, v)
                         return v
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Expected error in [TradovateWebUIAPI._clean_to_flat]: {e}")
+                    # pass
             # fallback cleaner: digits, dot, minus
             try:
                 cleaned = "".join(ch for ch in txt if ch.isdigit() or ch in ".-")
@@ -811,8 +813,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     mapping = self._sel.get("price.last")
                     if mapping:
                         sels.extend(mapping if isinstance(mapping, list) else [mapping])       
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Expected error in [TradovateWebUIAPI._clean_to_float]: {e}")
+                # pass
 
             sels += [
                 ".last-price-info .number",
@@ -873,8 +876,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 if hasattr(self, "logger"):
                     self.logger.warning(f"get_current_price({symbol}) failed: {e}")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Expected error in [TradovateWebUIAPI.get_current_price]: {e}")
+                # pass
             logger.debug("get_current_price(%s) -> None (no selector matched)", symbol)
             return None
 
@@ -1193,9 +1197,10 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 return
             # otherwise trying to base_url once
             self._run(self._page.goto(self.base_url, wait_until="domcontentloaded"))
-        except Exception:
+        except Exception as e:
             # In CDP mode we might already be on the app page; ignoring navigation errors
-            pass
+            logger.debug(f"Expected error in [TradovateWebUIAPI._logging_iif_needed]: {e}")
+            # pass
 
         # If already logged in on any page/frame, return immediately
         pg = self._find_logged_in_page(markers)
@@ -1312,8 +1317,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 self._run(page.wait_for_selector(sel, timeout=per_attempt_ms, state="visible"), timeout=per_attempt_ms/1000 + 5)
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Expected error in [TradovateWebUIAPI._any_visible_global]: {e}")
+                # pass
         # then every frame
         try:
             frames = list(page.frames)
@@ -1324,8 +1330,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 try:
                     self._run(fr.wait_for_selector(sel, timeout=per_attempt_ms, state="visible"), timeout=per_attempt_ms/1000 + 5)
                     return True
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Expected error in [TradovateWebUIAPI._any_visible_global]: {e}")
+                    # pass
         return False
 
 
@@ -1340,8 +1347,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             self._fill_first("symbol.search_input", symbol)
             self._wait_any("symbol.first_result")
             self._click_any("symbol.first_result")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
+            # pass
         
         self._wait_any("order.buy_market", timeout=self.timeout_ms)
         # self._page_locator(".market-buttons").first().wait_for(timeout=self.timeout_ms) # REPLACING
@@ -1364,17 +1372,19 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 if hasattr(self, "_ensure_symbol_loaded"):
                     self._ensure_symbol_loaded(symbol) # your current implementation
-            except Exception:
+            except Exception as e:
                 # non-fatal, continue with verification/heuristics
-                pass
+                logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
+                # pass
             # 2) Verify chart header contains symbol (fast check)
             try:
                 chart = self._page.locator(f".chart-wrapper:has(.header:has-text('{symbol}'))")
                 cnt = self._run(chart.count(), timeout=1.5)
                 if cnt and cnt > 0:
                     return True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
+                # pass
 
             # 3) Heuriostic: try a few generic symbol search inputs
             search_candidates = [
@@ -1389,8 +1399,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     loc = self._page.locator(sel).first
                     try:
                         self._run(loc.fill(""), timeout=0.8)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
+                        # pass
                     self._run(loc.type(symbol), timeout=1.2)
                     self._run(self._page.keyboard.press("Enter"), timeout=0.8)
                     # brief settle and re-check
@@ -1462,8 +1473,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # HARD REQUIREMENT: Positions must be the active panel
             try:
                 self._switch_to("positions.tab", "positions.tab_active")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
+                # pass
             
             side = (side or "").strip().lower()
             buy = side.startswith("b")
@@ -1476,8 +1488,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 if existing is not None:
                     logger.info("[click_market_button] confirm popover already open (%s); skipping outer click", target)
                     return True # let confirm_order() handle it
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
+                # pass
             
             if not skip_position_checks:
                 # SAFETY GATE: prevent stacking if positions are unknown
@@ -1552,13 +1565,15 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # 3) Click sequence: bring to view, ensure visible & enabled, click
             try:
                 self._run(btn.scroll_into_view_if_needed(), timeout=min(1.5, t_ms/1000.0))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
+                # pass
 
             try:
                 self._run(btn.wait_for(state="visible"), timeout=min(1.5, t_ms/1000.0))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
+                # pass
 
             # try normal click, then DOM click, then force click as last resort
             try:
@@ -1599,8 +1614,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
         # Try Esc first (cheap + often works)
         try:
             await page.keyboard.press("Escape")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Expected error in [TradovateWebUIAPI._cleanup_backdrops]: {e}")
+            # pass
 
         backdrop = page.locator("#placeholder-for-modals .modal-backdrop.in, .modal-backdrop.in")
         try:
@@ -1610,15 +1626,17 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # last resort: click somewhere safe to dismiss
             try:
                 await page.mouse.click(5, 5)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Expected error in [TradovateWebUIAPI._cleanup_backdrops]: {e}")
+                # pass
 
     def cleanup_backdrops(self, timeout_ms: int = 1500) -> None:
         # "Sync-safe wrapper for async backdrop cleanup."
         try:
             self._run(self._cleanup_backdrops(timeout_ms=timeout_ms), timeout=(timeout_ms/1000.0 + 1.0))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Expected error in [TradovateWebUIAPI.cleanup_backdrops]: {e}")
+            # pass
 
 
     async def _confirm_order_impl(self, side: str | None = None, timeout_ms: int = 3000) -> bool:
@@ -1722,8 +1740,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # Try normal click first, than force click as fallback.
             try:
                 await locator.scroll_into_view_if_needed(timeout=min(t_ms, 1500))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Expected error in [TradovateWebUIAPI._confirm_order_impl.safe_click]: {e}")
+                # pass
             
             # 1) normal click
             try:
@@ -1811,8 +1830,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     # try cleanup
                     try:
                         await page.keyboard.press("Escape")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Expected error in [TradovateWebUIAPI._confirm_order_impl]: {e}")
+                        # pass
                     cancel_btn = pop.locator("div.btn.btn-default", has_text=re.compile(r"^Cancel$", re.I)).first
                     await safe_click(cancel_btn, "Cancel")
                     return False
@@ -1826,8 +1846,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 logger.warning("[confirm_order] popover still visible after clicking '%s'; attempting cleanup", target)
                 try:
                     await page.keyboard.press("Escape")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Expected error in [TradovateWebUIAPI._confirm_order_impl]: {e}")
+                    # pass
                 cancel_btn = pop.locator("div.btn.btn-default", has_text=re.compile(r"^Cancel$", re.I)).first
                 await safe_click(cancel_btn, "Cancel")
                 await wait_gone(pop)
@@ -2014,8 +2035,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
         try:
             if (self._run(table.locator("text=/NET\\s*POS/i").count(), timeout=0.6) or 0) > 0:
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Expected error in [TradovateWebUIAPI._looks_like_positions_table]: {e}")
+            # pass
         return False
 
     def _looks_like_orders_table(self, table) -> bool:
@@ -2278,8 +2300,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # main page first
             self._run(self._page.wait_for_selector(selector, timeout=int(remaining * 1000), state="visible"), timeout=remaining + 0.5)
             return self._run(self._page.locator(selector).first.inner_text(), timeout=0.8)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Expected error in [TradovateWebUIAPI._inner_text_any]: {e}")
+            # pass
 
         # Trying every frame
         try:
@@ -2293,8 +2316,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
         
                 except Exception:
                     continue
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Expected error in [TradovateWebUIAPI._inner_text_any]: {e}")
+            # pass
         return None
         # raise RuntimeError(f"Failed to read inner_text: {selector}")
 
@@ -2347,14 +2371,16 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     self._run(self._page.keyboard.type(qty_text))
                     # small settle wait
                     self._run(self._page.wait_for_timeout(200))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity._type_active]: {e}")
+                    # pass
 
                 # also try .fill() (some UIs need this)
                 try:
                     self._fill_any(sel, qty_text, timeout_ms=1000)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity]: {e}")
+                    # pass
 
                 # 2) Verify it stuck (read back value via JS)
                 for ctx in self._all_contexts():
@@ -2403,10 +2429,12 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 return True
             # if _type_active():
             #     return True
-            except Exception:
-                pass
-        except Exception:
-            pass
+            except Exception as e:
+                logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity]: {e}")
+                # pass
+        except Exception as e:
+            logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity]: {e}")
+            # pass
 
         return False
 
@@ -2462,8 +2490,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # callers sometimes pass seconds here; accept it/float
             try:
                 return int(float(timeout) * 1000)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Expected error in [TradovateWebUIAPI._norm_timeout_ms]: {e}")
+                # pass
         return int(default_ms if default_ms is not None else getattr(self, "timeout_ms", 3000))
 
     # -------------------------- tiny helpers -----------------------------
@@ -2602,18 +2631,21 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 # ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
                 await self._page.screenshot(path=f"ui_error_{label}_{ts}.png", full_page=True)
-            except Exception:
-                pass
+            except Exception as e:
+                self.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+                # pass
             try:
                 html = await self._page.content()
                 with open(f"ui_error_{label}_{ts}.html", "w", encoding="utf-8") as f:
                     f.write(html)
-            except Exception:
-                pass
+            except Exception as e:
+                self.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+                # pass
         try:
             self._run(_do(), timeout=20)
-        except Exception:
-            pass
+        except Exception as e:
+            self.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+            # pass
 
     
     def _expand(self, keys_or_selectors):
@@ -2745,8 +2777,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
         print(f"connect() failed at {label}: {e}")
         try:
             self._snapshot(f"connect_fail_{label}")
-        except Exception:
-            pass
+        except Exception as e:
+            self.debug(f"Expected error in [TradovateWebUIAPI._connect_fail]: {e}")
+            # pass
 
 
 
@@ -2773,8 +2806,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 self._run(self._page.evaluate(
                     "() => { const bd = document.querySelector('.modal-backdrop.in'); if (bd) bd.remove(); }"
                 ), timeout=0.8)
-            except Exception:
-                pass
+            except Exception as e:
+                self.debug(f"Expected error in [TradovateWebUIAPI._close_any_modal]: {e}")
+                # pass
 
 
     def _pre_click_hygiene(self):
@@ -2787,8 +2821,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             self._run(self._page.evaluate(
                 "() => { const bd = document.querySelector('.modal-backdrop.in'); if (bd) bd.remove(); }"
             ), timeout=0.8)
-        except Exception:
-            pass
+        except Exception as e:
+            self.debug(f"Expected error in [TradovateWebUIAPI._pre_click_hygiene]: {e}")
+            # pass
 
 
     def get_latest_filled_order(self, symbol: str, side: str, since_ts: float | None = None, *, baseline_rows: set[str] | None = None) -> dict | None:
@@ -2970,8 +3005,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                                         v = parse_float_token(cell_texts[idx - 1])
                                         if v is not None and is_price_like(v):
                                             avg_fill = v
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    self.debug(f"Expected error in [TradovateWebUIAPI._get_latest_filled_ordert]: {e}")
+                                    # pass
                                 
                                 # 2) Backup
                                 if avg_fill is None:
@@ -3036,8 +3072,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                                 for k in range(min(max_rows, 5)):
                                     rt = norm(self._run(rows.nth(k).inner_text(), timeout=0.8) or "")
                                     logger.info("ORDERS ROW[%d]=%s", k, rt)
-                            except Exception:
-                                pass 
+                            except Exception as e:
+                                self.debug(f"Expected error in [TradovateWebUIAPI._get_latest_filled_order]: {e}")
+                                # pass
                             return None
                         
                         # If ordering is unclear, safest is: return the last match we saw
@@ -3139,8 +3176,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             self._ensure_page()
             try:
                 self.cleanup_backdrops(timeout_ms=1500)
-            except Exception:
-                pass
+            except Exception as e:
+                self.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
+                # pass
 
 
             # --- Force Positions tab ---
@@ -3159,8 +3197,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
             try:
                 self.cleanup_backdrops(timeout_ms=1500)
-            except Exception:
-                pass
+            except Exception as e:
+                self.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
+                # pass
 
 
             # Wait for a positions table selector to appear (DOM presence is enough)
@@ -3181,8 +3220,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 # then go back to positions so steady state is Positions
                 self._click_any_first_visible("positions.tab", timeout_ms=2500)
                 logger.info("ensure_trading_panels_ready: returned to positions.tab")
-            except Exception:
-                pass
+            except Exception as e:
+                self.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
+                # pass
 
 
             return True

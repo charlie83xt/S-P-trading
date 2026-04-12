@@ -402,16 +402,18 @@ def _snap_status(from_trading_thread: bool = False):
             for t in daily_trades:
                 try:
                     daily_realized += float(t.get("pnl", 0.0) or 0.0)
-                except Exception:
-                    pass
+                except Exception as e:
+                    app.logger.debug(f"Expected error in [web_app._snap_status]: {e}")
+                    # pass
 
             # unrealized PnL across all open positions right now         
             unreal_total = 0.0
             for ppos in positions.values():
                 try:
                     unreal_total += float(ppos.get("unrealized", 0.0) or 0.0)
-                except Exception:
-                    pass
+                except Exception as e:
+                    app.logger.debug(f"Expected error in [web_app._snap_status]: {e}")
+                    # pass
 
             # expose open positions count at top-level for the dashboard tile
             _status["open_positions_count"] = sum(
@@ -436,8 +438,9 @@ def _snap_status(from_trading_thread: bool = False):
                     try:
                         if float(t.get("pnl", 0.0) or 0.0) > 0.0:
                             wins += 1
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        app.logger.debug(f"Expected error in [web_app._snap_status]: {e}")
+                        # pass
 
             # losses = sum(1 for t in trade_hist if float(t.get("pnl", 0.0) or 0.0) < 0.0)
             # win_rate = (wins / (wins + losses)) * 100.0 if (wins + losses) else 0.0
@@ -473,21 +476,24 @@ def _snap_status(from_trading_thread: bool = False):
                     if p is not None:
                         with _status_lock:
                             _status["current_price"] = float(p)
-            except Exception:
-                pass
+            except Exception as e:
+                app.logger.debug(f"Expected error in [web_app._snap_status]: {e}")
+                # pass
         else:
             try:
                 p = (getattr(bot, "_latest_analysis", {}) or {}).get("current_price")  # if your key is _latest_analysis, use that
                 if p is not None:
                     with _status_lock:
                         _status["current_price"] = float(p)
-            except Exception:
-                pass
+            except Exception as e:
+                app.logger.debug(f"Expected error in [web_app._snap_status]: {e}")
+                # pass
 
 
-    except Exception:
+    except Exception as e:
         # never let this raise; STATUS must keep flowing
-        pass
+        app.logger.debug(f"Expected error in [web_app._snap_status]: {e}")
+        # pass
 
 
 
@@ -599,8 +605,9 @@ def _trading_main():
                             if not hasattr(bot, "_latest_analysis") or bot._latest_analysis is None:
                                 bot._latest_analysis = {}
                             bot._latest_analysis["current_price"] = float(price)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            app.logger.debug(f"Expected error in [web_app._trading_main]: {e}")
+                            # pass
                         # app.logger.info("HB: sym=%s price=%s (poll)", sym, price)
                     else:
                         app.logger.debug("HB: sym=%s price unavailable from API", sym)
@@ -641,8 +648,9 @@ def _trading_main():
                         bot.stop()
                     if api:
                         api.disconnect()
-                except Exception:
-                    pass
+                except Exception as e:
+                    app.logger.debug(f"Expected error in [web_app._trading_main]: {e}")
+                    # pass
                 _snap_status(from_trading_thread=True)
                 return
 
@@ -764,8 +772,9 @@ def _trading_main():
 
                 try:
                     bot.is_running = False
-                except Exception:
-                    pass
+                except Exception as e:
+                    app.logger.debug(f"Expected error in [web_app._trading_main]: {e}")
+                    # pass
                 _snap_status(from_trading_thread=True)
 
             elif cmd == "pause":
@@ -848,6 +857,41 @@ def _trading_main():
                 if payload.get("reply"):
                     payload["reply"].put({"success": ok, "message": "Strategy set" if ok else err})
 
+            elif cmd == "load_symbol":
+                # Load a symbol in the Tradovate UI
+                symbol = payload.get("symbol", "").strip().upper()
+                ok, err = False, None
+                
+                try:
+                    if not symbol:
+                        err = "No symbol provided"
+                    elif not api:
+                        err = "API not initialized"
+                    elif not hasattr(api, "ensure_symbol_loaded"):
+                        err = "API does not support ensure_symbol_loaded"
+                    else:
+                        # This runs in the trading thread, safe to call Playwright
+                        loaded = api.ensure_symbol_loaded(symbol)
+                        ok = bool(loaded)
+                        
+                        if ok:
+                            app.logger.info(f"✅ Symbol loaded in UI: {symbol}")
+                        else:
+                            err = f"Failed to load symbol: {symbol}"
+                
+                except Exception as e:
+                    err = str(e)
+                    app.logger.error(f"Symbol load error: {e}")
+                
+                # Update status
+                _snap_status(from_trading_thread=True)
+                
+                # Send reply if requested
+                if payload.get("reply"):
+                    payload["reply"].put({
+                        "success": ok,
+                        "message": f"Symbol loaded: {symbol}" if ok else err
+                    })
 
         except Exception as e:
             _thread_error = str(e)
@@ -915,8 +959,9 @@ def get_status():
         try:
             app.logger.info("STATUS OUT: sym=%s price=%s running=%s",
                             s.get("symbol"), s.get("current_price"), s.get("is_running"))
-        except Exception:
-            pass
+        except Exception as e:
+            app.logger.debug(f"Expected error in [web_app.get_status]: {e}")
+            # pass
 
         # return jsonify(dict(_status))
         return jsonify({"success": True, "status": s})
@@ -1041,8 +1086,9 @@ def get_trades():
                     app.logger.warning("No trades found when expected")
                 # if trades:
                     # app.logger.info("TRADES API SAMPLE: %s", str(trades[-1])[:300])
-            except Exception:
-                pass
+            except Exception as e:
+                app.logger.debug(f"Expected error in [web_app.get_trades]: {e}")
+                # pass
             return jsonify({'success': True, 'trades': trades})
         else:
             app.logger.info("TRADES API: bot missing -> 0 records")
@@ -1081,9 +1127,10 @@ def get_market_analysis():
                         analysis["current_price"] = float(p)
                     # a = getattr(dm, "api", None)
                     # price = api.get_current_price(sym) # if a else None
-                except Exception:
+                except Exception as e:
                     # price = None
-                    pass
+                    app.logger.debug(f"Expected error in [web_app.get_market_analysis]: {e}")
+                    # pass
 
         # Ensure required keys exist so the UI never breaks
         analysis.setdefault("range_position", "unknown")
@@ -1146,8 +1193,9 @@ def shutdown():
     # >>> ADD: save state before we ask the trading thread to quit
     try:
         _persist_state()
-    except Exception:
-        pass
+    except Exception as e:
+        app.logger.debug(f"Expected error in [web_app.shutdown]: {e}")
+        # pass
     if _trading_thread and _trading_thread.is_alive():
         _cmd_q.put(("shutdown", {}))
     return jsonify({"success": True})
@@ -1234,6 +1282,90 @@ def list_strategies():
             'success': False,
             'message': str(e)
         }), 500
+
+
+@app.route('/api/change_symbol', methods=['POST'])
+def change_symbol():
+    """
+    Change the active trading symbol.
+    
+    Payload: {"symbol": "MES"}
+    Returns: {"success": true, "symbol": "MES", "multiplier": 5.0}
+    """
+    try:
+        data = _get_json()
+        new_symbol = data.get("symbol", "").strip().upper()
+        
+        if not new_symbol:
+            return jsonify({"error": "Symbol required"}), 400
+        
+        # Validate symbol against contract multipliers
+        valid_symbols = list(cfg.CONTRACT_MULTIPLIERS.keys())
+        if new_symbol not in valid_symbols:
+            return jsonify({
+                "error": f"Invalid symbol. Valid symbols: {valid_symbols}"
+            }), 400
+        
+        # Get current symbol
+        old_symbol = getattr(bot, "symbol", None)
+        
+        # Change the symbol on bot
+        bot.symbol = new_symbol
+        
+        app.logger.info(f"📊 Symbol changed: {old_symbol} → {new_symbol}")
+        
+        # Get multiplier for response
+        multiplier = cfg.CONTRACT_MULTIPLIERS.get(new_symbol, 1.0)
+        
+        # Update status dict
+        with _status_lock:
+            _status["symbol"] = new_symbol
+        
+        # Load symbol in Tradovate UI (send command to trading thread)
+        _ensure_trading_thread()
+        
+        # If bot is running, we need to load the symbol in UI
+        if _thread_connected.is_set():
+            # Send command to trading thread to load symbol
+            # The trading thread will handle the UI interaction
+            try:
+                # We'll add a "load_symbol" command handler in the trading thread
+                _cmd_q.put(("load_symbol", {"symbol": new_symbol}))
+                app.logger.info(f"✅ Symbol load command queued: {new_symbol}")
+            except Exception as e:
+                app.logger.warning(f"⚠️  Could not queue symbol load: {e}")
+        
+        # Reset strategy for new symbol if bot is running
+        if getattr(bot, "is_running", False):
+            if hasattr(bot, 'strategy') and hasattr(bot.strategy, 'reset_strategy'):
+                try:
+                    bot.strategy.reset_strategy()
+                    app.logger.info(f"🔄 Strategy reset for {new_symbol}")
+                except Exception as e:
+                    app.logger.warning(f"⚠️  Strategy reset failed: {e}")
+        
+        # Check for open positions (warning)
+        position_warning = None
+        if hasattr(bot, 'risk_manager'):
+            positions = getattr(bot.risk_manager, "positions", {})
+            if positions and any(p.get("qty", 0) != 0 for p in positions.values()):
+                position_warning = f"Warning: Active positions exist: {list(positions.keys())}"
+                app.logger.warning(f"⚠️  {position_warning}")
+        
+        return jsonify({
+            "success": True,
+            "symbol": new_symbol,
+            "old_symbol": old_symbol,
+            "multiplier": multiplier,
+            "tick_value": multiplier / 4,  # 4 ticks per point
+            "message": f"Symbol changed to {new_symbol}",
+            "warning": position_warning
+        })
+    
+    except Exception as e:
+        app.logger.error(f"Change symbol error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 def _log_routes():
     print("\nRegistered routes:")
