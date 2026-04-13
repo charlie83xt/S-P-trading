@@ -88,7 +88,6 @@ class TradingBot:
         self.is_running = False
         self.is_paused = False
         self.symbol_manager = SymbolManager(self.config)
-        # self.symbol = self.config.DEFAULT_SYMBOL
         self.monitoring_thread = None
         self.last_price_check = None
         
@@ -223,7 +222,7 @@ class TradingBot:
 
         self.is_running = True
         self.is_paused = False
-        self.symbol = symbol
+        self.symbol_manager.symbol = symbol
         self.start_time = datetime.now()
         self.logger.info("Bot loop started for %s (%s)", symbol, type(self.strategy).__name__)
         self.logger.info("RM id (bot thread) = %s", id(getattr(self, "risk_manager", None)))
@@ -1200,13 +1199,13 @@ class TradingBot:
         Args:
             symbol: New trading symbol
         """
-        old_symbol = self.symbol
-        self.symbol = symbol
+        # old_symbol = self.symbol
+        # self.symbol = symbol
+        self.change_symbol(symbol)
         
         # Reset strategy for new symbol
-        self.strategy.reset_strategy()
-        
-        self.logger.info(f"Symbol changed from {old_symbol} to {symbol}")
+        # self.strategy.reset_strategy()
+        # self.logger.info(f"Symbol changed from {old_symbol} to {symbol}")
     
     def get_trade_history(self) -> List[Dict]:
         """

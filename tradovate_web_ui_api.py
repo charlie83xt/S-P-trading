@@ -165,7 +165,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             self._launch()
             self._login_if_needed()
             try:
-                txt = self._inner_text_any(".last-price-info .number", timeout=800)
+                txt = self._inner_text_any(".last-price-info .number", timeout_ms=800)
                 if not txt:
                     # not fatal, still consider connected - UI scrape will retry
                     pass

@@ -80,7 +80,7 @@ class APIFactory:
     def _create_binance_api(cls, config) -> Optional[BinanceAPI]:
         """Create Binance API instance."""
         try:
-            if not config.binance_api_key or not config.binance_api_secret:
+            if not config.BINANCE_API_KEY or not config.BINANCE_API_SECRET:
                 logger.error("Binance API credentials not found in configuration")
                 return None
             
