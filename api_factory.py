@@ -18,7 +18,7 @@ from tradovate_web_ui_api import TradovateWebUIAPI
 # except Exception as e:
 #     import logging; logging.getLogger(__name__).exception("Import TradovateWebUIAPI failed: %s", e)
 #     TradovateWebUIAPI = None
-
+from debug_config import debug_print, production_print
 from ninjatrader_api import NinjaTraderAPI
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ class APIFactory:
             elif platform_name == 'ninjatrader':
                 return cls._create_ninjatrader_api(config)
             elif platform_name == 'tradovate_ui':
-                print("[APIFactory] Using TradovateWebUIAPI (UI automation) - dry_run=", os.getenv("DRY_RUN", "true"))
+                debug_print("[APIFactory] Using TradovateWebUIAPI (UI automation) - dry_run=", os.getenv("DRY_RUN", "true"))
                 return cls._create_tradovate_ui_api(config)
             else:
                 logger.error(f"Platform {platform_name} not implemented")
@@ -80,7 +80,7 @@ class APIFactory:
     def _create_binance_api(cls, config) -> Optional[BinanceAPI]:
         """Create Binance API instance."""
         try:
-            if not config.binance_api_key or not config.binance_api_secret:
+            if not config.BINANCE_API_KEY or not config.BINANCE_API_SECRET:
                 logger.error("Binance API credentials not found in configuration")
                 return None
             

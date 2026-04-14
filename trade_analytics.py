@@ -18,7 +18,7 @@ class TradeAnalytics:
     for ML model training and strategy optimization.
     """
     
-    def __init__(self, db_path='market_data.db', use_supabase=True):
+    def __init__(self, db_path='data/db/market_data.db', use_supabase=True):
         """Use same DB as data_manager for efficiency"""
         self.db_path = db_path
         self.logger = logging.getLogger(__name__)

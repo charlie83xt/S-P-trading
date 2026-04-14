@@ -5,9 +5,10 @@
 import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta
+from debug_config import debug_print, production_print
 
 
-DB_PATH = 'market_data.db'
+DB_PATH = 'data/db/market_data.db'
 
 
 def get_recent_performance(days=7):
@@ -34,22 +35,22 @@ def get_recent_performance(days=7):
     conn.close()
    
     if len(df) == 0:
-        print(f"📊 No trades in last {days} days")
+        debug_print(f"📊 No trades in last {days} days")
         return
    
-    print(f"\n{'='*70}")
-    print(f"📊 PERFORMANCE - LAST {days} DAYS")
-    print(f"{'='*70}\n")
+    debug_print(f"\n{'='*70}")
+    debug_print(f"📊 PERFORMANCE - LAST {days} DAYS")
+    debug_print(f"{'='*70}\n")
    
     for _, row in df.iterrows():
         win_rate = (row['wins'] / row['trades'] * 100) if row['trades'] > 0 else 0
        
         pnl_emoji = "🟢" if row['total_pnl'] > 0 else "🔴"
        
-        print(f"{row['date']}")
-        print(f"  Trades: {row['trades']} | W:{row['wins']} L:{row['losses']} | WR: {win_rate:.1f}%")
-        print(f"  P&L: {pnl_emoji} ${row['total_pnl']:.2f} (Avg: ${row['avg_pnl']:.2f})")
-        print(f"  Range: ${row['max_loss']:.2f} to ${row['max_win']:.2f}\n")
+        debug_print(f"{row['date']}")
+        debug_print(f"  Trades: {row['trades']} | W:{row['wins']} L:{row['losses']} | WR: {win_rate:.1f}%")
+        debug_print(f"  P&L: {pnl_emoji} ${row['total_pnl']:.2f} (Avg: ${row['avg_pnl']:.2f})")
+        debug_print(f"  Range: ${row['max_loss']:.2f} to ${row['max_win']:.2f}\n")
    
     # Overall stats
     total_trades = df['trades'].sum()
@@ -57,9 +58,9 @@ def get_recent_performance(days=7):
     total_pnl = df['total_pnl'].sum()
     overall_wr = (total_wins / total_trades * 100) if total_trades > 0 else 0
    
-    print(f"{'='*70}")
-    print(f"TOTALS: {total_trades} trades | {total_wins}W | WR: {overall_wr:.1f}% | P&L: ${total_pnl:.2f}")
-    print(f"{'='*70}\n")
+    debug_print(f"{'='*70}")
+    debug_print(f"TOTALS: {total_trades} trades | {total_wins}W | WR: {overall_wr:.1f}% | P&L: ${total_pnl:.2f}")
+    debug_print(f"{'='*70}\n")
 
 
 def get_strategy_comparison():
@@ -86,7 +87,7 @@ def get_strategy_comparison():
 
     # Check if we got data BEFORE closing connection
     if len(df) == 0:
-        print("📊 No strategy data in signals table, trying trades_enhanced...")
+        debug_print("📊 No strategy data in signals table, trying trades_enhanced...")
         
         # Try to get strategy from trades_enhanced directly
         fallback_query = """
@@ -108,13 +109,13 @@ def get_strategy_comparison():
     conn.close()
     
     if len(df) == 0 or df.iloc[0]['trades'] == 0:
-        print("📊 No trade data available")
+        debug_print("📊 No trade data available")
         return
 
    
-    print(f"\n{'='*70}")
-    print(f"📊 STRATEGY COMPARISON - LAST 30 DAYS")
-    print(f"{'='*70}\n")
+    debug_print(f"\n{'='*70}")
+    debug_print(f"📊 STRATEGY COMPARISON - LAST 30 DAYS")
+    debug_print(f"{'='*70}\n")
    
     for _, row in df.iterrows():
         if row['trades'] == 0:
@@ -122,11 +123,11 @@ def get_strategy_comparison():
            
         win_rate = (row['wins'] / row['trades'] * 100)
        
-        print(f"{row['strategy_name']}")
-        print(f"  Trades: {row['trades']} | Win Rate: {win_rate:.1f}%")
-        print(f"  Total P&L: ${row['total_pnl']:.2f}")
-        print(f"  Avg P&L: ${row['avg_pnl']:.2f}")
-        print(f"  Best/Worst: ${row['max_win']:.2f} / ${row['max_loss']:.2f}\n")
+        debug_print(f"{row['strategy_name']}")
+        debug_print(f"  Trades: {row['trades']} | Win Rate: {win_rate:.1f}%")
+        debug_print(f"  Total P&L: ${row['total_pnl']:.2f}")
+        debug_print(f"  Avg P&L: ${row['avg_pnl']:.2f}")
+        debug_print(f"  Best/Worst: ${row['max_win']:.2f} / ${row['max_loss']:.2f}\n")
 
 
 def get_time_of_day_analysis():
@@ -149,12 +150,12 @@ def get_time_of_day_analysis():
     conn.close()
    
     if len(df) == 0:
-        print("📊 No time-of-day data yet")
+        debug_print("📊 No time-of-day data yet")
         return
    
-    print(f"\n{'='*70}")
-    print(f"📊 PERFORMANCE BY HOUR (UTC)")
-    print(f"{'='*70}\n")
+    debug_print(f"\n{'='*70}")
+    debug_print(f"📊 PERFORMANCE BY HOUR (UTC)")
+    debug_print(f"{'='*70}\n")
    
     for _, row in df.iterrows():
         win_rate = (row['wins'] / row['trades'] * 100) if row['trades'] > 0 else 0
@@ -163,7 +164,7 @@ def get_time_of_day_analysis():
         hour_utc = int(row['hour'])
         et_hour = (hour_utc - 5) % 24
        
-        print(f"{hour_utc:02d}:00 UTC ({et_hour:02d}:00 ET) | "
+        debug_print(f"{hour_utc:02d}:00 UTC ({et_hour:02d}:00 ET) | "
               f"Trades: {row['trades']} | WR: {win_rate:.1f}% | "
               f"Avg: ${row['avg_pnl']:.2f}")
 
@@ -175,29 +176,29 @@ def export_for_analysis():
     # Export trades
     trades_df = pd.read_sql("SELECT * FROM trades_enhanced", conn)
     trades_df.to_csv('data/trades_export.csv', index=False)
-    print(f"✅ Exported {len(trades_df)} trades to data/trades_export.csv")
+    debug_print(f"✅ Exported {len(trades_df)} trades to data/trades_export.csv")
    
     # Export signals
     signals_df = pd.read_sql("SELECT * FROM signals", conn)
     signals_df.to_csv('data/signals_export.csv', index=False)
-    print(f"✅ Exported {len(signals_df)} signals to data/signals_export.csv")
+    debug_print(f"✅ Exported {len(signals_df)} signals to data/signals_export.csv")
    
     conn.close()
 
 
 def main():
     """Run all analytics"""
-    print("\n" + "="*70)
-    print("📊 TRADING BOT ANALYTICS")
-    print("="*70)
+    debug_print("\n" + "="*70)
+    debug_print("📊 TRADING BOT ANALYTICS")
+    debug_print("="*70)
    
     get_recent_performance(days=7)
     get_strategy_comparison()
     get_time_of_day_analysis()
    
-    print("\n" + "="*70)
-    print("💾 EXPORT")
-    print("="*70 + "\n")
+    debug_print("\n" + "="*70)
+    debug_print("💾 EXPORT")
+    debug_print("="*70 + "\n")
     export_for_analysis()
 
 

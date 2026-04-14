@@ -8,6 +8,7 @@ from datetime import datetime, time, timedelta
 from typing import Optional, Dict, Any, List
 from zoneinfo import ZoneInfo
 from dataclasses import dataclass
+from debug_config import PRINT_STRATEGY_STATE, should_log_throttled
 
 
 @dataclass
@@ -306,12 +307,13 @@ class PreviousDayHighLowStrategy:
                 return None
 
         if self.prev_day_high:
-            self.logger.info(
-                f"📊 PrevDayHL Active: High={self.prev_day_high:.2f}, "
-                f"Low={self.prev_day_low:.2f}, "
-                f"Trades={self.trades_today}/{self.max_trades_per_day}"
-            )
-            # Only log this once per minute, not every tick
+            if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                self.logger.info(
+                    f"📊 PrevDayHL Active: High={self.prev_day_high:.2f}, "
+                    f"Low={self.prev_day_low:.2f}, "
+                    f"Trades={self.trades_today}/{self.max_trades_per_day}"
+                )
+                # Only log this once per minute, not every tick
         
         # Get current price
         current_price = self.dm.get_current_price(symbol)

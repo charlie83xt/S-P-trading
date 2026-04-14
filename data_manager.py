@@ -27,6 +27,7 @@ except ImportError:
 
 import sys
 import traceback
+from debug_config import debug_print, production_print
 
 _TRACE = False
 
@@ -145,7 +146,8 @@ class DataManager:
             )
         self.logger.info(f"✅ API created successfully: {self.api.get_platform_name()}")
 
-        self.db_path = 'market_data.db'
+        # self.db_path = 'market_data.db'
+        self.db_path = getattr(self.config, 'DATABASE_PATH', 'data/db/market_data.db')
         self._init_database()
         self._tick_buf = None
 

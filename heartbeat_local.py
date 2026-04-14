@@ -9,6 +9,7 @@ import time
 import threading
 from datetime import datetime, timedelta
 import logging
+from debug_config import debug_print, production_print
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +172,7 @@ if __name__ == "__main__":
         def __init__(self):
             self.driver = True  # Simulate browser driver
     
-    print("=== Local Session Keepalive Test ===\n")
+    debug_print("=== Local Session Keepalive Test ===\n")
     
     # Create mock API
     api = MockTradovateUI()
@@ -179,28 +180,28 @@ if __name__ == "__main__":
     # Create keepalive with 1-minute interval (for testing - normally use 15)
     keepalive = LocalSessionKeepAlive(api, interval_minutes=1)
     
-    print("Starting keepalive...")
+    debug_print("Starting keepalive...")
     keepalive.start()
     
     # Simulate trading session for 5 minutes
-    print("\nSimulating 5-minute trading session...")
-    print("(In real use, this runs in background while your bot trades)")
+    debug_print("\nSimulating 5-minute trading session...")
+    debug_print("(In real use, this runs in background while your bot trades)")
     
     for i in range(5):
         time.sleep(60)
         status = keepalive.get_status()
-        print(f"\nAfter {i+1} minutes:")
-        print(f"  Pings sent: {status['pings_sent']}")
-        print(f"  Last ping: {status['last_ping']}")
-        print(f"  Next ping in: {status['next_ping_in_seconds']}s")
+        debug_print(f"\nAfter {i+1} minutes:")
+        debug_print(f"  Pings sent: {status['pings_sent']}")
+        debug_print(f"  Last ping: {status['last_ping']}")
+        debug_print(f"  Next ping in: {status['next_ping_in_seconds']}s")
     
-    print("\n\nStopping keepalive...")
+    debug_print("\n\nStopping keepalive...")
     keepalive.stop()
     
-    print("\nTest complete!")
-    print("\nTo use in your bot:")
-    print("  from heartbeat_local import LocalSessionKeepAlive")
-    print("  keepalive = LocalSessionKeepAlive(api, interval_minutes=15)")
-    print("  keepalive.start()  # When you start trading")
-    print("  # ... your bot runs ...")
-    print("  keepalive.stop()   # When you stop trading")
+    debug_print("\nTest complete!")
+    debug_print("\nTo use in your bot:")
+    debug_print("  from heartbeat_local import LocalSessionKeepAlive")
+    debug_print("  keepalive = LocalSessionKeepAlive(api, interval_minutes=15)")
+    debug_print("  keepalive.start()  # When you start trading")
+    debug_print("  # ... your bot runs ...")
+    debug_print("  keepalive.stop()   # When you stop trading")
