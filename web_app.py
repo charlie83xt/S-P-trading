@@ -12,6 +12,7 @@ import logging, os
 import traceback
 import sys
 import os
+import shutil
 
 from trading_bot import TradingBot
 from config import Config
@@ -26,6 +27,7 @@ import trading_bot, risk_manager, api_factory, config
 import tradovate_web_ui_api  # wherever it is imported from
 
 from heartbeat_local import LocalSessionKeepAlive
+from debug_config import should_log_throttled, PRINT_STATUS_POLLS, SUPPRESS_NO_TRADES_WARNING, DEBUG, SUPPRESS_WERKZEUG, debug_print, production_print
 
 class UIWatchdog:
     """
@@ -236,11 +238,11 @@ api = APIFactory.create_api(cfg) # uses TRADING_PLATFORM=tradovate_ui
 bot = TradingBot(config=cfg)
 
 # ADD THESE LINES: print("=" * 80) 
-print("🔍 DEBUG: Bot created") 
-print(f"🔍 bot.data_manager = {bot.data_manager}") 
-print(f"🔍 bot.data_manager.live = {bot.data_manager.live}") 
-print(f"🔍 type(bot.data_manager.live) = {type(bot.data_manager.live)}") 
-print("=" * 80)
+debug_print("🔍 DEBUG: Bot created") 
+debug_print(f"🔍 bot.data_manager = {bot.data_manager}") 
+debug_print(f"🔍 bot.data_manager.live = {bot.data_manager.live}") 
+debug_print(f"🔍 type(bot.data_manager.live) = {type(bot.data_manager.live)}") 
+debug_print("=" * 80)
 
 # Initialise UI watchdog
 _watchdog = UIWatchdog(bot, check_interval=30) # Check every 30 seconds
@@ -312,6 +314,22 @@ keepalive = None
 # Global bot instance
 bot_thread = None
 PRICE_POLL = True
+
+def backup_database_on_startup(db_path='data/db/market_data.db'):
+    """Backup database when bot starts"""
+    if not os.path.exists(db_path):
+        debug_print(f"⚠️  No database found at {db_path}")
+        return
+    
+    backup_dir = 'data/backups/daily'
+    os.makedirs(backup_dir, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(backup_dir, f"market_data_{timestamp}.db")
+    
+    shutil.copy2(db_path, backup_path)
+    debug_print(f"✅ Database backed up on startup: {backup_path}")
+
 
 def _snap_status(from_trading_thread: bool = False):
     try:
@@ -956,12 +974,12 @@ def get_status():
         """Return current bot status for the dashboard."""
         s = dict(_status)
 
-        try:
-            app.logger.info("STATUS OUT: sym=%s price=%s running=%s",
-                            s.get("symbol"), s.get("current_price"), s.get("is_running"))
-        except Exception as e:
-            app.logger.debug(f"Expected error in [web_app.get_status]: {e}")
-            # pass
+        if PRINT_STATUS_POLLS and should_log_throttled('status_poll', 30):
+            try:
+                app.logger.info("STATUS OUT: sym=%s price=%s running=%s",
+                                s.get("symbol"), s.get("current_price"), s.get("is_running"))
+            except Exception as e:
+                app.logger.debug(f"Expected error in [web_app.get_status]: {e}")
 
         # return jsonify(dict(_status))
         return jsonify({"success": True, "status": s})
@@ -1082,7 +1100,7 @@ def get_trades():
                 # app.logger.info("RM id (flask thread) = %s len=%d",
                 id(getattr(bot, "risk_manager", None)),
                 len(getattr(getattr(bot, "risk_manager", None), "trade_history", []))
-                if not trades:
+                if not trades and not SUPPRESS_NO_TRADES_WARNING:
                     app.logger.warning("No trades found when expected")
                 # if trades:
                     # app.logger.info("TRADES API SAMPLE: %s", str(trades[-1])[:300])
@@ -1368,20 +1386,28 @@ def change_symbol():
 
 
 def _log_routes():
-    print("\nRegistered routes:")
+    debug_print("\nRegistered routes:")
     for r in app.url_map.iter_rules():
-        print(f" {r.rule:30s} -> {','.join(sorted(r.methods))}")
-    print()
+        debug_print(f" {r.rule:30s} -> {','.join(sorted(r.methods))}")
+        pass
+    debug_print()
 
 
 import atexit
 atexit.register(lambda: _persist_state())
 
 if __name__ == '__main__':
+    # Backup database before starting
+    backup_database_on_startup()
+
     _log_routes()
-    print("🌐 Starting Futures Trading Bot Web Dashboard...")
-    print("📊 Dashboard will be available at: http://localhost:5050")
-    print("🔧 Use Ctrl+C to stop the web server")
+    debug_print("🌐 Starting Futures Trading Bot Web Dashboard...")
+    debug_print("📊 Dashboard will be available at: http://localhost:5050")
+    debug_print("🔧 Use Ctrl+C to stop the web server")
+
+    # Suppress Flask/Werkzeug request logs in production
+    if SUPPRESS_WERKZEUG:
+        logging.getLogger('werkzeug').setLevel(logging.ERROR)
     
-    app.run(host='0.0.0.0', port=5050, debug=True)
+    app.run(host='0.0.0.0', port=5050, debug=DEBUG)
 

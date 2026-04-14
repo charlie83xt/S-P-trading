@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional
 import time
 import logging
 from collections import deque
+from debug_config import PRINT_STRATEGY_STATE, should_log_throttled
 
 class TestStrategy:
     """
@@ -53,15 +54,16 @@ class TestStrategy:
             dn_abs = ap - self.abs_threshold
             up_pct = ap * (1.0 + self.pct_threshold)
             dn_pct = ap * (1.0 - self.pct_threshold)
-            self.log.debug(
-                "tick p=%.4f last=%.4f up_abs=%.4f dn_abs=%.4f up_pct=%.4f dn_pct=%.4f",
-                float(price),
-                float(lp) if lp is not None else float("nan"),
-                float(up_abs) if up_abs is not None else float("nan"),
-                float(dn_abs) if dn_abs is not None else float("nan"),
-                float(up_pct) if up_pct is not None else float("nan"),
-                float(dn_pct) if dn_pct is not None else float("nan"),
-            )
+            if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                self.log.debug(
+                    "tick p=%.4f last=%.4f up_abs=%.4f dn_abs=%.4f up_pct=%.4f dn_pct=%.4f",
+                    float(price),
+                    float(lp) if lp is not None else float("nan"),
+                    float(up_abs) if up_abs is not None else float("nan"),
+                    float(dn_abs) if dn_abs is not None else float("nan"),
+                    float(up_pct) if up_pct is not None else float("nan"),
+                    float(dn_pct) if dn_pct is not None else float("nan"),
+                )
             self._last_debug_ts = ts
 
         self.recent_prices.append(float(price))

@@ -8,25 +8,33 @@ import sys
 import webbrowser
 import time
 from threading import Timer
+import logging
+from debug_config import debug_print, production_print, SUPPRESS_WERKZEUG, DEBUG
+
+if SUPPRESS_WERKZEUG:
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
+    logging.getLogger('flask.app').setLevel(logging.ERROR)
 
 
 port = int(os.getenv("PORT", "5050"))
 def open_browser():
     """Open the web browser to the dashboard URL."""
     url = f"http://localhost:{port}"
-    print(f"🌐 Opening web browser to: {url}")
+    production_print(f"🌐 Opening web browser to: {url}")
     webbrowser.open(url)
 
 def main():
-    print("🚀 Launching Futures Trading Bot Web Dashboard...")
-    print("=" * 60)
+    production_print("🚀 Launching Futures Trading Bot Web Dashboard...")
+
+    if DEBUG:
+        production_print("=" * 60)
     
     # Change to the script directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
     
-    print(f"📁 Working directory: {script_dir}")
-    print("🔧 Starting Flask web server...")
+    debug_print(f"📁 Working directory: {script_dir}")
+    production_print("🔧 Starting Flask web server...")
     
     # Schedule browser opening after 3 seconds
     Timer(3.0, open_browser).start()
@@ -34,10 +42,11 @@ def main():
     # Import and run the Flask app
     try:
         from web_app import app
-        print("✅ Flask app loaded successfully")
-        print("🌐 Dashboard will be available at: http://localhost:5050")
-        print("🔧 Use Ctrl+C to stop the web server")
-        print("=" * 60)
+        debug_print("✅ Flask app loaded successfully")
+        debug_print("🌐 Dashboard will be available at: http://localhost:5050")
+        debug_print("🔧 Use Ctrl+C to stop the web server")
+        if DEBUG:
+            debug_print("=" * 60)
         
         # Run the Flask app
         app.run(host='0.0.0.0', port=port, debug=False)

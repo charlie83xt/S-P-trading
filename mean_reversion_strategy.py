@@ -3,6 +3,7 @@ from datetime import datetime, time
 from typing import Optional, Dict, Any, List
 from zoneinfo import ZoneInfo
 from dataclasses import field
+from debug_config import PRINT_STRATEGY_STATE, should_log_throttled
 
 
 class MeanReversionStrategy:
@@ -260,10 +261,11 @@ class MeanReversionStrategy:
                 self.awaiting_sell_reentry = False
                 self.bars_since_last_trade = 0
 
-                self.logger.info(
-                    "BUY %s | price=%.2f lower=%.2f sma=%.2f z=%.2f",
-                    symbol, price, lower_band, stats["sma"], stats["zscore"]
-                )
+                if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                    self.logger.info(
+                        "BUY %s | price=%.2f lower=%.2f sma=%.2f z=%.2f",
+                        symbol, price, lower_band, stats["sma"], stats["zscore"]
+                    )
                 return self._build_signal(
                     "BUY",
                     symbol,
@@ -279,10 +281,11 @@ class MeanReversionStrategy:
                 self.awaiting_sell_reentry = False
                 self.bars_since_last_trade = 0
 
-                self.logger.info(
-                    "SELL %s | price=%.2f upper=%.2f sma=%.2f z=%.2f",
-                    symbol, price, upper_band, stats["sma"], stats["zscore"]
-                )
+                if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                    self.logger.info(
+                        "SELL %s | price=%.2f upper=%.2f sma=%.2f z=%.2f",
+                        symbol, price, upper_band, stats["sma"], stats["zscore"]
+                    )
                 return self._build_signal(
                     "SELL",
                     symbol,
@@ -311,16 +314,17 @@ class MeanReversionStrategy:
             self.awaiting_sell_reentry = False
             self.bars_since_last_trade = 0
 
-            self.logger.info(
-                "CONFIRMED BUY %s | price=%.2f lower=%.2f sma=%.2f z=%.2f trades=%d/%d",
-                symbol,
-                price,
-                lower_band,
-                stats["sma"],
-                stats["zscore"],
-                self.trades_today,
-                self.max_trades_per_day,
-            )
+            if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                self.logger.info(
+                    "CONFIRMED BUY %s | price=%.2f lower=%.2f sma=%.2f z=%.2f trades=%d/%d",
+                    symbol,
+                    price,
+                    lower_band,
+                    stats["sma"],
+                    stats["zscore"],
+                    self.trades_today,
+                    self.max_trades_per_day,
+                )
 
             return self._build_signal(
                 "BUY",
@@ -345,16 +349,17 @@ class MeanReversionStrategy:
             self.awaiting_sell_reentry = False
             self.bars_since_last_trade = 0
 
-            self.logger.info(
-                "CONFIRMED SELL %s | price=%.2f upper=%.2f sma=%.2f z=%.2f trades=%d/%d",
-                symbol,
-                price,
-                upper_band,
-                stats["sma"],
-                stats["zscore"],
-                self.trades_today,
-                self.max_trades_per_day,
-            )
+            if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                self.logger.info(
+                    "CONFIRMED SELL %s | price=%.2f upper=%.2f sma=%.2f z=%.2f trades=%d/%d",
+                    symbol,
+                    price,
+                    upper_band,
+                    stats["sma"],
+                    stats["zscore"],
+                    self.trades_today,
+                    self.max_trades_per_day,
+                )
 
             return self._build_signal(
                 "SELL",

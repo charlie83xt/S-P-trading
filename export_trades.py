@@ -10,6 +10,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import os
 import sys
+from debug_config import debug_print, production_print
 
 # Configuration
 DATABASE_PATH = 'data/db/market_data.db'  # Adjust to your actual database location

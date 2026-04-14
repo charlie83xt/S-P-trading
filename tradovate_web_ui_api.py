@@ -35,6 +35,7 @@ from api_interface import TradingAPIInterface
 
 from playwright.async_api import async_playwright, Error as PWError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+from debug_config import debug_print, production_print
 
 logger = logging.getLogger(__name__)
 logger.info("Loaded tradovate_web_ui_api from: %s", __file__)
@@ -1211,7 +1212,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         # If manual_login: let the user log_in, then wait for a logged-in marker
         if self.manual_login:
             # Give you time to type; we just wait.
-            print("Please log in manually in the opened browser window...")
+            production_print("Please log in manually in the opened browser window...")
 
             # 4) Try for up to ~120s; if we find a page/frame a with any marker, switch self._page to it
             # marker = None
@@ -2774,7 +2775,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
 
     def _connect_fail(self, label: str, e: Exception):
-        print(f"connect() failed at {label}: {e}")
+        production_print(f"connect() failed at {label}: {e}")
         try:
             self._snapshot(f"connect_fail_{label}")
         except Exception as e:

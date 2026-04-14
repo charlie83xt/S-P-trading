@@ -19,6 +19,7 @@ from trade_analytics import TradeAnalytics
 from strategy_manager import StrategyManager
 from intelligent_entry_filter import IntelligentEntryFilter
 from symbol_manager import SymbolManager
+from debug_config import PRINT_HEARTBEATS, should_log_throttled
 
 # ================= tiny helpers =====================
 import uuid
@@ -419,7 +420,8 @@ class TradingBot:
                     # adding new here
                     rm = getattr(self, "risk_manager", None)
                     rh_len = len(getattr(rm, "trade_history", []))
-                    self.logger.info("HB: price=%s strategy=%s running=%s | RM id=%s trade_history_len=%d", price, type(self.strategy).__name__, self.is_running, id(rm), rh_len)
+                    if PRINT_HEARTBEATS or should_log_throttled('heartbeat', 60):
+                        self.logger.info("HB: price=%s strategy=%s running=%s | RM id=%s trade_history_len=%d", price, type(self.strategy).__name__, self.is_running, id(rm), rh_len)
                     last_log = now
                 time.sleep(1)
             except Exception as e:
@@ -950,10 +952,11 @@ class TradingBot:
                 )
 
                 # 4) Only now do we record the fill
-                self.logger.info(
-                    "LIVE %s %s x%s @ %s | sig=%s att=%s",
-                    side, sym, qty, px_exec, signal_id, attempt_id
-                )
+                if PRINT_HEARTBEATS:
+                    self.logger.info(
+                        "LIVE %s %s x%s @ %s | sig=%s att=%s",
+                        side, sym, qty, px_exec, signal_id, attempt_id
+                    )
                 # self.logger.info("LIVE %s %s x%s @ %s", side, sym, qty, px)
                 # Only after UI worked, record live fill
                 # self._record_fill(sym, side, qty, px, dry_run=(acct_mode != "false"))
@@ -1382,13 +1385,15 @@ class TradingBot:
 
         qty = rm.get_position_qty(symbol)
         if qty == 0:
-            self.logger.debug("EXIT-CHECK: qty=0 -> skip (sym=%s px=%s)", symbol, current_price)
+            if PRINT_HEARTBEATS or should_log_throttled('exit_check', 60):
+                self.logger.debug("EXIT-CHECK: qty=0 -> skip (sym=%s px=%s)", symbol, current_price)
             return
 
         # prevent exit spam (2s)
         now = time.time()
         if (now - self._last_exit_ts.get(symbol, 0.0)) < 2.0:
-            self.logger.info("EXIT-CHECK: rate-limited -> skip (sym=%s)", symbol)
+            if PRINT_HEARTBEATS or should_log_throttled('exit_check', 60):
+                self.logger.info("EXIT-CHECK: rate-limited -> skip (sym=%s)", symbol)
             return
 
         # Option B: Clean - Use helper from RM)
@@ -1398,14 +1403,16 @@ class TradingBot:
         # logging the position state we are using
         sym = (symbol or "").upper()
         pos = rm.positions.get(sym) or {}
-        self.logger.info(
-            "EXIT-CHECK: sym=%s qty=%s px=%s avg=%s stop_pts=%s take_pts=%s", 
-            symbol, qty, current_price, pos.get("avg_price"), stop_pts, take_pts
-        )
+        if PRINT_HEARTBEATS or should_log_throttled('exit_check', 60):
+            self.logger.info(
+                "EXIT-CHECK: sym=%s qty=%s px=%s avg=%s stop_pts=%s take_pts=%s", 
+                symbol, qty, current_price, pos.get("avg_price"), stop_pts, take_pts
+            )
         
         reason = rm.check_exit_points(symbol, current_price, stop_pts, take_pts)
         if not reason:
-            self.logger.info("EXIT-CHECK: no trigger (sym=%s)", symbol)
+            if PRINT_HEARTBEATS:
+                self.logger.info("EXIT-CHECK: no trigger (sym=%s)", symbol)
             return
 
         self._last_exit_ts[symbol] = now

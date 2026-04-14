@@ -27,6 +27,7 @@ except ImportError:
 
 import sys
 import traceback
+from debug_config import debug_print, production_print
 
 _TRACE = False
 
