@@ -121,67 +121,19 @@ else:
 # HELPER FUNCTIONS
 # ============================================================================
 
-
-# Counter for throttling logs
-_log_counters = {}
-
-
-def should_log_throttled(key: str, interval: int) -> bool:
-    """
-    Throttle repetitive logs.
-    
-    Args:
-        key: Unique identifier for this log type
-        interval: Log once every N calls
-    
-    Returns:
-        True if should log, False if should skip
-    """
-    if DEBUG:
-        return True  # Always log in debug mode
-    
-    _log_counters[key] = _log_counters.get(key, 0) + 1
-    
-    if _log_counters[key] >= interval:
-        _log_counters[key] = 0
-        return True
-    
-    return False
-
-
-
-
-def debug_print(*args, **kwargs):
-    """
-    Print only in DEBUG mode.
-    
-    Usage:
-        debug_print("Debug message", var1, var2)
-    """
-    if DEBUG:
-        print(*args, **kwargs)
-
-
-
-
-def production_print(*args, **kwargs):
-    """
-    Print in both DEBUG and PRODUCTION modes.
-    Use for important user-facing messages.
-    
-    Usage:
-        production_print("✅ Bot started successfully")
-    """
-    print(*args, **kwargs)
-
-
 # Detect if emojis are supported
 _platform = platform.system()
-_encoding = sys.stdout.encoding if sys.stdout else 'utf-8'
 
-
-# Windows cmd.exe doesn't support emojis well
-USE_EMOJIS = _platform != 'Windows' or _encoding == 'utf-8'
+# IMPORTANT: Windows console (cmd.exe/PowerShell) cannot handle emojis properly
+# Even if sys.stdout.encoding reports 'utf-8', the console still uses cp1252
+# and will throw UnicodeEncodeError when trying to print emojis
+ 
+if _platform == 'Windows':
+   # Windows: NEVER use emojis (console can't handle them)
+   USE_EMOJIS = False
+else:
+   # Mac/Linux: Emojis work fine
+   USE_EMOJIS = True
 
 
 def emoji(char: str, fallback: str = "") -> str:
@@ -225,17 +177,72 @@ FIRE = emoji("🔥", "[Fire]")
 FOLDER = emoji("📁", "[Folder]")
 TREND = emoji("📈", "[Trend]")
 DISK = emoji("💾", "[Disk]")
-LOADING = emoji("🔄", "[Loading]")
-STICKS = emoji("⏸️", "[Sticks]")
-TERRA = emoji("🌐", "[Terra]")
+LOADING = emoji("🔄", "[Loading...]")
+STICKS = emoji("⏸️", "[||]")
+TERRA = emoji("🌐", "[@]")
 BULB = emoji("💡", "[Bulb]")
 BOT = emoji("🤖", "[Bot]")
-UP_R = emoji("🔺", "[Up-r]")
-DO_R = emoji("🔻", "[Do-r]")
-SANDTIME = emoji("⏳", "[Sand-t]")
-TARGET = emoji("🎯", "[Target]")
-SNOW = emoji("❄️", "[Snow-Flake]")
-BLOCKED = emoji("⛔️", "[Blocked]")
+UP_R = emoji("🔺", "[^]")
+DO_R = emoji("🔻", "[v]")
+SANDTIME = emoji("⏳", "[9+3]")
+TARGET = emoji("🎯", "[=>]")
+SNOW = emoji("❄️", "[*]")
+BLOCKED = emoji("⛔️", "[(-)]")
+MONEY = emoji("💰", "[$]")
+
+
+# Counter for throttling logs
+_log_counters = {}
+
+
+def should_log_throttled(key: str, interval: int) -> bool:
+    """
+    Throttle repetitive logs.
+    
+    Args:
+        key: Unique identifier for this log type
+        interval: Log once every N calls
+    
+    Returns:
+        True if should log, False if should skip
+    """
+    if DEBUG:
+        return True  # Always log in debug mode
+    
+    _log_counters[key] = _log_counters.get(key, 0) + 1
+    
+    if _log_counters[key] >= interval:
+        _log_counters[key] = 0
+        return True
+    
+    return False
+
+
+def debug_print(*args, **kwargs):
+    """
+    Print only in DEBUG mode.
+    
+    Usage:
+        debug_print("Debug message", var1, var2)
+    """
+    if DEBUG:
+        print(*args, **kwargs)
+
+
+def production_print(*args, **kwargs):
+    """
+    Print in both DEBUG and PRODUCTION modes.
+    Use for important user-facing messages.
+    
+    Usage:
+        production_print("✅ Bot started successfully")
+    """
+    print(*args, **kwargs)
+
+
+# _encoding = sys.stdout.encoding if sys.stdout else 'utf-8'
+# Windows cmd.exe doesn't support emojis well
+# USE_EMOJIS = _platform != 'Windows' or _encoding == 'utf-8'
 
 
 # ============================================================================
@@ -244,28 +251,74 @@ BLOCKED = emoji("⛔️", "[Blocked]")
 
 
 __all__ = [
-    'DEBUG',
-    'LOG_LEVEL',
-    'LOG_TO_CONSOLE',
-    'LOG_TO_FILE',
-    'VERBOSE_LOGGING',
-    'PRINT_SIGNALS',
-    'PRINT_POSITIONS',
-    'PRINT_HEARTBEATS',
-    'PRINT_STATUS_POLLS',
-    'PRINT_STRATEGY_STATE',
-    'PRINT_API_CALLS',
-    'PRINT_RISK_UPDATES',
-    'SUPPRESS_WERKZEUG',
-    'SUPPRESS_NO_TRADES_WARNING',
-    'SUPPRESS_STRATEGY_HEARTBEAT',
-    'HEARTBEAT_LOG_INTERVAL',
-    'STATUS_LOG_INTERVAL',
-    'STRATEGY_LOG_INTERVAL',
-    'should_log_throttled',
-    'debug_print',
-    'production_print',
+   'DEBUG',
+   'LOG_LEVEL',
+   'LOG_TO_CONSOLE',
+   'LOG_TO_FILE',
+   'VERBOSE_LOGGING',
+   'PRINT_SIGNALS',
+   'PRINT_POSITIONS',
+   'PRINT_HEARTBEATS',
+   'PRINT_STATUS_POLLS',
+   'PRINT_STRATEGY_STATE',
+   'PRINT_API_CALLS',
+   'PRINT_RISK_UPDATES',
+   'SUPPRESS_WERKZEUG',
+   'SUPPRESS_NO_TRADES_WARNING',
+   'SUPPRESS_STRATEGY_HEARTBEAT',
+   'HEARTBEAT_LOG_INTERVAL',
+   'STATUS_LOG_INTERVAL',
+   'STRATEGY_LOG_INTERVAL',
+   'USE_EMOJIS',
+   'emoji',
+   'CHECK',
+   'CROSS',
+   'ROCKET',
+   'CHART',
+   'WRENCH',
+   'WARNING',
+   'INFO',
+   'NOTE',
+   'TRASH',
+   'BOX',
+   'CALENDAR',
+   'APPLE',
+   'GREEN',
+   'RED',
+   'YELLOW',
+   'BLUE',
+   'MAGNI',
+   'FOLDER',
+   'TREND',
+   'DISK',
+   'LOADING',
+   'STICKS',
+   'TERRA',
+   'BULB',
+   'BOT',
+   'UP_R',
+   'DO_R',
+   'SANDTIME',
+   'TARGET',
+   'SNOW',
+   'BLOCKED',
+   'MONEY',
+   'FIRE',
+   'should_log_throttled',
+   'debug_print',
+   'production_print',
 ]
 
+
+# ============================================================================
+# STARTUP DEBUG INFO
+# ============================================================================
+ 
+if DEBUG:
+   print(f"Debug Config Loaded:")
+   print(f"  Platform: {_platform}")
+   print(f"  USE_EMOJIS: {USE_EMOJIS}")
+   print(f"  CHECK: '{CHECK}'")
+   print(f"  sys.stdout.encoding: {sys.stdout.encoding}")
 
 
