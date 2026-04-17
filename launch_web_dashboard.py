@@ -54,12 +54,12 @@ def ensure_chrome_running():
     """
     try:
         # Try using chrome_helper module
-        from chrome_helper import ensure_chrome_running as chrome_ensure
-        return chrome_ensure(port=9222)
+        import chrome_helper 
+        return chrome_helper.ensure_chrome_running(port=9222)
     
-    except ImportError:
-        # Fallback: chrome_helper not available
-        debug_print(f"{WARNING}  chrome_helper.py not found, using fallback launcher")
+    except Exception as e:
+        # Fallback: manual check
+        debug_print(f"{WARNING}  chrome_helper failed: {e}")
         
         try:
             import requests
@@ -72,95 +72,95 @@ def ensure_chrome_running():
             pass
         
         # Chrome not running - try to launch it
-        production_print(f"{TERRA} Launching Chrome with remote debugging...")
+        production_print(f"{CROSS} Chrome not running and auto-launch failed")
         
-        import subprocess
-        import platform
+        # import subprocess
+        # import platform
         
-        system = platform.system()
+        # system = platform.system()
         
-        if system == "Darwin":  # macOS
-            chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-            user_data_dir = os.path.expanduser("~/.tv_chrome")
+        # if system == "Darwin":  # macOS
+        #     chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        #     user_data_dir = os.path.expanduser("~/.tv_chrome")
         
-        elif system == "Windows":
-            # Try common Windows locations
-            chrome_paths = [
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-            ]
-            chrome_path = None
-            for path in chrome_paths:
-                if os.path.exists(path):
-                    chrome_path = path
-                    break
+        # elif system == "Windows":
+        #     # Try common Windows locations
+        #     chrome_paths = [
+        #         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        #         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        #     ]
+        #     chrome_path = None
+        #     for path in chrome_paths:
+        #         if os.path.exists(path):
+        #             chrome_path = path
+        #             break
             
-            if not chrome_path:
-                print(f"{CROSS} Chrome not found on Windows")
-                print("   Expected locations:")
-                for p in chrome_paths:
-                    print(f"     - {p}")
-                return False
+        #     if not chrome_path:
+        #         print(f"{CROSS} Chrome not found on Windows")
+        #         print("   Expected locations:")
+        #         for p in chrome_paths:
+        #             print(f"     - {p}")
+        #         return False
             
-            user_data_dir = os.path.expanduser("~/.tv_chrome")
+        #     user_data_dir = os.path.expanduser("~/.tv_chrome")
         
-        else:  # Linux
-            chrome_path = "/usr/bin/google-chrome"
-            user_data_dir = os.path.expanduser("~/.tv_chrome")
+        # else:  # Linux
+        #     chrome_path = "/usr/bin/google-chrome"
+        #     user_data_dir = os.path.expanduser("~/.tv_chrome")
         
-        # Check if Chrome executable exists
-        if not os.path.exists(chrome_path):
-            print(f"{CROSS} Chrome not found at: {chrome_path}")
-            print("   Please install Google Chrome or update the path.")
-            return False
+        # # Check if Chrome executable exists
+        # if not os.path.exists(chrome_path):
+        #     print(f"{CROSS} Chrome not found at: {chrome_path}")
+        #     print("   Please install Google Chrome or update the path.")
+        #     return False
         
-        # Launch Chrome
-        try:
-            args = [
-                chrome_path,
-                "--remote-debugging-port=9222",
-                f"--user-data-dir={user_data_dir}",
-                "--no-first-run",
-                "--no-default-browser-check",
-            ]
+        # # Launch Chrome
+        # try:
+        #     args = [
+        #         chrome_path,
+        #         "--remote-debugging-port=9222",
+        #         f"--user-data-dir={user_data_dir}",
+        #         "--no-first-run",
+        #         "--no-default-browser-check",
+        #     ]
             
-            if system == "Windows":
-                # Windows needs special handling
-                subprocess.Popen(
-                    args,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-                )
-            else:
-                # Unix-like systems
-                subprocess.Popen(
-                    args,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
+        #     if system == "Windows":
+        #         # Windows needs special handling
+        #         subprocess.Popen(
+        #             args,
+        #             stdout=subprocess.DEVNULL,
+        #             stderr=subprocess.DEVNULL,
+        #             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+        #         )
+        #     else:
+        #         # Unix-like systems
+        #         subprocess.Popen(
+        #             args,
+        #             stdout=subprocess.DEVNULL,
+        #             stderr=subprocess.DEVNULL
+        #         )
             
-            production_print(f"{CHECK} Chrome launched")
+        #     production_print(f"{CHECK} Chrome launched")
             
-            # Wait for Chrome to be ready
-            time.sleep(3)
+        #     # Wait for Chrome to be ready
+        #     time.sleep(3)
             
-            # Verify it's running
-            try:
-                import requests
-                response = requests.get("http://localhost:9222/json/version", timeout=3)
-                if response.status_code == 200:
-                    production_print("✓ Chrome ready on port 9222")
-                    return True
-            except:
-                pass
+        #     # Verify it's running
+        #     try:
+        #         import requests
+        #         response = requests.get("http://localhost:9222/json/version", timeout=3)
+        #         if response.status_code == 200:
+        #             production_print("✓ Chrome ready on port 9222")
+        #             return True
+        #     except:
+        #         pass
             
-            debug_print("⚠️  Chrome launched but not responding yet (may need more time)")
-            return True
+        #     debug_print("⚠️  Chrome launched but not responding yet (may need more time)")
+        #     return True
         
-        except Exception as e:
-            print(f"{CROSS} Failed to launch Chrome: {e}")
-            return False
+        # except Exception as e:
+        #     print(f"{CROSS} Failed to launch Chrome: {e}")
+        return False
 
 
 # ============================================================================

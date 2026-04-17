@@ -29,9 +29,15 @@ def get_chrome_executable_path() -> Optional[str]:
             "/Applications/Chromium.app/Contents/MacOS/Chromium",
         ]
     elif system == "Windows":
+        # Windows - check multiple locations including user-specific
         paths = [
+            # User-specific install (most common)
+            os.path.expanduser(r"~\AppData\Local\Google\Chrome\Application\chrome.exe"),
+            # System-wide installs
             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
             r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            # Using environment variables
+            os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
             os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
             os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
         ]
@@ -44,7 +50,7 @@ def get_chrome_executable_path() -> Optional[str]:
         ]
     
     for path in paths:
-        expanded = os.path.expandvars(path)
+        expanded = os.path.expandvars(os.path.expanduser(path))
         if os.path.isfile(expanded):
             logger.info(f"{CHECK} Found Chrome at: {expanded}")
             return expanded
@@ -121,11 +127,21 @@ def launch_chrome(
     # Suppress output
     try:
         logger.info(f"{ROCKET} Launching Chrome with args: {args[:3]}...")
-        process = subprocess.Popen(
-            args,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            preexec_fn=None if platform.system() == "Windows" else os.setsid
+        if platform.system() == "Windows":
+            # Windows needs CREATE_NEW_PROCESS_GROUP
+            process = subprocess.Popen(
+                args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+        else:
+            # Unix-ike systems
+            process = subprocess.Popen(
+                args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                preexec_fn=os.setsid
         )
         
         logger.info(f"{CHECK} Chrome started (PID: {process.pid})")
@@ -182,7 +198,7 @@ def kill_chrome_on_port(port: int = 9222):
     Args:
         port: Debugging port
     """
-    import sys
+    # import sys
     system = platform.system()
     
     try:
@@ -190,15 +206,16 @@ def kill_chrome_on_port(port: int = 9222):
             # Windows: use taskkill
             subprocess.run(
                 ["taskkill", "/F", "/IM", "chrome.exe"],
-                capture_output=True
+                capture_output=True,
+                timeout=5
             )
         else:
             # macOS/Linux: use lsof and kill
-            import subprocess
             result = subprocess.run(
-                ["lsof", "-i", f":{port}"],
+                ["lsof", "-ti", f":{port}"],
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=5
             )
             lines = result.stdout.strip().split('\n')[1:]  # Skip header
             for line in lines:
@@ -210,3 +227,36 @@ def kill_chrome_on_port(port: int = 9222):
         logger.info(f"{CHECK} Chrome process terminated")
     except Exception as e:
         logger.debug(f"Could not terminate Chrome: {e}")
+
+
+
+def ensure_chrome_running(port: int = 9222) -> bool:
+    """
+    Ensure Chrome is running with remote debugging.
+    Launch it if not already running.
+    
+    Args:
+        port: Remote debugging port (default: 9222)
+        
+    Returns:
+        True if Chrome is running or was launched successfully
+    """
+    # Check if already running
+    if is_chrome_running(port):
+        logger.info(f"{CHECK} Chrome already running on port {port}")
+        return True
+    
+    # Not running - try to launch
+    logger.info(f"{ROCKET} Launching Chrome...")
+    process = launch_chrome(port=port)
+    
+    if not process:
+        logger.error(f"{CROSS} Failed to launch Chrome")
+        return False
+    
+    # Wait for Chrome to be ready
+    if wait_for_chrome(port, timeout=10):
+        return True
+    
+    logger.error(f"{CROSS} Chrome launched but not responding")
+    return False
