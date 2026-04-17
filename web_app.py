@@ -1338,7 +1338,7 @@ def change_symbol():
         # Change the symbol on bot
         bot.symbol = new_symbol
         
-        app.logger.info(f"{CHART} Symbol changed: {old_symbol} → {new_symbol}")
+        app.logger.info(f"{CHART} Symbol changed: {old_symbol} -> {new_symbol}")
         
         # Get multiplier for response
         multiplier = cfg.CONTRACT_MULTIPLIERS.get(new_symbol, 1.0)

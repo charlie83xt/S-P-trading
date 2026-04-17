@@ -30,7 +30,7 @@ class Config:
     PREV_DAY_TOLERANCE_PCT = float(os.getenv("PREV_DAY_TOLERANCE_PCT", "0.002")) 
     PREV_DAY_MAX_TRADES = int(os.getenv("PREV_DAY_MAX_TRADES", "4"))
 
-    # Parse trade window times (format: "9,45" → (9, 45))
+    # Parse trade window times (format: "9,45" -> (9, 45))
     _start_str = os.getenv("ORB_RETEST_START", "9,45")
     _end_str = os.getenv("ORB_RETEST_END", "10,30")
     ORB_RETEST_TRADE_START = tuple(map(int, _start_str.split(",")))

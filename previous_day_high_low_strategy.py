@@ -55,8 +55,8 @@ class PreviousDayHighLowStrategy:
     1. Calculate previous day's high and low at session start
     2. Wait for price to touch previous day's high or low
     3. Look for reversal candle pattern:
-       - Shooting Star at previous high → SHORT signal
-       - Hanging Man at previous low → LONG signal
+       - Shooting Star at previous high -> SHORT signal
+       - Hanging Man at previous low -> LONG signal
     4. Enter trade targeting opposite level
     
     Pattern Definitions:

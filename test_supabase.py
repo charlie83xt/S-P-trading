@@ -46,8 +46,8 @@ def test_query_yesterday_bars_full_session(dm):
     bars = dm.query_yesterday_bars('ES')  # 9:30 AM - 4:00 PM ET
    
     assert isinstance(bars, list)
-    # Weekend or Supabase unavailable → empty list OK
-    # Weekday with data → ~390 bars expected
+    # Weekend or Supabase unavailable -> empty list OK
+    # Weekday with data -> ~390 bars expected
 
 
 def test_query_yesterday_bars_custom_range(dm):

@@ -187,7 +187,7 @@ class OpeningRangeStrategy:
                     )
                 return None
 
-        thr_pct = self.breakout_threshold / 100.0   # convert percent → fraction
+        thr_pct = self.breakout_threshold / 100.0   # convert percent -> fraction
 
         buy_trigger_pct = or_high * (1.0 + thr_pct)
         sell_trigger_pct = or_low * (1.0 - thr_pct)
