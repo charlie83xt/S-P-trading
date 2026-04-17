@@ -610,7 +610,7 @@ class ORBRetestStrategy:
                     self.logger.info(f"   5m Close: {close:.2f}")
                     self.logger.info(f"   Threshold: {threshold_up:.2f}")
                     self.logger.info(f"   Broke above by: {close - threshold_up:.2f} points")
-                    self.logger.info(f"   Phase: WAIT_BREAK → WAIT_RETEST")
+                    self.logger.info(f"   Phase: WAIT_BREAK -> WAIT_RETEST")
                     self.logger.info(f"")
                 
                 self.state.breakout_side = "UP"
@@ -627,7 +627,7 @@ class ORBRetestStrategy:
                     self.logger.info(f"   5m Close: {close:.2f}")
                     self.logger.info(f"   Threshold: {threshold_down:.2f}")
                     self.logger.info(f"   Broke below by: {threshold_down - close:.2f} points")
-                    self.logger.info(f"   Phase: WAIT_BREAK → WAIT_RETEST")
+                    self.logger.info(f"   Phase: WAIT_BREAK -> WAIT_RETEST")
                     self.logger.info(f"")
                 
                 self.state.breakout_side = "DOWN"

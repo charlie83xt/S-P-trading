@@ -476,30 +476,6 @@ class DataManager:
         """Check if connected to the trading platform."""
         return self.api.is_connected()
 
-    # def get_current_price(self, symbol: str) -> Optional[float]:
-    #     """Get current price and feed to LiveBarStore"""
-    #     try:
-    #         price = self.api.get_current_price(symbol)
-            
-    #         if price is None:
-    #             return None
-            
-    #         # Feed to LiveBarStore IMMEDIATELY
-    #         now_ts = time.time()
-    #         self.live.ingest_tick(symbol, now_ts, float(price))
-
-    #         # DEBUG: Log every 10 calls 
-    #         self._price_call_count = getattr(self, '_price_call_count', 0) + 1 
-    #         if self._price_call_count % 10 == 0: 
-    #             bars = self.live.get_last_n(symbol, n=5) 
-    #             self.logger.info(f"📊 PRICE CALLS: {self._price_call_count} | BARS: {len(bars)}")
-
-            
-    #         return price
-            
-    #     except Exception as e:
-    #         self.logger.error(f"get_current_price failed: {e}")
-    #         return None
 
     
     def get_current_price(self, symbol: str) -> Optional[float]:
@@ -903,6 +879,65 @@ class DataManager:
             # Unsupported timeframe
             self.logger.warning(f"Unsupported timeframe: {timeframe}")
             return []
+
+    def get_recent_bars(self, symbol: str, timeframe: str = '1m', count: int = 20) -> pd.DataFrame:
+        """
+        Get recent completed price bars for intelligent entry filtering.
+        
+        🎯 PURPOSE: Feed entry filters to avoid market maker traps
+        
+        This method provides clean, completed bars for:
+        - Volume confirmation (avoid low-volume fakeouts)
+        - Momentum validation (trend strength)
+        - Order flow analysis (buyer/seller pressure)
+        - Trend alignment (with SMA confirmation)
+        
+        CRITICAL: Returns ONLY completed bars (excludes current incomplete bar)
+        to avoid false signals from mid-bar data.
+        
+        Args:
+            symbol: Trading symbol (e.g., 'MES', 'ES')
+            timeframe: Bar timeframe ('1m' or '5m')
+            count: Number of bars to retrieve (default: 20)
+            
+        Returns:
+            DataFrame with columns: ts, open, high, low, close, volume
+            Empty DataFrame if insufficient data
+            
+        Example:
+            >>> bars = data_manager.get_recent_bars('MES', '5m', 20)
+            >>> if not bars.empty:
+            >>>     avg_volume = bars['volume'].mean()
+            >>>     current_volume = bars.iloc[-1]['volume']
+            >>>     is_high_volume = current_volume > avg_volume * 1.5
+        """
+        # Use existing get_last_closed_candles method (already excludes incomplete bar)
+        candles = self.get_last_closed_candles(symbol, timeframe, n=count)
+        
+        if not candles:
+            self.logger.debug(f"No recent bars available for {symbol} {timeframe}")
+            return pd.DataFrame()
+        
+        # Convert to DataFrame for easy analysis
+        df = pd.DataFrame(candles)
+        
+        # Ensure required columns exist
+        required_cols = ['ts', 'open', 'high', 'low', 'close', 'volume']
+        for col in required_cols:
+            if col not in df.columns:
+                if col == 'volume':
+                    df[col] = 0  # Default volume if not available
+                else:
+                    self.logger.warning(f"Missing required column: {col}")
+                    return pd.DataFrame()
+        
+        self.logger.debug(
+            f"Retrieved {len(df)} bars for {symbol} {timeframe} "
+            f"(range: {df.iloc[0]['ts']:.0f} to {df.iloc[-1]['ts']:.0f})"
+        )
+        
+        return df
+
 
     def get_sma(self, symbol: str, length: int, timeframe: str = "5m", 
                 offset: int = 0) -> float:

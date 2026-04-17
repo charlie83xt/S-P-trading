@@ -259,10 +259,10 @@ DOCUMENTATION = """
   [ ] What happens next after setup is clear
 
 ✓ ERROR MESSAGES:
-  [ ] Authorization failed → explain how to fix
-  [ ] Chrome not found → system requirements listed
-  [ ] Port already in use → troubleshooting step provided
-  [ ] Config error → suggest checking .env.example
+  [ ] Authorization failed -> explain how to fix
+  [ ] Chrome not found -> system requirements listed
+  [ ] Port already in use -> troubleshooting step provided
+  [ ] Config error -> suggest checking .env.example
 
 ✓ USER GUIDE (README_SHIPPING.md):
   [ ] How to install on macOS written

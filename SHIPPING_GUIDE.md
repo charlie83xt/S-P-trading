@@ -4,7 +4,7 @@ COMPREHENSIVE SHIPPING & DEPLOYMENT GUIDE
 S-P Trading Application v0.1.0
 ===================================================================
 
-This document guides you from development → packaged app → distributed
+This document guides you from development -> packaged app -> distributed
 to users on macOS and Windows with built-in authorization.
 
 CURRENT STATUS: Feature complete for macOS + Windows
@@ -114,7 +114,7 @@ To switch strategies:
 """
 
 # ===================================================================
-# PART 3: STEP-BY-STEP: DEV → PACKAGED APP
+# PART 3: STEP-BY-STEP: DEV -> PACKAGED APP
 # ===================================================================
 
 """
@@ -219,7 +219,7 @@ Build for your current OS:
 STEP 4: CREATE INSTALLERS
 ──────────────────────────
 
-macOS → DMG Installer:
+macOS -> DMG Installer:
     (1) Build .app (see Step 3)
     (2) Create DMG:
         cd dist/
@@ -230,7 +230,7 @@ macOS → DMG Installer:
     (3) Test: Double-click sp_trading.dmg
     (4) Verify: Can drag app to /Applications
 
-Windows → EXE Installer:
+Windows -> EXE Installer:
     (1) Build .exe (see Step 3)
     (2) Install Inno Setup: https://jrsoftware.org/isdl.php
     (3) Create installer.iss (template in BUILD_AND_DEPLOY.py)
@@ -238,7 +238,7 @@ Windows → EXE Installer:
     (5) Output: sp_trading_setup.exe
     (6) Test: Run installer, verify shortcut works
 
-Linux → AppImage:
+Linux -> AppImage:
     (1) Build executable (see Step 3)
     (2) Install appimagetool
     (3) Create AppDir structure and .desktop file
@@ -301,7 +301,7 @@ MACOS USER:
 4. Drags to Applications folder
 5. Goes to Applications, double-clicks S-P Trading.app
 6. First run prompt: "Are you sure? This is from an unidentified developer"
-   - Click "Open" (or set System Preferences → Security to allow)
+   - Click "Open" (or set System Preferences -> Security to allow)
 7. Setup wizard appears:
    ✏️ Enter email address
    ✏️ Choose trading platform
@@ -309,18 +309,18 @@ MACOS USER:
    ✏️ Opt-in to dry-run mode
    ✏️ Enter trading credentials
 8. App verifies machine registration
-9. Chrome opens → Dashboard loads → Ready to trade!
+9. Chrome opens -> Dashboard loads -> Ready to trade!
 
 WINDOWS USER:
 ─────────────
 1. Downloads sp_trading_setup.exe
 2. Double-clicks installer
-3. Windows SmartScreen: Click "More info" → "Run anyway"
+3. Windows SmartScreen: Click "More info" -> "Run anyway"
 4. Installer wizard: Choose installation directory
 5. Installer completes, app launches
 6. Setup wizard appears: [Same as macOS]
 7. App verifies machine registration
-8. Chrome opens → Dashboard loads → Ready to trade!
+8. Chrome opens -> Dashboard loads -> Ready to trade!
 
 LINUX USER:
 ────────────
@@ -329,7 +329,7 @@ LINUX USER:
 3. Terminal: ./sp_trading.AppImage
 4. Setup wizard appears: [Same as macOS]
 5. App verifies machine registration
-6. Chrome opens → Dashboard loads → Ready to trade!
+6. Chrome opens -> Dashboard loads -> Ready to trade!
 """
 
 # ===================================================================
@@ -409,7 +409,7 @@ Issue: "This app can't be opened" (macOS)
 
 Cause: App not signed, or unrecognized developer
 Fix:
-  - (1) Right-click app → Open → Choose "Open anyway"
+  - (1) Right-click app -> Open -> Choose "Open anyway"
   - (2) Or: xattr -d com.apple.quarantine "S-P Trading.app"
   - (3) Or: Sign the app (see Part 3, Step 5)
 
@@ -471,23 +471,23 @@ Which authorization strategy should you use?
 ├─────────────────────────┤
 │
 ├─> Just me / single machine
-│   → Use MACHINE FINGERPRINT
+│   -> Use MACHINE FINGERPRINT
 │   Command: No change needed (default)
 │   Registration: python launcher.py --setup
 │   Pro: Simple, offline-first
 │   Con: Can't use on other machines
 │
 ├─> Small team (< 10 people)
-│   → Use LICENSE KEYS
-│   Command: Edit authorization.py → STRATEGY = "license"
+│   -> Use LICENSE KEYS
+│   Command: Edit authorization.py -> STRATEGY = "license"
 │   Registration: Share license key with each user
 │   You generate: LicenseKey.generate_license("user@example.com")
 │   Pro: Can distribute easily
 │   Con: Need to manage keys
 │
 └─> Large deployment / SaaS
-    → Use SERVER VALIDATION
-    Command: Edit authorization.py → STRATEGY = "server"
+    -> Use SERVER VALIDATION
+    Command: Edit authorization.py -> STRATEGY = "server"
     Registration: Users login to server
     You need: Backend server at auth.sp-trading.app
     Pro: Centralized control, revokable

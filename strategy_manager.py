@@ -143,7 +143,7 @@ class StrategyManager:
         # Switch strategies if needed
         if strategy_name != self.current_strategy_name:
             self.logger.info(
-                f"{LOADING} STRATEGY SWITCH: {self.current_strategy_name} → {strategy_name} "
+                f"{LOADING} STRATEGY SWITCH: {self.current_strategy_name} -> {strategy_name} "
                 f"(ET time: {current_et.strftime('%H:%M')})"
             )
             self.current_strategy_name = strategy_name

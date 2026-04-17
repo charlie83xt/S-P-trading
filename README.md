@@ -53,7 +53,7 @@ TradingBot
 ├── DataManager (Platform-agnostic data handling)
 ├── OpeningRangeStrategy (Pure strategy logic)
 ├── RiskManager (Platform-independent risk controls)
-└── APIFactory → Creates platform-specific APIs
+└── APIFactory -> Creates platform-specific APIs
     ├── BinanceAPI (Crypto futures)
     ├── TradovateAPI (Traditional futures)
     └── NinjaTraderAPI (Desktop platform)
