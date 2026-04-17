@@ -10,7 +10,7 @@ from datetime import datetime
 
 from trading_bot import TradingBot
 from config import Config
-from debug_config import debug_print, production_print
+from debug_config import debug_print, production_print, MAGNI, CHECK, CROSS, BOT, TREND, CHART, RED, STICKS, ROCKET
 
 
 def signal_handler(signum, frame):
@@ -38,7 +38,7 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     
     debug_print("=" * 60)
-    debug_print("🤖 FUTURES TRADING BOT")
+    debug_print(f"{BOT} FUTURES TRADING BOT")
     debug_print("=" * 60)
     debug_print(f"Platform: {args.platform or config.TRADING_PLATFORM}")
     debug_print(f"Symbol: {args.symbol}")
@@ -55,37 +55,37 @@ def main():
     
     if args.mode == 'test':
         # Test mode - check connections and basic functionality
-        debug_print("🔍 Running in TEST mode...")
+        debug_print(f"{MAGNI} Running in TEST mode...")
         
         debug_print("Testing platform connection...")
         if bot.connect():
-            debug_print("✅ Connection successful")
+            debug_print(f"{CHECK} Connection successful")
             
             debug_print(f"Testing market data for {args.symbol}...")
             try:
                 price = bot.data_manager.get_current_price(args.symbol)
-                debug_print(f"✅ Current price: {price}")
+                debug_print(f"{CHECK} Current price: {price}")
                 
                 debug_print("Testing historical data...")
                 data = bot.data_manager.get_historical_data(args.symbol, '1m', 10)
-                debug_print(f"✅ Retrieved {len(data)} historical data points")
+                debug_print(f"{CHECK} Retrieved {len(data)} historical data points")
                 
                 debug_print("Testing strategy...")
                 analysis = bot.get_market_analysis()
-                debug_print(f"✅ Market analysis: {len(analysis)} metrics")
+                debug_print(f"{CHECK} Market analysis: {len(analysis)} metrics")
                 
             except Exception as e:
-                print(f"❌ Error during testing: {e}")
+                print(f"{CROSS} Error during testing: {e}")
             
             bot.disconnect()
         else:
-            debug_print("❌ Connection failed")
+            debug_print(f"{CROSS} Connection failed")
         
         debug_print("Test completed.")
         
     elif args.mode == 'status':
         # Status mode - show current bot status
-        debug_print("📊 Bot Status:")
+        debug_print(f"{CHART} Bot Status:")
         status = bot.get_status()
         
         for key, value in status.items():
@@ -93,11 +93,11 @@ def main():
     
     else:
         # Run mode - start the bot
-        debug_print("🚀 Starting trading bot...")
+        debug_print(f"{ROCKET} Starting trading bot...")
         
         if bot.start(args.symbol):
-            debug_print("✅ Bot started successfully")
-            debug_print("📈 Monitoring market for trading opportunities...")
+            debug_print(f"{CHECK} Bot started successfully")
+            debug_print(f"{TREND} Monitoring market for trading opportunities...")
             debug_print("Press Ctrl+C to stop the bot")
             
             try:
@@ -106,7 +106,7 @@ def main():
                     time.sleep(30)  # Show status every 30 seconds
                     
                     status = bot.get_status()
-                    debug_print(f"\n📊 Status Update - {datetime.now().strftime('%H:%M:%S')}")
+                    debug_print(f"\n{CHART} Status Update - {datetime.now().strftime('%H:%M:%S')}")
                     debug_print(f"  Current Price: {status.get('current_price', 'N/A')}")
                     debug_print(f"  Signals Generated: {status['total_signals']}")
                     debug_print(f"  Trades Executed: {status['executed_trades']}")
@@ -114,14 +114,14 @@ def main():
                     debug_print(f"  Daily P&L: {status['risk_metrics']['daily_pnl']:.2f}")
                     
                     if status['is_paused']:
-                        debug_print("  ⏸️  Bot is PAUSED")
+                        debug_print(f"  {STICKS}  Bot is PAUSED")
                     
             except KeyboardInterrupt:
-                print("\n🛑 Stopping bot...")
+                print(f"\n{RED} Stopping bot...")
                 bot.stop()
-                print("✅ Bot stopped successfully")
+                print(f"{CHECK} Bot stopped successfully")
         else:
-            print("❌ Failed to start bot")
+            print(f"{CROSS} Failed to start bot")
 
 if __name__ == "__main__":
     main()

@@ -9,7 +9,7 @@ import time
 import threading
 from datetime import datetime, timedelta
 import logging
-from debug_config import debug_print, production_print
+from debug_config import debug_print, production_print, LOADING, STICKS, CHECK, WRENCH, WARNING
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class LocalSessionKeepAlive:
         self.thread.start()
         
         timestamp = datetime.now().strftime('%H:%M:%S')
-        logger.info(f"🔄 [{timestamp}] Session keepalive started (ping every {self.interval.total_seconds()/60:.0f} minutes)")
+        logger.info(f"{LOADING} [{timestamp}] Session keepalive started (ping every {self.interval.total_seconds()/60:.0f} minutes)")
     
     def stop(self):
         """Stop keepalive when you end trading session"""
@@ -61,7 +61,7 @@ class LocalSessionKeepAlive:
             self.thread.join(timeout=5)
         
         timestamp = datetime.now().strftime('%H:%M:%S')
-        logger.info(f"⏸️  [{timestamp}] Session keepalive stopped ({self.ping_count} pings sent today)")
+        logger.info(f"{STICKS}  [{timestamp}] Session keepalive stopped ({self.ping_count} pings sent today)")
     
     def _heartbeat_loop(self):
         """Background loop that sends periodic pings"""
@@ -102,27 +102,27 @@ class LocalSessionKeepAlive:
                     loop.run_until_complete(
                         self.api._page.evaluate("() => console.log('keepalive ping')")
                     )
-                    logger.info(f"✓ [{timestamp}] Session ping #{self.ping_count + 1} sent (Playwright)")
+                    logger.info(f"{CHECK} [{timestamp}] Session ping #{self.ping_count + 1} sent (Playwright)")
                     return
                 except Exception as e:
-                    logger.warning(f"⚠️  [{timestamp}] Playwright ping failed: {e}")
+                    logger.warning(f"{WARNING}  [{timestamp}] Playwright ping failed: {e}")
             
             # Fallback: Try REST API if available
             elif hasattr(self.api, 'get_account_info'):
                 try:
                     account_info = self.api.get_account_info()
                     if account_info and 'error' not in account_info:
-                        logger.info(f"✓ [{timestamp}] Session ping #{self.ping_count + 1} sent (REST API)")
+                        logger.info(f"{CHECK} [{timestamp}] Session ping #{self.ping_count + 1} sent (REST API)")
                         return
                 except Exception as e:
-                    logger.warning(f"⚠️  [{timestamp}] REST API ping failed: {e}")
+                    logger.warning(f"{WARNING}  [{timestamp}] REST API ping failed: {e}")
             
             # If nothing worked
-            logger.warning(f"⚠️  [{timestamp}] No valid ping method found")
+            logger.warning(f"{WARNING}  [{timestamp}] No valid ping method found")
                 
         except Exception as e:
             timestamp = datetime.now().strftime('%H:%M:%S')
-            logger.warning(f"⚠️  [{timestamp}] Ping failed: {e} (will retry next interval)")
+            logger.warning(f"{WARNING}  [{timestamp}] Ping failed: {e} (will retry next interval)")
 
     
     def force_ping(self):
@@ -132,7 +132,7 @@ class LocalSessionKeepAlive:
         Usage:
             keepalive.force_ping()
         """
-        logger.info("🔧 Manual ping requested")
+        logger.info(f"{WRENCH} Manual ping requested")
         self._ping()
         self.last_heartbeat = datetime.now()
     

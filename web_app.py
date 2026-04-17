@@ -27,7 +27,15 @@ import trading_bot, risk_manager, api_factory, config
 import tradovate_web_ui_api  # wherever it is imported from
 
 from heartbeat_local import LocalSessionKeepAlive
-from debug_config import should_log_throttled, PRINT_STATUS_POLLS, SUPPRESS_NO_TRADES_WARNING, DEBUG, SUPPRESS_WERKZEUG, debug_print, production_print
+from debug_config import (
+    should_log_throttled, 
+    PRINT_STATUS_POLLS, 
+    SUPPRESS_NO_TRADES_WARNING, 
+    DEBUG, SUPPRESS_WERKZEUG, 
+    debug_print, 
+    production_print,
+    WRENCH, CHART, LOADING, TERRA, MAGNI, CHECK, WARNING, FIRE
+    )
 
 class UIWatchdog:
     """
@@ -238,10 +246,10 @@ api = APIFactory.create_api(cfg) # uses TRADING_PLATFORM=tradovate_ui
 bot = TradingBot(config=cfg)
 
 # ADD THESE LINES: print("=" * 80) 
-debug_print("🔍 DEBUG: Bot created") 
-debug_print(f"🔍 bot.data_manager = {bot.data_manager}") 
-debug_print(f"🔍 bot.data_manager.live = {bot.data_manager.live}") 
-debug_print(f"🔍 type(bot.data_manager.live) = {type(bot.data_manager.live)}") 
+debug_print(f"{MAGNI} DEBUG: Bot created") 
+debug_print(f"{MAGNI} bot.data_manager = {bot.data_manager}") 
+debug_print(f"{MAGNI} bot.data_manager.live = {bot.data_manager.live}") 
+debug_print(f"{MAGNI} type(bot.data_manager.live) = {type(bot.data_manager.live)}") 
 debug_print("=" * 80)
 
 # Initialise UI watchdog
@@ -318,7 +326,7 @@ PRICE_POLL = True
 def backup_database_on_startup(db_path='data/db/market_data.db'):
     """Backup database when bot starts"""
     if not os.path.exists(db_path):
-        debug_print(f"⚠️  No database found at {db_path}")
+        debug_print(f"{WARNING}  No database found at {db_path}")
         return
     
     backup_dir = 'data/backups/daily'
@@ -328,7 +336,7 @@ def backup_database_on_startup(db_path='data/db/market_data.db'):
     backup_path = os.path.join(backup_dir, f"market_data_{timestamp}.db")
     
     shutil.copy2(db_path, backup_path)
-    debug_print(f"✅ Database backed up on startup: {backup_path}")
+    debug_print(f"{CHECK} Database backed up on startup: {backup_path}")
 
 
 def _snap_status(from_trading_thread: bool = False):
@@ -709,7 +717,7 @@ def _trading_main():
                             keepalive.stop()
                         keepalive = LocalSessionKeepAlive(api, interval_minutes=15)
                         keepalive.start()
-                        app.logger.info("✅ session keepalive started")
+                        app.logger.info(f"{CHECK} session keepalive started")
                     except Exception as e:
                         app.logger.warning(f"Keepalive start failed: {e}")
 
@@ -740,7 +748,7 @@ def _trading_main():
                 else:
                     if hasattr(bot, 'clear_strategy_override'):
                         bot.clear_strategy_override()
-                        app.logger.info(f"✅ Auto-switching enabled")
+                        app.logger.info(f"{CHECK} Auto-switching enabled")
 
 
                 # remember desired strategy in case a later 'connect' recreates the bot
@@ -759,7 +767,7 @@ def _trading_main():
 
 
                 if name and not hasattr(bot, 'strategy_manager'):
-                    app.logger.info("🔥 SETTING STRATEGY: name=%s params=%s", name, params)
+                    app.logger.info(f"{FIRE} SETTING STRATEGY: name=%s params=%s", name, params)
                     try:
                         bot.set_strategy(name, params)
                         app.logger.info("Thread: strategy set to %s with %s", name, params)
@@ -784,7 +792,7 @@ def _trading_main():
                 if keepalive is not None:
                     try:
                         keepalive.stop()
-                        app.logger.info("✅ session keepalive stopped")
+                        app.logger.info(f"{CHECK} session keepalive stopped")
                     except Exception as e:
                         app.logger.warning(f"keepalive stop failed: {e}")
 
@@ -893,7 +901,7 @@ def _trading_main():
                         ok = bool(loaded)
                         
                         if ok:
-                            app.logger.info(f"✅ Symbol loaded in UI: {symbol}")
+                            app.logger.info(f"{CHECK} Symbol loaded in UI: {symbol}")
                         else:
                             err = f"Failed to load symbol: {symbol}"
                 
@@ -1330,7 +1338,7 @@ def change_symbol():
         # Change the symbol on bot
         bot.symbol = new_symbol
         
-        app.logger.info(f"📊 Symbol changed: {old_symbol} → {new_symbol}")
+        app.logger.info(f"{CHART} Symbol changed: {old_symbol} → {new_symbol}")
         
         # Get multiplier for response
         multiplier = cfg.CONTRACT_MULTIPLIERS.get(new_symbol, 1.0)
@@ -1349,18 +1357,18 @@ def change_symbol():
             try:
                 # We'll add a "load_symbol" command handler in the trading thread
                 _cmd_q.put(("load_symbol", {"symbol": new_symbol}))
-                app.logger.info(f"✅ Symbol load command queued: {new_symbol}")
+                app.logger.info(f"{CHECK} Symbol load command queued: {new_symbol}")
             except Exception as e:
-                app.logger.warning(f"⚠️  Could not queue symbol load: {e}")
+                app.logger.warning(f"{WARNING}  Could not queue symbol load: {e}")
         
         # Reset strategy for new symbol if bot is running
         if getattr(bot, "is_running", False):
             if hasattr(bot, 'strategy') and hasattr(bot.strategy, 'reset_strategy'):
                 try:
                     bot.strategy.reset_strategy()
-                    app.logger.info(f"🔄 Strategy reset for {new_symbol}")
+                    app.logger.info(f"{LOADING} Strategy reset for {new_symbol}")
                 except Exception as e:
-                    app.logger.warning(f"⚠️  Strategy reset failed: {e}")
+                    app.logger.warning(f"{WARNING}  Strategy reset failed: {e}")
         
         # Check for open positions (warning)
         position_warning = None
@@ -1368,7 +1376,7 @@ def change_symbol():
             positions = getattr(bot.risk_manager, "positions", {})
             if positions and any(p.get("qty", 0) != 0 for p in positions.values()):
                 position_warning = f"Warning: Active positions exist: {list(positions.keys())}"
-                app.logger.warning(f"⚠️  {position_warning}")
+                app.logger.warning(f"{WARNING}  {position_warning}")
         
         return jsonify({
             "success": True,
@@ -1401,9 +1409,9 @@ if __name__ == '__main__':
     backup_database_on_startup()
 
     _log_routes()
-    debug_print("🌐 Starting Futures Trading Bot Web Dashboard...")
-    debug_print("📊 Dashboard will be available at: http://localhost:5050")
-    debug_print("🔧 Use Ctrl+C to stop the web server")
+    debug_print(f"{TERRA} Starting Futures Trading Bot Web Dashboard...")
+    debug_print(f"{CHART} Dashboard will be available at: http://localhost:5050")
+    debug_print(f"{WRENCH} Use Ctrl+C to stop the web server")
 
     # Suppress Flask/Werkzeug request logs in production
     if SUPPRESS_WERKZEUG:

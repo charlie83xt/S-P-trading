@@ -27,7 +27,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, time as dtime
 from typing import Any, Dict, Optional, List, Tuple
-from debug_config import PRINT_STRATEGY_STATE, should_log_throttled
+from debug_config import PRINT_STRATEGY_STATE, should_log_throttled, CHART, UP_R, DO_R, CROSS, CHECK, ROCKET, MAGNI, WARNING, TARGET
 
 try:
     from zoneinfo import ZoneInfo  # Python 3.9+
@@ -245,7 +245,7 @@ class ORBRetestStrategy:
         bars_available = self.dm.live.get_last_n(symbol, n=self.opening_range_minutes + 5)
         
         if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
-            self.logger.info(f"📊 COMPUTE_OR: have {len(bars_available)} bars, need {self.opening_range_minutes}")
+            self.logger.info(f"{CHART} COMPUTE_OR: have {len(bars_available)} bars, need {self.opening_range_minutes}")
         
         # ADD THESE LINES:
         if bars_available:
@@ -272,7 +272,7 @@ class ORBRetestStrategy:
         or_start_time = datetime.fromtimestamp(or_start)
         or_end_time = datetime.fromtimestamp(or_end)
         if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
-            self.logger.info(f"📊 OR Time Range: {or_start_time} to {or_end_time}")
+            self.logger.info(f"{CHART} OR Time Range: {or_start_time} to {or_end_time}")
             self.logger.info(f"   Unix: {or_start} to {or_end}")
         
         # Get candles from the OR period
@@ -285,11 +285,11 @@ class ORBRetestStrategy:
                 candles = []
             if candles:
                 if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
-                    self.logger.info(f"📊 Using {tf} timeframe for OR calculation")
+                    self.logger.info(f"{CHART} Using {tf} timeframe for OR calculation")
                 break
         
         if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
-            self.logger.info(f"📊 COMPUTE_OR: got {len(candles)} candles from get_candles()")
+            self.logger.info(f"{CHART} COMPUTE_OR: got {len(candles)} candles from get_candles()")
         
         if not candles:
             if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
@@ -311,12 +311,12 @@ class ORBRetestStrategy:
         threshold_down = lo - self.breakout_points
         
         if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
-            self.logger.info(f"✅ ORB COMPUTED for {symbol}:")
+            self.logger.info(f"{CHECK} ORB COMPUTED for {symbol}:")
             self.logger.info(f"   OR Low:  {lo:.2f}")
             self.logger.info(f"   OR High: {hi:.2f}")
             self.logger.info(f"   Range:   {hi - lo:.2f} points")
-            self.logger.info(f"   🔺 BREAKOUT UP if price > {threshold_up:.2f}")
-            self.logger.info(f"   🔻 BREAKOUT DOWN if price < {threshold_down:.2f}")
+            self.logger.info(f"   {UP_R} BREAKOUT UP if price > {threshold_up:.2f}")
+            self.logger.info(f"   {DO_R} BREAKOUT DOWN if price < {threshold_down:.2f}")
 
 
     # ============================================================================
@@ -473,7 +473,7 @@ class ORBRetestStrategy:
             bars = self.dm.live.get_last_n(symbol, n=5)
             bar_count = len(bars)
         except Exception as e:
-            self.logger.error(f"❌ Failed to get bars: {e}")
+            self.logger.error(f"{CROSS} Failed to get bars: {e}")
             bar_count = -1
         
         # self.logger.info(
@@ -484,7 +484,7 @@ class ORBRetestStrategy:
         # )
         if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
             self.logger.debug(
-                "🔍 CHECK_SIGNAL: phase=%s or_ready=%s or_computed=%s bars_count=%d", 
+                f"{MAGNI} CHECK_SIGNAL: phase=%s or_ready=%s or_computed=%s bars_count=%d", 
                 self.state.phase, self.state.or_ready, self.state.or_computed, 
                 len(self.dm.live.get_last_n(symbol, n=50))
             )
@@ -562,7 +562,7 @@ class ORBRetestStrategy:
                 current_price = self.dm.get_current_price(symbol)
                 if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
                     self.logger.info(f"")  # Blank line for readability
-                    self.logger.info(f"📊 WAIT_BREAK STATUS:")
+                    self.logger.info(f"{CHART} WAIT_BREAK STATUS:")
                     self.logger.info(f"   OR Range: {or_low:.2f} to {or_high:.2f}")
                     self.logger.info(f"   Current Price: {current_price:.2f}")
                     self.logger.info(f"   Need CLOSE > {threshold_up:.2f} OR < {threshold_down:.2f}")
@@ -590,7 +590,7 @@ class ORBRetestStrategy:
             if not candles_5m or len(candles_5m) < 2:
                 if self._break_check_count % 10 == 1:
                     self.logger.warning(
-                        f"❌ Not enough 5m candles! Got {len(candles_5m)}, need 2+"
+                        f"{CROSS} Not enough 5m candles! Got {len(candles_5m)}, need 2+"
                     )
                 return None
             
@@ -606,7 +606,7 @@ class ORBRetestStrategy:
             if close > threshold_up:
                 if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
                     self.logger.info(f"")
-                    self.logger.info(f"🚀 ═══ UPWARD BREAKOUT DETECTED! ═══")
+                    self.logger.info(f"{ROCKET} ═══ UPWARD BREAKOUT DETECTED! ═══")
                     self.logger.info(f"   5m Close: {close:.2f}")
                     self.logger.info(f"   Threshold: {threshold_up:.2f}")
                     self.logger.info(f"   Broke above by: {close - threshold_up:.2f} points")
@@ -623,7 +623,7 @@ class ORBRetestStrategy:
             elif close < threshold_down:
                 if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
                     self.logger.info(f"")
-                    self.logger.info(f"🔻 ═══ DOWNWARD BREAKOUT DETECTED! ═══")
+                    self.logger.info(f"{DO_R} ═══ DOWNWARD BREAKOUT DETECTED! ═══")
                     self.logger.info(f"   5m Close: {close:.2f}")
                     self.logger.info(f"   Threshold: {threshold_down:.2f}")
                     self.logger.info(f"   Broke below by: {threshold_down - close:.2f} points")
@@ -643,7 +643,7 @@ class ORBRetestStrategy:
                     distance_to_down = close - threshold_down
                     if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
                         self.logger.info(
-                            f"   ⏳ No breakout yet. "
+                            f"   {SANDTIME} No breakout yet. "
                             f"Need +{distance_to_up:.2f}pts up OR -{distance_to_down:.2f}pts down"
                         )
             
@@ -680,7 +680,7 @@ class ORBRetestStrategy:
 
                 if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
                     self.logger.info(f"")
-                    self.logger.info(f"🎯 WAIT_TRIGGER STATUS:")
+                    self.logger.info(f"{TARGET} WAIT_TRIGGER STATUS:")
                     self.logger.info(f"   Breakout Side: {self.state.breakout_side}")
                     self.logger.info(f"   OR Level: {self.state.breakout_level:.2f}")
                     self.logger.info(f"   Current Price: {current_price:.2f}")
@@ -689,7 +689,7 @@ class ORBRetestStrategy:
             
                 if self.allow_only_one_side_per_day:
                     if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
-                        self.logger.info(f"   ⚠️  Already traded {self.state.breakout_side} today")
+                        self.logger.info(f"   {WARNING}  Already traded {self.state.breakout_side} today")
                         self.logger.info(f"   Will only look for opposite direction until tomorrow")
                     pass
 
@@ -845,7 +845,7 @@ class ORBRetestStrategy:
 
             if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
                 self.logger.info(
-                    f"📊 Yesterday context: Range={stats['yesterday_range']:.2f} pts,"
+                    f"{CHART} Yesterday context: Range={stats['yesterday_range']:.2f} pts,"
                     f"Bars={len(bars)}"
                 )
 

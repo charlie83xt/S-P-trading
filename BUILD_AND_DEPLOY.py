@@ -1,3 +1,4 @@
+from debug_config import CHECK, CROSS, BOX, APPLE
 """
 BUILD AND DEPLOYMENT GUIDE for S-P Trading App
 
@@ -24,7 +25,7 @@ import sys
 
 def build_macos():
     """Build macOS .app bundle."""
-    print("🍎 Building for macOS...")
+    print(f"{APPLE} Building for macOS...")
     
     # Build with PyInstaller
     result = subprocess.run(
@@ -33,13 +34,13 @@ def build_macos():
     )
     
     if result.returncode != 0:
-        print("❌ PyInstaller build failed")
+        print(f"{CROSS} PyInstaller build failed")
         return False
     
-    print("✅ Built: dist/S-P Trading.app")
+    print(f"{CHECK} Built: dist/S-P Trading.app")
     
     # (Optional) Create DMG installer
-    print("\n📦 Creating DMG installer...")
+    print(f"\n{BOX} Creating DMG installer...")
     
     # Manual DMG creation (requires macOS)
     steps = """
@@ -66,13 +67,13 @@ def build_windows():
     )
     
     if result.returncode != 0:
-        print("❌ PyInstaller build failed")
+        print(f"{CROSS} PyInstaller build failed")
         return False
     
-    print("✅ Built: dist/launcher.exe")
+    print(f"{CHECK} Built: dist/launcher.exe")
     
     # Create installer (using Inno Setup or NSIS)
-    print("\n📦 Creating installer...")
+    print(f"\n{BOX} Creating installer...")
     
     # Option 1: Use Inno Setup (recommended for Windows)
     inno_script = """
@@ -118,13 +119,13 @@ def build_linux():
     )
     
     if result.returncode != 0:
-        print("❌ PyInstaller build failed")
+        print(f"{CROSS} PyInstaller build failed")
         return False
     
-    print("✅ Built: dist/launcher")
+    print(f"{CHECK} Built: dist/launcher")
     
     # Create AppImage
-    print("\n📦 Creating AppImage...")
+    print(f"\n{BOX} Creating AppImage...")
     print("""
     1. Install appimagetool:
        https://github.com/AppImage/AppImageKit/releases
@@ -278,7 +279,7 @@ def build_all():
     else:
         build_linux()
     
-    print("\n✅ Build complete!")
+    print(f"\n{CHECK} Build complete!")
     print("\nNext steps:")
     print("1. Test the application thoroughly")
     print("2. Create installer (DMG/EXE/AppImage)")

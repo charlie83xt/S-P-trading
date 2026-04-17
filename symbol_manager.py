@@ -1,4 +1,5 @@
 import logging
+from debug_config import CHART
 
 class SymbolManager:
     """
@@ -31,7 +32,7 @@ class SymbolManager:
         old_symbol = self._active_symbol
         self._active_symbol = new_symbol
        
-        self.logger.info(f"📊 Symbol changed: {old_symbol} → {new_symbol}")
+        self.logger.info(f"{CHART} Symbol changed: {old_symbol} → {new_symbol}")
         self.logger.info(f"   Multiplier: ${self.get_multiplier()}/point")
    
     def get_multiplier(self) -> float:

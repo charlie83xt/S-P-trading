@@ -5,7 +5,7 @@
 import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta
-from debug_config import debug_print, production_print
+from debug_config import debug_print, production_print, CHART, RED, GREEN, CHECK, DISK
 
 
 DB_PATH = 'data/db/market_data.db'
@@ -35,17 +35,17 @@ def get_recent_performance(days=7):
     conn.close()
    
     if len(df) == 0:
-        debug_print(f"📊 No trades in last {days} days")
+        debug_print(f"{CHART} No trades in last {days} days")
         return
    
     debug_print(f"\n{'='*70}")
-    debug_print(f"📊 PERFORMANCE - LAST {days} DAYS")
+    debug_print(f"{CHART} PERFORMANCE - LAST {days} DAYS")
     debug_print(f"{'='*70}\n")
    
     for _, row in df.iterrows():
         win_rate = (row['wins'] / row['trades'] * 100) if row['trades'] > 0 else 0
        
-        pnl_emoji = "🟢" if row['total_pnl'] > 0 else "🔴"
+        pnl_emoji = f"{GREEN}" if row['total_pnl'] > 0 else f"{RED}"
        
         debug_print(f"{row['date']}")
         debug_print(f"  Trades: {row['trades']} | W:{row['wins']} L:{row['losses']} | WR: {win_rate:.1f}%")
@@ -87,7 +87,7 @@ def get_strategy_comparison():
 
     # Check if we got data BEFORE closing connection
     if len(df) == 0:
-        debug_print("📊 No strategy data in signals table, trying trades_enhanced...")
+        debug_print(f"{CHART} No strategy data in signals table, trying trades_enhanced...")
         
         # Try to get strategy from trades_enhanced directly
         fallback_query = """
@@ -109,12 +109,12 @@ def get_strategy_comparison():
     conn.close()
     
     if len(df) == 0 or df.iloc[0]['trades'] == 0:
-        debug_print("📊 No trade data available")
+        debug_print(f"{CHART} No trade data available")
         return
 
    
     debug_print(f"\n{'='*70}")
-    debug_print(f"📊 STRATEGY COMPARISON - LAST 30 DAYS")
+    debug_print(f"{CHART} STRATEGY COMPARISON - LAST 30 DAYS")
     debug_print(f"{'='*70}\n")
    
     for _, row in df.iterrows():
@@ -150,11 +150,11 @@ def get_time_of_day_analysis():
     conn.close()
    
     if len(df) == 0:
-        debug_print("📊 No time-of-day data yet")
+        debug_print(f"{CHART} No time-of-day data yet")
         return
    
     debug_print(f"\n{'='*70}")
-    debug_print(f"📊 PERFORMANCE BY HOUR (UTC)")
+    debug_print(f"{CHART} PERFORMANCE BY HOUR (UTC)")
     debug_print(f"{'='*70}\n")
    
     for _, row in df.iterrows():
@@ -176,12 +176,12 @@ def export_for_analysis():
     # Export trades
     trades_df = pd.read_sql("SELECT * FROM trades_enhanced", conn)
     trades_df.to_csv('data/trades_export.csv', index=False)
-    debug_print(f"✅ Exported {len(trades_df)} trades to data/trades_export.csv")
+    debug_print(f"{CHECK} Exported {len(trades_df)} trades to data/trades_export.csv")
    
     # Export signals
     signals_df = pd.read_sql("SELECT * FROM signals", conn)
     signals_df.to_csv('data/signals_export.csv', index=False)
-    debug_print(f"✅ Exported {len(signals_df)} signals to data/signals_export.csv")
+    debug_print(f"{CHECK} Exported {len(signals_df)} signals to data/signals_export.csv")
    
     conn.close()
 
@@ -189,7 +189,7 @@ def export_for_analysis():
 def main():
     """Run all analytics"""
     debug_print("\n" + "="*70)
-    debug_print("📊 TRADING BOT ANALYTICS")
+    debug_print(f"{CHART} TRADING BOT ANALYTICS")
     debug_print("="*70)
    
     get_recent_performance(days=7)
@@ -197,7 +197,7 @@ def main():
     get_time_of_day_analysis()
    
     debug_print("\n" + "="*70)
-    debug_print("💾 EXPORT")
+    debug_print(f"{DISK} EXPORT")
     debug_print("="*70 + "\n")
     export_for_analysis()
 

@@ -16,6 +16,7 @@ import argparse
 import subprocess
 from pathlib import Path
 from threading import Thread
+from debug_config import CHECK, CROSS, ROCKET, CHART, WRENCH, WARNING, INFO, NOTE, TERRA
 
 # Add current directory to path so imports work
 sys.path.insert(0, str(Path(__file__).parent))
@@ -53,7 +54,7 @@ def setup_logging(debug: bool = False):
 def print_header():
     """Print app header."""
     print("\n" + "="*60)
-    print("🤖 S-P TRADING APP")
+    print(f"{BOT} S-P TRADING APP")
     print(f"Version: {APP_VERSION}")
     print("="*60 + "\n")
 
@@ -75,10 +76,10 @@ def validate_installation() -> bool:
     
     for file in required_files:
         if not Path(file).exists():
-            logger.error(f"❌ Missing required file: {file}")
+            logger.error(f"{CROSS} Missing required file: {file}")
             return False
     
-    logger.info("✅ Installation validation passed")
+    logger.info(f"{CHECK} Installation validation passed")
     return True
 
 def setup_wizard(logger):
@@ -88,24 +89,24 @@ def setup_wizard(logger):
     ALSO registers machine for authorization.
     """
     print("\n" + "="*60)
-    print("🔧 INITIAL SETUP")
+    print(f"{WRENCH} INITIAL SETUP")
     print("="*60 + "\n")
     
     config = load_config()
     
     # AUTHORIZATION: Register this machine
-    print("📝 Step 1: Machine Registration")
+    print(f"{NOTE} Step 1: Machine Registration")
     print("-" * 40)
     config_dir = get_app_config_dir()
     user_email = input("Enter your email address (for license tracking): ").strip()
     
     if not register_machine(config_dir, user_email):
-        logger.error("❌ Registration failed. Application cannot start.")
-        print("❌ Registration failed. Please try again.")
+        logger.error(f"{CROSS} Registration failed. Application cannot start.")
+        print(f"{CROSS} Registration failed. Please try again.")
         sys.exit(1)
     
     # Ask for trading platform
-    print("\n📝 Step 2: Trading Configuration")
+    print(f"\n{NOTE} Step 2: Trading Configuration")
     print("-" * 40)
     print("Which trading platform do you want to use?")
     print("  1) Tradovate (Recommended for S&P 500 futures)")
@@ -134,7 +135,7 @@ def setup_wizard(logger):
     
     # Save environment variables if needed
     if config["trading_platform"] in ("tradovate_ui", "tradovate"):
-        print("\n📝 Enter your Tradovate credentials:")
+        print(f"\n{NOTE} Enter your Tradovate credentials:")
         username = input("Tradovate username: ").strip()
         password = input("Tradovate password: ").strip()
         
@@ -143,8 +144,8 @@ def setup_wizard(logger):
         env_vars["TRADOVATE_PASSWORD"] = password
         save_env_file(env_vars)
     
-    logger.info("✅ Setup wizard completed")
-    print("\n✅ Setup complete! You can now start the app.\n")
+    logger.info(f"{CHECK} Setup wizard completed")
+    print(f"\n{CHECK} Setup complete! You can now start the app.\n")
 
 def start_chrome(logger, config: dict) -> bool:
     """
@@ -155,7 +156,7 @@ def start_chrome(logger, config: dict) -> bool:
     """
     chrome_port = config.get("chrome_port", 9222)
     
-    logger.info(f"🌐 Launching Chrome on port {chrome_port}...")
+    logger.info(f"{TERRA} Launching Chrome on port {chrome_port}...")
     
     # Kill any existing Chrome on this port
     try:
@@ -167,16 +168,16 @@ def start_chrome(logger, config: dict) -> bool:
     # Launch new Chrome
     chrome_process = launch_chrome(port=chrome_port)
     if not chrome_process:
-        logger.error("❌ Failed to launch Chrome")
+        logger.error(f"{CROSS} Failed to launch Chrome")
         return False
     
     # Wait for Chrome to be ready
     if not wait_for_chrome(port=chrome_port, timeout=10):
-        logger.error("❌ Chrome failed to respond")
+        logger.error(f"{CROSS} Chrome failed to respond")
         chrome_process.terminate()
         return False
     
-    logger.info("✅ Chrome ready")
+    logger.info(f"{CHECK} Chrome ready")
     return True
 
 def start_dashboard(logger, config: dict) -> bool:
@@ -188,7 +189,7 @@ def start_dashboard(logger, config: dict) -> bool:
     """
     dashboard_port = config.get("dashboard_port", 5000)
     
-    logger.info(f"📊 Starting dashboard on port {dashboard_port}...")
+    logger.info(f"{CHART} Starting dashboard on port {dashboard_port}...")
     
     try:
         # Start dashboard in background
@@ -202,14 +203,14 @@ def start_dashboard(logger, config: dict) -> bool:
         time.sleep(2)
         
         if process.poll() is not None:
-            logger.error("❌ Dashboard process exited unexpectedly")
+            logger.error(f"{CROSS} Dashboard process exited unexpectedly")
             return False
         
-        logger.info(f"✅ Dashboard started (PID: {process.pid})")
+        logger.info(f"{CHECK} Dashboard started (PID: {process.pid})")
         return True
         
     except Exception as e:
-        logger.error(f"❌ Failed to start dashboard: {e}")
+        logger.error(f"{CROSS} Failed to start dashboard: {e}")
         return False
 
 def run_app(logger, config: dict):
@@ -217,23 +218,23 @@ def run_app(logger, config: dict):
     Main application run loop.
     """
     print("\n" + "="*60)
-    print("🚀 STARTING APPLICATION")
+    print(f"{ROCKET} STARTING APPLICATION")
     print("="*60 + "\n")
     
     # Validate installation
     if not validate_installation():
-        logger.error("❌ Installation validation failed")
-        print("❌ Installation is not complete. Please check the logs.")
+        logger.error(f"{CROSS} Installation validation failed")
+        print(f"{CROSS} Installation is not complete. Please check the logs.")
         return False
     
     # Start Chrome
     if not start_chrome(logger, config):
-        print("❌ Failed to start Chrome. Make sure it's installed.")
+        print(f"{CROSS} Failed to start Chrome. Make sure it's installed.")
         return False
     
     # Start dashboard
     if not start_dashboard(logger, config):
-        print("❌ Failed to start dashboard.")
+        print(f"{CROSS} Failed to start dashboard.")
         return False
     
     # Load environment variables
@@ -241,7 +242,7 @@ def run_app(logger, config: dict):
     os.environ.update(env_vars)
     
     print("\n" + "="*60)
-    print("✅ APPLICATION RUNNING")
+    print(f"{CHECK} APPLICATION RUNNING")
     print("="*60)
     print(f"Dashboard: http://localhost:{config.get('dashboard_port', 5000)}")
     print(f"Chrome debugging: localhost:{config.get('chrome_port', 9222)}")
@@ -252,7 +253,7 @@ def run_app(logger, config: dict):
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n\n🛑 Shutting down...")
+        print(f"\n\n{RED} Shutting down...")
         logger.info("Application stopped by user")
     
     return True
@@ -308,14 +309,14 @@ Examples:
     
     # Otherwise, check authorization before doing anything
     if not check_authorization_before_launch(config_dir):
-        print("\n❌ AUTHORIZATION FAILED")
+        print(f"\n{CROSS} AUTHORIZATION FAILED")
         print(f"Authorization file: {config_dir / 'authorization.json'}")
         print("\nTo register this machine:")
         print(f"  python launcher.py --setup")
         logger.error("Authorization check failed - access denied")
         sys.exit(1)
     
-    logger.info("✅ Authorization check passed")
+    logger.info(f"{CHECK} Authorization check passed")
     
     # ========================================================
     # CONTINUE WITH NORMAL STARTUP
@@ -326,7 +327,7 @@ Examples:
     
     # Check if setup is needed
     if "trading_platform" not in config or config["trading_platform"] is None:
-        print("ℹ️  First-time setup required.\n")
+        print(f"{INFO}  First-time setup required.\n")
         setup_wizard(logger)
         config = load_config()  # Reload config
     
