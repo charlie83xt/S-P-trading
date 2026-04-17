@@ -1,4 +1,8 @@
 # debug_config.py
+
+import sys
+import platform
+
 """
 Debug Configuration Toggle
 
@@ -169,6 +173,69 @@ def production_print(*args, **kwargs):
         production_print("✅ Bot started successfully")
     """
     print(*args, **kwargs)
+
+
+# Detect if emojis are supported
+_platform = platform.system()
+_encoding = sys.stdout.encoding if sys.stdout else 'utf-8'
+
+
+# Windows cmd.exe doesn't support emojis well
+USE_EMOJIS = _platform != 'Windows' or _encoding == 'utf-8'
+
+
+def emoji(char: str, fallback: str = "") -> str:
+    """
+    Return emoji on supported platforms, text fallback otherwise.
+    
+    Args:
+        char: Emoji character
+        fallback: Text to use if emoji not supported
+    
+    Returns:
+        Emoji or fallback text
+    
+    Example:
+        >>> emoji("✅", "[OK]")
+        "✅"  # On Mac/Linux
+        "[OK]"  # On Windows
+    """
+    return char if USE_EMOJIS else fallback
+
+
+# Predefined common emojis
+CHECK = emoji("✅", "[OK]")
+CROSS = emoji("❌", "[X]")
+ROCKET = emoji("🚀", ">>")
+CHART = emoji("📊", "[Chart]")
+WRENCH = emoji("🔧", "[Tool]")
+WARNING = emoji("⚠️", "[!]")
+INFO = emoji("ℹ️", "[i]")
+NOTE = emoji("📝", "[Note]")
+TRASH = emoji("🗑", "[Trash]")
+BOX = emoji("📦", "[Box]")
+CALENDAR = emoji("📆", "[Date]")
+APPLE = emoji("🍎", "[Apple]")
+GREEN = emoji("🟢", "[Green]")
+RED = emoji("🔴", "[Red]")
+YELLOW = emoji("🟡", "[Yellow]")
+BLUE = emoji("🔵", "[Blue]")
+MAGNI = emoji("🔍", "[Magnifier]") 
+FIRE = emoji("🔥", "[Fire]")
+FOLDER = emoji("📁", "[Folder]")
+TREND = emoji("📈", "[Trend]")
+DISK = emoji("💾", "[Disk]")
+LOADING = emoji("🔄", "[Loading]")
+STICKS = emoji("⏸️", "[Sticks]")
+TERRA = emoji("🌐", "[Terra]")
+BULB = emoji("💡", "[Bulb]")
+BOT = emoji("🤖", "[Bot]")
+UP_R = emoji("🔺", "[Up-r]")
+DO_R = emoji("🔻", "[Do-r]")
+SANDTIME = emoji("⏳", "[Sand-t]")
+TARGET = emoji("🎯", "[Target]")
+SNOW = emoji("❄️", "[Snow-Flake]")
+BLOCKED = emoji("⛔️", "[Blocked]")
 
 
 # ============================================================================

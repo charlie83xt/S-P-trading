@@ -10,6 +10,7 @@ import time
 import logging
 from pathlib import Path
 from typing import Optional, List
+from debug_config import CHECK, CROSS, ROCKET, WARNING
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,10 @@ def get_chrome_executable_path() -> Optional[str]:
     for path in paths:
         expanded = os.path.expandvars(path)
         if os.path.isfile(expanded):
-            logger.info(f"✅ Found Chrome at: {expanded}")
+            logger.info(f"{CHECK} Found Chrome at: {expanded}")
             return expanded
     
-    logger.warning(f"❌ Chrome not found on {system}. Tried: {paths}")
+    logger.warning(f"{CROSS} Chrome not found on {system}. Tried: {paths}")
     return None
 
 def get_chrome_user_data_dir(app_name: str = "S-P-Trading") -> str:
@@ -119,7 +120,7 @@ def launch_chrome(
     
     # Suppress output
     try:
-        logger.info(f"🚀 Launching Chrome with args: {args[:3]}...")
+        logger.info(f"{ROCKET} Launching Chrome with args: {args[:3]}...")
         process = subprocess.Popen(
             args,
             stdout=subprocess.DEVNULL,
@@ -127,11 +128,11 @@ def launch_chrome(
             preexec_fn=None if platform.system() == "Windows" else os.setsid
         )
         
-        logger.info(f"✅ Chrome started (PID: {process.pid})")
+        logger.info(f"{CHECK} Chrome started (PID: {process.pid})")
         return process
         
     except Exception as e:
-        logger.error(f"❌ Failed to launch Chrome: {e}")
+        logger.error(f"{CROSS} Failed to launch Chrome: {e}")
         return None
 
 def is_chrome_running(port: int = 9222) -> bool:
@@ -167,11 +168,11 @@ def wait_for_chrome(port: int = 9222, timeout: int = 10) -> bool:
     start_time = time.time()
     while time.time() - start_time < timeout:
         if is_chrome_running(port):
-            logger.info(f"✅ Chrome ready on port {port}")
+            logger.info(f"{CHECK} Chrome ready on port {port}")
             return True
         time.sleep(0.5)
     
-    logger.warning(f"⚠️  Chrome not responding after {timeout}s")
+    logger.warning(f"{WARNING}  Chrome not responding after {timeout}s")
     return False
 
 def kill_chrome_on_port(port: int = 9222):
@@ -206,6 +207,6 @@ def kill_chrome_on_port(port: int = 9222):
                     pid = parts[1]
                     os.kill(int(pid), 9)
         
-        logger.info(f"✅ Chrome process terminated")
+        logger.info(f"{CHECK} Chrome process terminated")
     except Exception as e:
         logger.debug(f"Could not terminate Chrome: {e}")

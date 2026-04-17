@@ -8,6 +8,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
+from debug_config import CHECK
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ def load_config() -> Dict[str, Any]:
         try:
             with open(config_file, 'r') as f:
                 config = json.load(f)
-                logger.info(f"✅ Loaded config from {config_file}")
+                logger.info(f"{CHECK} Loaded config from {config_file}")
                 return config
         except Exception as e:
             logger.error(f"Failed to load config: {e}")
@@ -77,7 +78,7 @@ def save_config(config: Dict[str, Any]):
     try:
         with open(config_file, 'w') as f:
             json.dump(config, f, indent=2)
-        logger.info(f"✅ Saved config to {config_file}")
+        logger.info(f"{CHECK} Saved config to {config_file}")
     except Exception as e:
         logger.error(f"Failed to save config: {e}")
 
@@ -154,7 +155,7 @@ def load_env_file() -> Dict[str, str]:
         try:
             import dotenv
             env_vars = dotenv.dotenv_values(env_file)
-            logger.info(f"✅ Loaded .env from {env_file}")
+            logger.info(f"{CHECK} Loaded .env from {env_file}")
         except ImportError:
             # Fallback: parse manually if dotenv not available
             with open(env_file, 'r') as f:
@@ -188,7 +189,7 @@ def save_env_file(env_vars: Dict[str, str]):
         
         # Restrict file permissions (sensitive data)
         os.chmod(env_file, 0o600)
-        logger.info(f"✅ Saved .env to {env_file}")
+        logger.info(f"{CHECK} Saved .env to {env_file}")
     except Exception as e:
         logger.error(f"Failed to save .env: {e}")
 

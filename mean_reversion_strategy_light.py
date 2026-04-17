@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from debug_config import PRINT_STRATEGY_STATE, should_log_throttled
 
-class MeanReversionStrategyOld:
+class MeanReversionStrategyLight:
     """
     Simple mean reversion strategy using Bollinger Bands.
    

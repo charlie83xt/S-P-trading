@@ -1890,51 +1890,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 )
                 return False
 
-            
-            # deadline = time.time() + min(t_ms / 1000.0, 2.0) # up to 2s just for modal appearance
-            # poll = 0.05
-
-            # try:
-            #     while time.time() < deadline:
-            #         try:
-            #             cnt = await modals.count()
-            #         except Exception:
-            #             cnt = 0
-            #         if cnt > 0:
-            #             # confirm_modal = modals.nth(cnt - 1)
-            #             logger.info("[confirm_order] modal appeared (count=%d)", cnt)
-            #             break
-            #         await asyncio.sleep(poll)
-
-            
-            # logger.info("[confirm_order] candidate modal count=%d", mcount)
-
-            # for i in reversed(range(mcount)):  # top-most first
-            #     m = modals.nth(i)
-            #     try:
-            #         if not await m.is_visible():
-            #             continue
-            #     except Exception:
-            #         continue
-
-            #     # if await m.locator("button", has_text=re.compile(r"Cancel", re.I)).count() == 0:
-            #     if await m.locator(CLICKABLE, has_text=re.compile(r"Cancel", re.I)).count() == 0:
-            #         continue
-            #     # if await m.locator("button", has_text=re.compile(rf"^{target}$", re.I)).count() == 0:
-            #     if await m.locator(CLICKABLE, has_text=re.compile(rf"^{target}$", re.I)).count() == 0:
-            #         continue
-
-            #     confirm_modal = m
-            #     break
-
-            # if confirm_modal is None:
-            #     # NEW: log visible buttons on the whole page to see where Buy/Cancel lives
-            #     await dump_visible_clickables("NO CONFIRM UI FOUND (popover+modal missed)")
-            #     logger.warning(
-            #         "[confirm_order] No confirmation modal with Buy/Sell + Cancel found; "
-            #         "will NOT click generic 'Send'."
-            #     )
-            #     return False
+        
             
             # btn = confirm_modal.locator("button", has_text=re.compile(rf"^{target}$", re.I)).first
             btn = confirm_modal.locator(self.clickable, has_text=re.compile(rf"^{target}$", re.I)).first
@@ -3231,15 +3187,3 @@ class TradovateWebUIAPI(TradingAPIInterface):
             logger.warning("ensure_trading_panels_ready failed: %s", e)
             return False
 
-
-# def _to_qty_safe(txt: str | None):
-#                     f = _to_float_safe(txt)
-#                     if f is None:
-#                         return None
-#                     # most features qty are ints
-#                     try:
-#                         if abs(f - int(f)) < 1e-9:
-#                             return int(f)
-#                     except Exception:
-#                         pass
-#                     return f

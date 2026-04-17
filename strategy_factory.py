@@ -11,7 +11,7 @@ Supported strategies:
 from opening_range_strategy import OpeningRangeStrategy
 from minimal_test_strategy import TestStrategy
 from mean_reversion_strategy import MeanReversionStrategy
-from mean_reversion_strategy_old import MeanReversionStrategyOld
+from mean_reversion_strategy_light import MeanReversionStrategyLight
 from previous_day_high_low_strategy import PreviousDayHighLowStrategy
 from typing import Any, Dict
 from datetime import time
@@ -39,7 +39,7 @@ _STRATEGIES = {
         "enabled": True, # Default strategy
     },
     "MeanReversionOld": {
-        "class": MeanReversionStrategyOld,
+        "class": MeanReversionStrategyLight,
         "description": "Bollinger Bands mean reversion (12 PM - 4 PM ET)",
         "available": _HAS_ORB_RETEST,
         "enabled": True, # Default strategy
@@ -158,7 +158,7 @@ def create(name: str, *, data_manager, **params):
     # ========================================================================
 
     elif name == "MeanReversionOld":
-        return MeanReversionStrategyOld(
+        return MeanReversionStrategyLight(
             data_manager=data_manager,
             lookback=int(params.get("lookback", 20)),
             std_dev=float(params.get("std_dev", 2.0)),

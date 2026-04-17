@@ -14,6 +14,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import logging
+from debug_config import CHECK, CROSS, NOTE
 
 logger = logging.getLogger(__name__)
 
@@ -371,7 +372,7 @@ def check_authorization_before_launch(config_dir: Path) -> bool:
     auth = AuthorizationManager(config_dir)
     
     if not auth.check_authorization():
-        print("❌ This machine is not authorized to run S-P Trading")
+        print(f"{CROSS} This machine is not authorized to run S-P Trading")
         print("Contact your administrator for a license key")
         return False
     
@@ -386,7 +387,7 @@ def register_machine(config_dir: Path, user_email: Optional[str] = None) -> bool
     """
     auth = AuthorizationManager(config_dir)
     
-    print("📝 Registering this machine for S-P Trading...")
+    print(f"{NOTE} Registering this machine for S-P Trading...")
     
     if auth.STRATEGY == "machine":
         print("Using machine fingerprint for authorization")
@@ -398,10 +399,10 @@ def register_machine(config_dir: Path, user_email: Optional[str] = None) -> bool
             user_email = input("Enter your username: ").strip()
     
     if auth.register_authorization(user_email):
-        print("✅ Machine registration successful!")
+        print(f"{CHECK} Machine registration successful!")
         return True
     else:
-        print("❌ Registration failed")
+        print(f"{CROSS} Registration failed")
         return False
 
 

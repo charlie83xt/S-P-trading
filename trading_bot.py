@@ -19,7 +19,25 @@ from trade_analytics import TradeAnalytics
 from strategy_manager import StrategyManager
 from intelligent_entry_filter import IntelligentEntryFilter
 from symbol_manager import SymbolManager
-from debug_config import PRINT_HEARTBEATS, should_log_throttled
+from debug_config import (
+    PRINT_HEARTBEATS, 
+    should_log_throttled, 
+    CHECK, 
+    CROSS, 
+    ROCKET, 
+    CHART, 
+    WRENCH, 
+    WARNING, 
+    INFO, 
+    NOTE, 
+    TRASH, 
+    BOX, 
+    CALENDAR,
+    BLOCKED,
+    FIRE,
+    TARGET
+)
+
 
 # ================= tiny helpers =====================
 import uuid
@@ -78,7 +96,7 @@ class TradingBot:
             data_manager = self.data_manager,
             logger = self.logger
         )
-        self.logger.info("✅ Filter initialised")
+        self.logger.info(f"{CHECK} Filter initialised")
         
         self.risk_manager.instant_close = getattr(self.config, "INSTANT_CLOSE_TRADES", "hold")
         self.risk_manager.emit_closed_on_hold = getattr(self.config, "RM_EMIT_CLOSED_ON_HOLD", True)
@@ -132,7 +150,7 @@ class TradingBot:
         # Clear risk manager positions for new symbol
         self.risk_manager.positions.clear()
     
-        self.logger.info(f"✅ Trading symbol changed to: {new_symbol}")
+        self.logger.info(f"{CHECK} Trading symbol changed to: {new_symbol}")
 
         
     def _setup_logging(self):
@@ -262,7 +280,7 @@ class TradingBot:
                         self.logger.warning(f"failed to ingest tick: {e}")
                 ########################
 
-                self.logger.debug(f"🎯 BOT GOT PRICE: {price}") # ADD THIS
+                self.logger.debug(f"{TARGET} BOT GOT PRICE: {price}") # ADD THIS
                 
                 ## ---- NEW ----
                 if price is None:
@@ -400,19 +418,6 @@ class TradingBot:
                         strategy_name=type(self.strategy).__name__
                     )
 
-
-                # 4) Optional: update analysis cache (for /api/market_analysis)
-                # try:
-                #     self._latest_analysis = self.strategy.analyze_market_context(symbol)
-                # except Exception:
-                #     self._latest_analysis = {"current_price": price}
-
-                #####
-                # if not self.data_manager.is_connected():
-                #     if not self.connect():
-                #         self.logger.error("Cannot connect, aborting start()")
-                #         return False
-                #####
 
                 # 5) Heartbeat every ~10s
                 now = time.time()
@@ -565,7 +570,7 @@ class TradingBot:
                 )
 
                 if not allow_entry:
-                    self.logger.warning(f"⛔️ ENTRY BLOCKED: {block_reason}")
+                    self.logger.warning(f"{BLOCKED} ENTRY BLOCKED: {block_reason}")
                     self.analytics.log_signal(
                         signal_id=signal_id,
                         symbol=sym,
@@ -577,7 +582,7 @@ class TradingBot:
                     )
                     return # EXIT - Don't execute!
                 
-                self.logger.info(f"✅ ENTRY APPROVED")
+                self.logger.info(f"{CHECK} ENTRY APPROVED")
 
             # ------------------------
             # DRY-RUN BRANCH
@@ -1235,7 +1240,7 @@ class TradingBot:
         Swap the active strategy at runtime.
         Safe to call before start(), or while paused.
         """
-        self.logger.info(f"🔥 SET_STRATEGY CALLED: name={name} params={params}")
+        self.logger.info(f"{FIRE} SET_STRATEGY CALLED: name={name} params={params}")
         params = params or {}
 
         # 1) Persist user params on the bot (so the trading loop can read them later)
@@ -1266,7 +1271,7 @@ class TradingBot:
             data_manager=self.data_manager,
             **merged
         )
-        self.logger.info(f"✅ STRATEGY NOW: {type(self.strategy).__name__}")
+        self.logger.info(f"{CHECK} STRATEGY NOW: {type(self.strategy).__name__}")
 
         # 3) (Optional) also reflect params onto strategy instance for convenience
         for k in ("opening_range_minutes", "breakout_threshold", "stop_loss_percent", "take_profit_percent", "breakout_points", "min_move_from_or"):
@@ -1490,7 +1495,7 @@ class TradingBot:
     
         self.strategy_manager.manual_override = True
         self.strategy_manager.manual_strategy_name = strategy_name
-        self.logger.info(f"🔧 MANUAL OVERRIDE: {strategy_name}")
+        self.logger.info(f"{WRENCH} MANUAL OVERRIDE: {strategy_name}")
         return True
 
 
@@ -1499,7 +1504,7 @@ class TradingBot:
         if hasattr(self, 'strategy_manager'):
             self.strategy_manager.manual_override = False
             self.strategy_manager.manual_strategy_name = None
-            self.logger.info("✅ Returning to auto-switching")
+            self.logger.info(f"{CHECK} Returning to auto-switching")
             return True
         return False
 

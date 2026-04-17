@@ -8,6 +8,7 @@ import logging
 import os, json
 import threading
 from config import Config
+from debug_config import CHECK
 
 class RiskManager:
     """
@@ -719,9 +720,9 @@ class RiskManager:
             analytics = TradeAnalytics()
             if trade_record:
                 analytics.log_trade(trade_record)
-                self.logger.info(f'✅ Logged trade to analytics: {trade_record.get("signal_id")}')
+                self.logger.info(f'{CHECK} Logged trade to analytics: {trade_record.get("signal_id")}')
         except Exception:
-            self.logger.error(f"❌ Failed to trade to analytics", exc_info=True) 
+            self.logger.error(f"{CROSS} Failed to trade to analytics", exc_info=True) 
             # pass # Don't break trading if logging fails
 
         # update last price & unrealized
