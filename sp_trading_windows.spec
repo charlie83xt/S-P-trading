@@ -22,6 +22,7 @@ hiddenimports = [
     # Core application
     'trading_bot',
     'web_app',
+    'web_ui',
     'launcher',
     'launch_web_dashboard',
     'config',
@@ -33,6 +34,9 @@ hiddenimports = [
     'data_manager',
     'api_factory',
     'api_interface',
+    'tradovate_api',
+    'binance_api',
+    'ninjatrader_api',
     'tradovate_web_ui_api',
     'risk_manager',
     'symbol_manager',
@@ -45,6 +49,7 @@ hiddenimports = [
     'orb_retest_strategy',
     'previous_day_high_low_strategy',
     'mean_reversion_strategy',
+    'mean_reversion_strategy_light',
     
     # Filters
     'intelligent_entry_filter',
@@ -53,6 +58,7 @@ hiddenimports = [
     'trade_analytics',
     'heartbeat_local',
     'query_analytics',
+    'export_trades',
     
     # Helpers
     'chrome_helper',

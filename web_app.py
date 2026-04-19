@@ -17,7 +17,6 @@ import shutil
 from trading_bot import TradingBot
 from config import Config
 from api_factory import APIFactory
-from minute_bar_builder import MinuteBarBuilder
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 # DASHBOARD_FILE = os.path.join(APP_DIR, "dashboard.html")
