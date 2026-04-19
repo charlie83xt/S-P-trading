@@ -9,12 +9,38 @@
 
 import sys
 import os
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
 # ============================================================================
-# CRITICAL: List ONLY files actually used in production
+# VERIFY CRITICAL FILES EXIST BEFORE BUILD
+# ============================================================================
+
+# Check templates folder exists
+if not os.path.isdir('templates'):
+    print("❌ ERROR: templates/ folder not found!")
+    print("   Make sure templates/ exists in the same directory as this .spec file")
+    print(f"   Current directory: {os.getcwd()}")
+    sys.exit(1)
+
+# Check dashboard.html exists
+if not os.path.isfile('templates/dashboard.html'):
+    print("❌ ERROR: templates/dashboard.html not found!")
+    print("   This is the main UI file and must exist")
+    sys.exit(1)
+
+print("✓ Found templates/dashboard.html")
+
+# List all templates being bundled
+print("\n✓ Templates to bundle:")
+for file in os.listdir('templates'):
+    print(f"  - {file}")
+print()
+
+# ============================================================================
+# HIDDEN IMPORTS
 # ============================================================================
 
 # Hidden imports - modules that PyInstaller might miss
@@ -117,36 +143,49 @@ hiddenimports = [
 ]
 
 # ============================================================================
-# DATA FILES - Files that need to be bundled
+# DATA FILES - Explicit paths with verification
 # ============================================================================
 
-datas = [
-    # Flask templates (REQUIRED for web UI)
-    ('templates', 'templates'),
-    
-    # Static files (if you have CSS/JS/images)
-    # ('static', 'static'),  # Uncomment if you have static folder
-    
-    # Configuration templates
-    ('.env.example', '.'),
-    
-    # Documentation
-    ('README.md', '.'),
-    
-    # Version and config
-    ('version.py', '.'),
-    ('debug_config.py', '.'),
-    
-    # IMPORTANT: Do NOT include .env (credentials)
-    # IMPORTANT: Do NOT include data/ folder (user-specific)
-]
+datas = []
+
+# Templates folder (CRITICAL - Flask needs this)
+templates_path = 'templates'
+if os.path.isdir(templates_path):
+    datas.append((templates_path, 'templates'))
+    print(f"✓ Including: {templates_path} → templates/")
+else:
+    print(f"❌ ERROR: {templates_path} not found!")
+    sys.exit(1)
+
+# Static folder (if exists)
+if os.path.isdir('static'):
+    datas.append(('static', 'static'))
+    print("✓ Including: static/ → static/")
+
+# Config template
+if os.path.isfile('.env.example'):
+    datas.append(('.env.example', '.'))
+    print("✓ Including: .env.example")
+
+# Documentation
+if os.path.isfile('README.md'):
+    datas.append(('README.md', '.'))
+    print("✓ Including: README.md")
+
+# Version and debug config
+if os.path.isfile('version.py'):
+    datas.append(('version.py', '.'))
+if os.path.isfile('debug_config.py'):
+    datas.append(('debug_config.py', '.'))
+
+print()
 
 # ============================================================================
-# ANALYSIS - What to include/exclude
+# ANALYSIS
 # ============================================================================
 
 a = Analysis(
-    ['launcher.py'],  # Entry point
+    ['launcher.py'],
     pathex=[],
     binaries=[],
     datas=datas,
@@ -155,19 +194,14 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Exclude large unused packages
-        'matplotlib',  # Unless you're plotting
-        'scipy',       # Unless you're using it
-        'PIL',         # Unless you have images
-        'tkinter',     # GUI toolkit (not needed for web app)
-        'pytest',      # Testing framework
-        'IPython',     # Interactive shell
-        'notebook',    # Jupyter
-        
-        # Exclude test files
+        'matplotlib',
+        'scipy',
+        'PIL',
+        'tkinter',
+        'pytest',
+        'IPython',
+        'notebook',
         'tests',
-        'test_*',
-        '_test',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -175,22 +209,10 @@ a = Analysis(
     noarchive=False,
 )
 
-# ============================================================================
-# REMOVE TEST/DEBUG FILES
-# ============================================================================
-
-# Filter out any test or debug files that snuck in
-a.datas = [x for x in a.datas if not any([
-    'test' in x[0].lower(),
-    'debug' in x[0].lower() and x[0] != 'debug_config.py',
-    '_test' in x[0].lower(),
-    'pytest' in x[0].lower(),
-])]
-
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 # ============================================================================
-# EXECUTABLE CONFIGURATION
+# EXECUTABLE
 # ============================================================================
 
 exe = EXE(
@@ -198,22 +220,21 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='S-P Trading',  # Name of the .exe
-    debug=False,          # Set to True only for debugging builds
+    name='S-P Trading',
+    debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,             # Compress with UPX
-    console=True,         # Show console window (set False to hide)
+    upx=True,
+    console=True,  # Show console for now (change to False to hide)
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # Add 'icon.ico' if you have an app icon
 )
 
 # ============================================================================
-# COLLECT FILES INTO DISTRIBUTION FOLDER
+# COLLECT
 # ============================================================================
 
 coll = COLLECT(
@@ -224,36 +245,23 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='S-P Trading',  # Name of the distribution folder
+    name='S-P Trading',
 )
 
 # ============================================================================
-# BUILD NOTES
+# POST-BUILD VERIFICATION
 # ============================================================================
 
-"""
-AFTER BUILDING:
-
-1. Test the executable:
-   cd "dist/S-P Trading"
-   "S-P Trading.exe" --setup
-
-2. Create installer with Inno Setup:
-   - Install Inno Setup: https://jrsoftware.org/isdl.php
-   - Use installer_script.iss
-   - Run: iscc installer_script.iss
-   - Creates: S-P-Trading-Setup-v1.0.0.exe
-
-3. Distribute:
-   - Share installer with users
-   - Users run installer
-   - App installs to Program Files
-   - Desktop shortcut created
-   - First run: setup wizard
-
-4. Updates:
-   - Bump version in version.py
-   - Rebuild: pyinstaller sp_trading_windows.spec
-   - Create new installer
-   - Users download and reinstall (settings preserved)
-"""
+print("\n" + "="*70)
+print("BUILD CONFIGURATION COMPLETE")
+print("="*70)
+print("\nTo build:")
+print("  pyinstaller sp_trading_windows.spec")
+print("\nOutput will be:")
+print("  dist/S-P Trading/S-P Trading.exe")
+print("  dist/S-P Trading/_internal/")
+print("  dist/S-P Trading/templates/")
+print("\nTo test:")
+print('  cd "dist\\S-P Trading"')
+print('  & ".\\S-P Trading.exe" --setup')
+print("="*70 + "\n")
