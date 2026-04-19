@@ -16,7 +16,7 @@ import argparse
 import subprocess
 from pathlib import Path
 from threading import Thread
-from debug_config import CHECK, CROSS, ROCKET, CHART, WRENCH, WARNING, INFO, NOTE, TERRA
+from debug_config import CHECK, CROSS, ROCKET, CHART, WRENCH, WARNING, INFO, NOTE, TERRA, RED, BOT
 
 # Add current directory to path so imports work
 sys.path.insert(0, str(Path(__file__).parent))
@@ -26,7 +26,7 @@ from app_config import (
     load_config, save_config, get_config_value, set_config_value,
     load_env_file, save_env_file, get_log_dir, get_app_config_dir
 )
-from version import APP_VERSION, get_version_info, load_version_info
+from version import APP_VERSION, load_version_info
 from authorization import (
     check_authorization_before_launch, register_machine,
     AuthorizationManager
