@@ -28,7 +28,7 @@ if sys.platform == 'win32':
 
 
 # NOW safe to import everything else
-from debug_config import debug_print, production_print, SUPPRESS_WERKZEUG, DEBUG, TERRA, ROCKET, CHECK, WRENCH, CROSS, WARNING, FOLDER
+from debug_config import debug_print, production_print, SUPPRESS_WERKZEUG, DEBUG, TERRA, ROCKET, CHECK, WRENCH, CROSS, WARNING, FOLDER, BULB
 
 
 # ============================================================================
