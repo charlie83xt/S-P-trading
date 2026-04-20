@@ -86,21 +86,28 @@ class IntelligentEntryFilter:
         return True, "all_filters_passed"
   
     def _check_volume(self, symbol: str, signal_type: str) -> Tuple[bool, str]:
-        """
-        Volume Confirmation: Real breakouts have volume surge.
-        False breakouts happen on low volume.
-        """
+        """Volume Confirmation."""
         try:
             # Get last 50 bars
             bars = self.dm.get_recent_bars(symbol, count=50, timeframe="1m")
-            if len(bars) < 20:
+            
+            # FIX: Check if bars is empty
+            if bars is None or (hasattr(bars, 'empty') and bars.empty):
+                self.logger.warning("Insufficient data for volume check")
                 return True, "insufficient_data"  # Allow if no data
             
-            # Current bar volume
-            current_volume = bars[-1].volume
+            # FIX: Check if bars has enough rows
+            if len(bars) < 20:
+                self.logger.warning(f"Only {len(bars)} bars, need 20+")
+                return True, "insufficient_data"
             
-            # Average volume (last 20 bars, excluding current)
-            avg_volume = bars[-21:-1]['volume'].mean()
+            # Get volume
+            try:
+                current_volume = bars.iloc[-1]['volume']
+                avg_volume = bars.iloc[-21:-1]['volume'].mean()
+            except (KeyError, IndexError) as e:
+                self.logger.error(f"Volume column error: {e}")
+                return True, "volume_data_error"
             
             if avg_volume == 0:
                 return True, "no_volume_data"
@@ -116,6 +123,7 @@ class IntelligentEntryFilter:
         except Exception as e:
             self.logger.error(f"Volume check error: {e}")
             return True, "volume_check_error"  # Don't block on errors
+
   
     def _check_momentum(
         self,

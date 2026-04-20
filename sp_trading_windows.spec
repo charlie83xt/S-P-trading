@@ -11,6 +11,7 @@ import sys
 import os
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
+import glob
 
 block_cipher = None
 
@@ -70,7 +71,7 @@ python_modules = [
     'api_interface.py',
     'tradovate_api.py',
     'binance_api.py',
-    'ninjatrader_api.py'
+    'ninjatrader_api.py',
     'tradovate_web_ui_api.py',
     'risk_manager.py',
     'symbol_manager.py',
@@ -195,7 +196,7 @@ hiddenimports = [
     'json',
     'pathlib',
     'logging',
-    logging.handlers',
+    'logging.handlers',
     'threading',
     'queue',
     'datetime',
@@ -270,6 +271,14 @@ for config_file in config_files:
         print(f"  → {config_file}")
 
 print()
+
+# JSON files (IMPORTANT for Tradovate)
+json_files = glob.glob('*.json')
+print("\nJSON files to bundle:")
+for json_file in json_files:
+    if json_file not in ['package.json', 'package-lock.json']:
+        datas.append((json_file, '.'))
+        print(f"  → {json_file}")
 
 
 # ============================================================================
