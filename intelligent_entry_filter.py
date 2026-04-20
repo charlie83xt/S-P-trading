@@ -131,38 +131,48 @@ class IntelligentEntryFilter:
         signal_type: str,
         signal_price: float
     ) -> Tuple[bool, str]:
-        """
-        Momentum Confirmation: Price should be accelerating in signal direction.
-        
-        Calculates:
-        - Recent price change velocity (3-bar vs 10-bar)
-        - RSI (not overbought/oversold extremes)
-        - Price position vs recent range
-        """
+        """Momentum Confirmation."""
         try:
             bars = self.dm.get_recent_bars(symbol, count=50, timeframe="1m")
-            if len(bars) < 20:
+            
+            # FIX: Check if bars is valid
+            if bars is None or (hasattr(bars, 'empty') and bars.empty):
+                self.logger.warning("Insufficient data for momentum check")
                 return True, "insufficient_data"
             
-            closes = bars['close'].values
+            if len(bars) < 20:
+                self.logger.warning(f"Only {len(bars)} bars, need 20+")
+                return True, "insufficient_data"
+            
+            # Get closes
+            try:
+                closes = bars['close'].values
+            except KeyError:
+                self.logger.error("No 'close' column in bars")
+                return True, "data_error"
             
             # Recent momentum (last 3 bars)
+            if len(closes) < 4:
+                return True, "insufficient_data"
+            
             recent_change = (closes[-1] - closes[-4]) / closes[-4]
             
             # Longer momentum (last 10 bars)
-            longer_change = (closes[-1] - closes[-11]) / closes[-11]
+            if len(closes) < 11:
+                longer_change = recent_change
+            else:
+                longer_change = (closes[-1] - closes[-11]) / closes[-11]
             
-            # Momentum score: recent should be stronger than longer (acceleration)
+            # Momentum score
             if signal_type == "BUY":
-                # Want positive momentum, accelerating up
+                # Want positive momentum
                 if recent_change <= 0:
                     return False, f"no_upward_momentum (change={recent_change:.4f})"
                 
-                # Check if accelerating
                 momentum_score = recent_change / max(abs(longer_change), 0.0001)
                 
             else:  # SELL
-                # Want negative momentum, accelerating down
+                # Want negative momentum
                 if recent_change >= 0:
                     return False, f"no_downward_momentum (change={recent_change:.4f})"
                 
@@ -171,7 +181,7 @@ class IntelligentEntryFilter:
             if momentum_score < self.min_momentum_score:
                 return False, f"weak_momentum (score={momentum_score:.2f}, need {self.min_momentum_score})"
             
-            # Check RSI - avoid extremes
+            # Check RSI
             rsi = self._calculate_rsi(closes, period=14)
             if signal_type == "BUY" and rsi > 75:
                 return False, f"overbought (RSI={rsi:.1f})"
@@ -184,6 +194,7 @@ class IntelligentEntryFilter:
         except Exception as e:
             self.logger.error(f"Momentum check error: {e}")
             return True, "momentum_check_error"
+
   
     def _check_order_flow(self, symbol: str, signal_type: str) -> Tuple[bool, str]:
         """
