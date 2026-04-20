@@ -60,27 +60,43 @@ def print_header():
 
 def validate_installation() -> bool:
     """
-    Validate that the app installation is complete and authorized.
+    Validate that the app installation is complete.
     
-    Returns:
-        True if authorized, False otherwise
+    In packaged app, modules are bundled, so check differently.
     """
     logger = logging.getLogger(__name__)
     
-    # Check for required files
-    required_files = [
-        "trading_bot.py",
-        "config.py",
-        "launch_web_dashboard.py",
-    ]
-    
-    for file in required_files:
-        if not Path(file).exists():
-            logger.error(f"{CROSS} Missing required file: {file}")
+    # Check if we're running from PyInstaller bundle
+    if getattr(sys, 'frozen', False):
+        # Running from PyInstaller bundle
+        logger.info("Running from packaged executable")
+        
+        # Check critical imports can be loaded
+        try:
+            import trading_bot
+            import web_app
+            import config
+            logger.info("[OK] Core modules loaded successfully")
+            return True
+        except ImportError as e:
+            logger.error(f"[X] Failed to import module: {e}")
             return False
     
-    logger.info(f"{CHECK} Installation validation passed")
-    return True
+    else:
+        # Running from source (development)
+        required_files = [
+            "trading_bot.py",
+            "config.py",
+            "launch_web_dashboard.py",
+        ]
+        
+        for file in required_files:
+            if not Path(file).exists():
+                logger.error(f"[X] Missing required file: {file}")
+                return False
+        
+        logger.info("[OK] Installation validation passed")
+        return True
 
 def setup_wizard(logger):
     """
