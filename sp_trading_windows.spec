@@ -10,13 +10,24 @@
 import sys
 import os
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 block_cipher = None
 
 # ============================================================================
 # VERIFY CRITICAL FILES EXIST BEFORE BUILD
 # ============================================================================
+
+print("\n" + "="*70)
+print("S-P TRADING - PYINSTALLER BUILD")
+print("="*70)
+
+# Verify we're in the right directory
+if not os.path.isfile('launcher.py'):
+    print("❌ ERROR: launcher.py not found!")
+    print(f"   Current directory: {os.getcwd()}")
+    print("   Make sure you're running from project root")
+    sys.exit(1)
 
 # Check templates folder exists
 if not os.path.isdir('templates'):
@@ -38,6 +49,61 @@ print("\n✓ Templates to bundle:")
 for file in os.listdir('templates'):
     print(f"  - {file}")
 print()
+
+# ============================================================================
+# COLLECT ALL PYTHON FILES AS DATA
+# ============================================================================
+
+
+# List all your .py files that need to be accessible at runtime
+python_modules = [
+    'trading_bot.py',
+    'web_app.py',
+    'web_ui.py',
+    'config.py',
+    'app_config.py',
+    'version.py',
+    'authorization.py',
+    'debug_config.py',
+    'data_manager.py',
+    'api_factory.py',
+    'api_interface.py',
+    'tradovate_api.py',
+    'binance_api.py',
+    'ninjatrader_api.py'
+    'tradovate_web_ui_api.py',
+    'risk_manager.py',
+    'symbol_manager.py',
+    'strategy_factory.py',
+    'strategy_manager.py',
+    'opening_range_strategy.py',
+    'orb_retest_strategy.py',
+    'previous_day_high_low_strategy.py',
+    'mean_reversion_strategy.py',
+    'mean_reversion_strategy_light.py',
+    'intelligent_entry_filter.py',
+    'trade_analytics.py',
+    'heartbeat_local.py',
+    'query_analytics.py',
+    'export_trades.py',
+    'chrome_helper.py',
+    'debug_config.py',
+]
+
+# Verify each module exists
+print("\nChecking Python modules:")
+missing_modules = []
+for module in python_modules:
+    if os.path.isfile(module):
+        print(f"  ✓ {module}")
+    else:
+        print(f"  ✗ {module} - NOT FOUND (will skip)")
+        missing_modules.append(module)
+
+if missing_modules:
+    print(f"\n⚠️  Warning: {len(missing_modules)} modules not found")
+    print("   Build will continue but these won't be available at runtime")
+
 
 # ============================================================================
 # HIDDEN IMPORTS
@@ -70,7 +136,6 @@ hiddenimports = [
     # Strategies
     'strategy_factory',
     'strategy_manager',
-    'base_strategy',
     'opening_range_strategy',
     'orb_retest_strategy',
     'previous_day_high_low_strategy',
@@ -148,37 +213,48 @@ hiddenimports = [
 
 datas = []
 
-# Templates folder (CRITICAL - Flask needs this)
-templates_path = 'templates'
-if os.path.isdir(templates_path):
-    datas.append((templates_path, 'templates'))
-    print(f"✓ Including: {templates_path} → templates/")
-else:
-    print(f"❌ ERROR: {templates_path} not found!")
-    sys.exit(1)
+# Add all Python modules as data files (so launcher can find them)
+for module in python_modules:
+    if os.path.isfile(module) and module not in missing_modules:
+        datas.append((module, '.'))
+        print(f"  → {module} will be bundled")
 
-# Static folder (if exists)
+# Templates (CRITICAL for Flask)
+if os.path.isdir('templates'):
+    # Add entire templates folder
+    import glob
+    template_files = glob.glob('templates/**/*', recursive=True)
+    for template_file in template_files:
+        if os.path.isfile(template_file):
+            # Preserve folder structure
+            dest_folder = os.path.dirname(template_file)
+            datas.append((template_file, dest_folder))
+            print(f"  → {template_file}")
+
+# Static files (if exists)
 if os.path.isdir('static'):
-    datas.append(('static', 'static'))
-    print("✓ Including: static/ → static/")
+    import glob
+    static_files = glob.glob('static/**/*', recursive=True)
+    for static_file in static_files:
+        if os.path.isfile(static_file):
+            dest_folder = os.path.dirname(static_file)
+            datas.append((static_file, dest_folder))
 
-# Config template
-if os.path.isfile('.env.example'):
-    datas.append(('.env.example', '.'))
-    print("✓ Including: .env.example")
+# Config and docs
+config_files = [
+    '.env.example',
+    'README.md',
+    'version.py',
+    'debug_config.py',
+]
 
-# Documentation
-if os.path.isfile('README.md'):
-    datas.append(('README.md', '.'))
-    print("✓ Including: README.md")
-
-# Version and debug config
-if os.path.isfile('version.py'):
-    datas.append(('version.py', '.'))
-if os.path.isfile('debug_config.py'):
-    datas.append(('debug_config.py', '.'))
+for config_file in config_files:
+    if os.path.isfile(config_file):
+        datas.append((config_file, '.'))
+        print(f"  → {config_file}")
 
 print()
+
 
 # ============================================================================
 # ANALYSIS
@@ -186,14 +262,15 @@ print()
 
 a = Analysis(
     ['launcher.py'],
-    pathex=[],
+    pathex=[os.getcwd()], # Explicitly set path to current directory
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[
+    excludes=[ 
+        # Exclude large unused packages
         'matplotlib',
         'scipy',
         'PIL',
@@ -202,12 +279,28 @@ a = Analysis(
         'IPython',
         'notebook',
         'tests',
+        'test',
+        '_test',
+        # Exclude invalid modules
+        'export_trades',  # Invalid module from launcher.py
+        'web_ui',         # Invalid module from launcher.py
+
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
+
+# ============================================================================
+# FILTER OUT TEST/DEBUG FILES
+# ============================================================================
+
+# Remove any test files that snuck in
+a.datas = [x for x in a.datas if not any([
+    'test' in x[0].lower() and 'pytest' not in x[0].lower(),
+    '_test' in x[0].lower(),
+])]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
@@ -255,13 +348,15 @@ coll = COLLECT(
 print("\n" + "="*70)
 print("BUILD CONFIGURATION COMPLETE")
 print("="*70)
-print("\nTo build:")
-print("  pyinstaller sp_trading_windows.spec")
-print("\nOutput will be:")
+print("\nExpected output:")
 print("  dist/S-P Trading/S-P Trading.exe")
 print("  dist/S-P Trading/_internal/")
-print("  dist/S-P Trading/templates/")
+print("  dist/S-P Trading/templates/dashboard.html")
+print("  dist/S-P Trading/trading_bot.py")
+print("  dist/S-P Trading/web_app.py")
+print("  dist/S-P Trading/[all other .py files]")
 print("\nTo test:")
 print('  cd "dist\\S-P Trading"')
 print('  & ".\\S-P Trading.exe" --setup')
 print("="*70 + "\n")
+
