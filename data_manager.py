@@ -11,6 +11,7 @@ import os
 import math
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from pathlib import Path
 
 from api_factory import APIFactory
 from api_interface import TradingAPIInterface
@@ -148,6 +149,7 @@ class DataManager:
 
         # self.db_path = 'market_data.db'
         self.db_path = getattr(self.config, 'DATABASE_PATH', 'data/db/market_data.db')
+        
         self._init_database()
         self._tick_buf = None
 
@@ -440,6 +442,10 @@ class DataManager:
         
     def _init_database(self):
         """Initialize SQLite database for storing market data."""
+        # Ensure database directory exists
+        db_path = Path(self.db_path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
