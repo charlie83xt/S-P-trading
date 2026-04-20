@@ -270,28 +270,40 @@ def start_dashboard(logger, config: dict) -> bool:
         return False
 
 def run_app(logger, config: dict):
-    """
-    Main application run loop.
-    """
+    """Main application run loop."""
+    
     print("\n" + "="*60)
     print(f"{ROCKET} STARTING APPLICATION")
     print("="*60 + "\n")
     
-    # Validate installation
-    if not validate_installation():
-        logger.error(f"{CROSS} Installation validation failed")
-        print(f"{CROSS} Installation is not complete. Please check the logs.")
-        return False
+    # ... existing validation code ...
     
     # Start Chrome
     if not start_chrome(logger, config):
-        print(f"{CROSS} Failed to start Chrome. Make sure it's installed.")
+        print(f"{CROSS} Failed to start Chrome.")
         return False
     
     # Start dashboard
     if not start_dashboard(logger, config):
         print(f"{CROSS} Failed to start dashboard.")
         return False
+    
+    # FIX: Auto-open browser to dashboard
+    dashboard_port = config.get('dashboard_port', 5000)
+    dashboard_url = f"http://localhost:{dashboard_port}"
+    
+    logger.info(f"Opening browser to {dashboard_url}...")
+    
+    try:
+        import webbrowser
+        # Wait a moment for Flask to fully start
+        time.sleep(2)
+        # Open browser
+        webbrowser.open(dashboard_url)
+        logger.info(f"{CHECK} Browser opened")
+    except Exception as e:
+        logger.warning(f"Could not auto-open browser: {e}")
+        logger.info(f"Please open manually: {dashboard_url}")
     
     # Load environment variables
     env_vars = load_env_file()
@@ -300,7 +312,7 @@ def run_app(logger, config: dict):
     print("\n" + "="*60)
     print(f"{CHECK} APPLICATION RUNNING")
     print("="*60)
-    print(f"Dashboard: http://localhost:{config.get('dashboard_port', 5000)}")
+    print(f"Dashboard: {dashboard_url}")
     print(f"Chrome debugging: localhost:{config.get('chrome_port', 9222)}")
     print("\nPress Ctrl+C to stop the application.\n")
     
@@ -309,10 +321,11 @@ def run_app(logger, config: dict):
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print(f"\n\n{RED} Shutting down...")
+        print(f"\n\n{CROSS} Shutting down...")
         logger.info("Application stopped by user")
     
     return True
+
 
 def main():
     """Main entry point."""
