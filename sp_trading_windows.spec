@@ -162,12 +162,16 @@ hiddenimports = [
     'werkzeug',
     'werkzeug.routing',
     'werkzeug.serving',
+    'werkzeug.middleware',
+    'werkzeug.middleware.proxy.fix',
     'jinja2',
     'jinja2.ext',
     'click',
     
     # Data processing
     'pandas',
+    'pandas.core',
+    'pandas.core.arrays',
     'numpy',
     'numpy.core',
     'numpy.lib',
@@ -183,12 +187,15 @@ hiddenimports = [
     'playwright',
     'playwright.sync_api',
     'playwright._impl',
+    'playwright._impl._browser',
+    'playwright._impl._page',
     
     # Environment and config
     'dotenv',
     'json',
     'pathlib',
     'logging',
+    logging.handlers',
     'threading',
     'queue',
     'datetime',
@@ -198,9 +205,18 @@ hiddenimports = [
     'platform',
     'subprocess',
     'socket',
+    'hashlib',
+    'hmac',
+    'base64',
+    'uuid',
     
     # Supabase (optional but include if installed)
     'supabase',
+    'httpx',
+    'gotrue',
+    'postgrest',
+    'realtime',
+    'storage3',
     
     # Avoid warnings
     'pkg_resources.py2_warn',
@@ -282,8 +298,8 @@ a = Analysis(
         'test',
         '_test',
         # Exclude invalid modules
-        'export_trades',  # Invalid module from launcher.py
-        'web_ui',         # Invalid module from launcher.py
+        # 'export_trades',  # Invalid module from launcher.py
+        # 'web_ui',         # Invalid module from launcher.py
 
     ],
     win_no_prefer_redirects=False,
