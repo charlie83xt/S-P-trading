@@ -208,25 +208,65 @@ def start_dashboard(logger, config: dict) -> bool:
     logger.info(f"{CHART} Starting dashboard on port {dashboard_port}...")
     
     try:
-        # Start dashboard in background
-        process = subprocess.Popen(
-            [sys.executable, "launch_web_dashboard.py"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+        # FIX: Check if running from PyInstaller bundle
+        if getattr(sys, 'frozen', False):
+            # Running from packaged .exe
+            # Import and run directly (don't subprocess)
+            logger.info("Starting dashboard from packaged app...")
+            
+            # Set environment variables
+            os.environ['PORT'] = str(dashboard_port)
+            
+            # Import and start Flask in a thread
+            def run_flask():
+                try:
+                    # Import web_app (it's bundled in _internal)
+                    import web_app
+                    # Run Flask
+                    web_app.app.run(
+                        host='0.0.0.0',
+                        port=dashboard_port,
+                        debug=False,
+                        use_reloader=False  # CRITICAL: No reloader in packaged app
+                    )
+                except Exception as e:
+                    logger.error(f"Flask error: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # Start Flask in background thread
+            flask_thread = Thread(target=run_flask, daemon=True)
+            flask_thread.start()
+            
+            # Wait for Flask to start
+            time.sleep(3)
+            
+            logger.info(f"{CHECK} Dashboard started in background thread")
+            return True
         
-        # Wait a moment for startup
-        time.sleep(2)
-        
-        if process.poll() is not None:
-            logger.error(f"{CROSS} Dashboard process exited unexpectedly")
-            return False
-        
-        logger.info(f"{CHECK} Dashboard started (PID: {process.pid})")
-        return True
+        else:
+            # Running from source (development mode)
+            # Use subprocess as before
+            process = subprocess.Popen(
+                [sys.executable, "launch_web_dashboard.py"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            
+            # Wait a moment for startup
+            time.sleep(2)
+            
+            if process.poll() is not None:
+                logger.error(f"{CROSS} Dashboard process exited unexpectedly")
+                return False
+            
+            logger.info(f"{CHECK} Dashboard started (PID: {process.pid})")
+            return True
         
     except Exception as e:
         logger.error(f"{CROSS} Failed to start dashboard: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 def run_app(logger, config: dict):
