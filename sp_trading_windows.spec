@@ -60,7 +60,6 @@ print()
 python_modules = [
     'trading_bot.py',
     'web_app.py',
-    'web_ui.py',
     'config.py',
     'app_config.py',
     'version.py',
@@ -86,7 +85,6 @@ python_modules = [
     'trade_analytics.py',
     'heartbeat_local.py',
     'query_analytics.py',
-    'export_trades.py',
     'chrome_helper.py',
     'debug_config.py',
 ]
@@ -115,7 +113,6 @@ hiddenimports = [
     # Core application
     'trading_bot',
     'web_app',
-    'web_ui',
     'launcher',
     'launch_web_dashboard',
     'config',
@@ -150,7 +147,6 @@ hiddenimports = [
     'trade_analytics',
     'heartbeat_local',
     'query_analytics',
-    'export_trades',
     
     # Helpers
     'chrome_helper',
@@ -307,8 +303,8 @@ a = Analysis(
         'test',
         '_test',
         # Exclude invalid modules
-        # 'export_trades',  # Invalid module from launcher.py
-        # 'web_ui',         # Invalid module from launcher.py
+        'export_trades',  # Invalid module from launcher.py
+        'web_ui',         # Invalid module from launcher.py
 
     ],
     win_no_prefer_redirects=False,

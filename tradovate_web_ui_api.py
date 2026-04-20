@@ -96,6 +96,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
         self._last_positions_rows = None
         self._last_positions_ts = 0.0
+        self.logger = logging.getLogger(__name__)
         
         try:
             self._load_selectors()
@@ -171,7 +172,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     # not fatal, still consider connected - UI scrape will retry
                     pass
             except Exception as e:
-                logger.warning(f"Expected error in [TradovateWebUIAPI.connect]: {e}")
+                self.logger.warning(f"Expected error in [TradovateWebUIAPI.connect]: {e}")
                 # pass
             self._connected = True
             return True
@@ -214,7 +215,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
     #         last_text = self._inner_text("[data-test-id='last-price']") # REPLACE Selector
     #         return self._to_float(last_text)
     #     except Exception as e:
-    #         logger.warning("get_current_price(%s) failed: %s", symbol, e)
+    #         self.logger.warning("get_current_price(%s) failed: %s", symbol, e)
     #         return float("nan")
 
     def get_order_book(self, symbol: str, depth: int = 10) -> Dict[str, Any]:
@@ -224,7 +225,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             asks = self._scrape_ladder("[data-test-id='ask-row']", depth) # REPLACE
             return {"symbol": symbol, "bids": bids, "asks": asks, "timestapm": datetime.utcnow().isoformat()}
         except Exception as e:
-            logger.warning("get_order_book(%s) failed: %s", symbol, e)
+            self.logger.warning("get_order_book(%s) failed: %s", symbol, e)
             return {"symbol": symbol, "bids": [], "asks": [], "error": str(e)}
 
     # ------------- TradingAPIInterface: Trading ---------------------
@@ -249,7 +250,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             return True
         except Exception as e:
             self._snapshot("cancel_order_error")
-            logger.warning("cancel_order(%s, %s) failed: %s", symbol, order_id, e)
+            self.logger.warning("cancel_order(%s, %s) failed: %s", symbol, order_id, e)
             return False
 
     def close_position(self, symbol: str) -> Dict[str, Any]:
@@ -287,7 +288,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 })
             return out
         except Exception as e:
-            logger.warning("get_open_orders failed: %s", e)
+            self.logger.warning("get_open_orders failed: %s", e)
             return []
 
     
@@ -310,7 +311,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     timeout_ms=4000,
                 )
             except Exception:
-                logger.warning("get_positions: failed to enforce Positions tab")
+                self.logger.warning("get_positions: failed to enforce Positions tab")
 
         # Throttle + cache to avoid scrapping repeatedly ad to survive brief UI glitches
         cache = getattr(self, "_pos_cache", None)
@@ -337,13 +338,13 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 if table_sel:
                     table = self._page.locator(table_sel).first
                     if self._looks_like_positions_table(table):
-                        logger.info("get_positions: table-first hit selector=%s", table_sel)
+                        self.logger.info("get_positions: table-first hit selector=%s", table_sel)
                         result = self._parse_positions_table(table, root_symbol=root_symbol, ui_symbol=ui_symbol, include_zero_rows=include_zero_rows)
                         self._pos_cache = result
                         self._pos_cache_ts = now
                         return result
                     else:
-                        logger.info("get_positions: table-first selector found but does NOT look like Positions table -> ignore")
+                        self.logger.info("get_positions: table-first selector found but does NOT look like Positions table -> ignore")
 
             # 2) If not table visible, attempt to go to Positions tab
             # Go to positions tab (using selector map)
@@ -355,22 +356,22 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # # try each candidate selector until one works
             clicked = self._click_any_first_visible("positions.tab", timeout_ms=8000)
             if clicked:
-                logger.info("get_positions: clicked positions.tab")
+                self.logger.info("get_positions: clicked positions.tab")
             # for s in (tab_sel if isinstance(tab_sel, list) else [tab_sel]):
             #     if self._click_first_visible_sync(s, timeout_ms=8000):
             #         clicked = True
-            #         logger.info("get_positions: clicked positions.tab via selector=%s", s)
+            #         self.logger.info("get_positions: clicked positions.tab via selector=%s", s)
             #         active = self._wait_any(self._expand("positions.tab_active"), timeout_ms=2000)
-            #         logger.info("get_positions: tab_active after click=%s", bool(active))
+            #         self.logger.info("get_positions: tab_active after click=%s", bool(active))
             #         break
             if not clicked:
-                logger.warning("get_positions: could not click Positions tab (no visible+enabled match)")
+                self.logger.warning("get_positions: could not click Positions tab (no visible+enabled match)")
 
                 table_sel = self._first_visible_selector(table_selectors)
                 if table_sel:
                     table = self._page.locator(table_sel).first
                     if self._looks_like_positions_table(table):
-                        logger.info("get_positions: recovered via table-first despite inactive tab")
+                        self.logger.info("get_positions: recovered via table-first despite inactive tab")
                         result = self._parse_positions_table(
                             table,
                             root_symbol=root_symbol,
@@ -389,11 +390,11 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # Wait for positions table container (using selector map)
             table_sel = self._wait_any(table_selectors, timeout_ms=8000)
             if not table_sel:
-                logger.warning("get_positions: positions.table not found/visible after tab click")
+                self.logger.warning("get_positions: positions.table not found/visible after tab click")
                 return self._cache_fallback(now)
 
             table = self._page.locator(table_sel).first
-            logger.info("get_positions: using table selector=%s", table_sel)
+            self.logger.info("get_positions: using table selector=%s", table_sel)
 
             result = self._parse_positions_table(table, root_symbol=root_symbol, ui_symbol=ui_symbol)
             self._pos_cache = result
@@ -401,7 +402,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             return result
 
         except Exception as e:
-            logger.warning("get_positions failed: %s", e)
+            self.logger.warning("get_positions failed: %s", e)
             return self._cache_fallback(now)
 
 
@@ -411,7 +412,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         cache_ts = getattr(self, "_pos_cache_ts", 0.0)
         age = now - cache_ts
         if cache is not None and age < 5.0:
-            logger.warning("get_positions: using cached positions age=%.2fs", age)
+            self.logger.warning("get_positions: using cached positions age=%.2fs", age)
             return cache
 
         return None
@@ -501,10 +502,10 @@ class TradovateWebUIAPI(TradingAPIInterface):
             
             if rows is None:
                 # Table exist but no rows found -> confidently flat
-                logger.info("positions table present but no rows matched ->  UNKNOWN (virtualization)")
+                self.logger.info("positions table present but no rows matched ->  UNKNOWN (virtualization)")
                 return None
 
-            logger.info("get_positions: using row selector=%s", used_row_sel)
+            self.logger.info("get_positions: using row selector=%s", used_row_sel)
 
             out: List[Dict[str, Any]] = []
             cnt = self._run(rows.count(), timeout=1.0) or 0
@@ -565,7 +566,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                         continue # not a position row we understand
                     
                     if sym and sym.upper().startswith("ES"):
-                        logger.info("POS CELL DUMP sym=%s cells=%s row=%s", sym, cell_texts, row_txt_norm)
+                        self.logger.info("POS CELL DUMP sym=%s cells=%s row=%s", sym, cell_texts, row_txt_norm)
 
                     if ui_symbol:
                         if sym.upper() != ui_symbol.upper():
@@ -593,13 +594,13 @@ class TradovateWebUIAPI(TradingAPIInterface):
                             if len(cell_texts) > 1 and re.fullmatch(r"-?\d+", (cell_texts[1] or "").strip()):
                                 v = int(cell_texts[1]) # NEW
                                 qty = v if v > 0 else abs(v) # NEW normalise long to +, previously: int(cell_texts[1])
-                                logger.info("POS DEBUG (long/short) sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
+                                self.logger.info("POS DEBUG (long/short) sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
 
                         elif (" short" in hdr) or hdr.endswith(" short"):
                             if len(cell_texts) > 1 and re.fullmatch(r"-?\d+", (cell_texts[1] or "").strip()):
                                 v = int(cell_texts[1]) # NEW
                                 qty = v if v < 0 else -abs(v) # NEW normalise short to -, previously: -int(cell_texts[1])
-                                logger.info("POS DEBUG (long/short) sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
+                                self.logger.info("POS DEBUG (long/short) sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
 
                     # Fallback: if cells look like [Symbol, NetPos, Bought, Sold, ...]
                     if qty is None and cell_texts:
@@ -608,7 +609,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                             t1 = (cell_texts[1] or "").strip()
                             if re.fullmatch(r"-?\d+", t1):
                                 qty = int(t1)
-                                logger.info("POS DEBUG (col1 netpos) sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
+                                self.logger.info("POS DEBUG (col1 netpos) sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
 
                         # 2) If still unknown, use guarded heuristic, but DO NOT prefer bought/sold totals over netpos=0
                         if qty is None:
@@ -639,7 +640,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                                 pick_from.sort(key=lambda x: (abs(x[1]), x[0]))
                                 qty = pick_from[0][1]
                                 #######
-                                logger.info("POS DEBUG sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
+                                self.logger.info("POS DEBUG sym=%s qty=%s cells=%s row=%s", sym, qty, cell_texts, row_txt_norm)
 
 
                     # Last resort: avoiding price fragments by excluding decimals
@@ -659,7 +660,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     if qty is None:
                         qty_parse_failed = True
                         # # we found a symbol row but couldn't parse NET POS -> NOT confidently flat
-                        logger.warning("get_positions: qty parse failed for sym=%s row=%s cells=%s", sym, row_txt_norm, cell_texts)
+                        self.logger.warning("get_positions: qty parse failed for sym=%s row=%s cells=%s", sym, row_txt_norm, cell_texts)
                         # return None
                         qty = None # keep row for debugging
 
@@ -688,10 +689,10 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # If we saw symbol rows but couldn't parse qty reliably, state is UNKNOWN (not flat)
             if qty_parse_failed and out:
                 # we found a symbol row but couldn't parse NET POS -> NOT confidently flat
-                # logger.warning("get_positions: qty parse failed for at least one row; returning None (unknown)")
+                # self.logger.warning("get_positions: qty parse failed for at least one row; returning None (unknown)")
                 # try:
                     # Temporary row_text for check purposes
-                    # self.logger.info("PRINTING ROW_TEXT=%s", out[0].get("row_text"))
+                    # self.self.logger.info("PRINTING ROW_TEXT=%s", out[0].get("row_text"))
                 # except Exception:
                     # pass
                 return None
@@ -699,7 +700,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             return []
 
         except Exception as e:
-            logger.warning("get_positions failed: %s", e)
+            self.logger.warning("get_positions failed: %s", e)
             return None
 
     def get_balance(self) -> Dict[str, Any]:
@@ -757,7 +758,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # total = cash + (locked if locked == locked else 0.0)
             return {"USD": {"free": eq, "locked": 0.0, "total": eq}}
         except Exception as e:
-            logger.warning("get_balance failed: %s", e)
+            self.logger.warning("get_balance failed: %s", e)
             cached = getattr(self, "_last_equity", float("nan"))
             return {"USD": {"free": cached, "locked": 0.0, "total": cached, "error": str(e)}}
 
@@ -789,10 +790,10 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     v = self._parse_price_text(txt)
                     if v is not None:
                         if getattr(self, "TRACE_PRICES", False):
-                            logger.info("get_current_price(%s) -> %s", symbol, v)
+                            self.logger.info("get_current_price(%s) -> %s", symbol, v)
                         return v
                 except Exception as e:
-                    logger.debug(f"Expected error in [TradovateWebUIAPI._clean_to_flat]: {e}")
+                    self.logger.debug(f"Expected error in [TradovateWebUIAPI._clean_to_flat]: {e}")
                     # pass
             # fallback cleaner: digits, dot, minus
             try:
@@ -815,7 +816,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     if mapping:
                         sels.extend(mapping if isinstance(mapping, list) else [mapping])       
             except Exception as e:
-                logger.debug(f"Expected error in [TradovateWebUIAPI._clean_to_float]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI._clean_to_float]: {e}")
                 # pass
 
             sels += [
@@ -830,7 +831,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     val = _clean_to_float(txt)
                     if val is not None:
                         if getattr(self, "TRACE_PRICES", False):
-                            logger.info("get_current_price(%s) -> %s", symbol, val)
+                            self.logger.info("get_current_price(%s) -> %s", symbol, val)
                         return val
                 except Exception:
                     continue
@@ -866,7 +867,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     # val = self._parse_price_text(price_text)
                     if val is not None:
                         if getattr(self, "TRACE_PRICES", False):
-                            logger.info("get_current_price(%s) -> %s", symbol, val)
+                            self.logger.info("get_current_price(%s) -> %s", symbol, val)
                         return val
                 except Exception:
                     continue
@@ -876,11 +877,11 @@ class TradovateWebUIAPI(TradingAPIInterface):
         except Exception as e:
             try:
                 if hasattr(self, "logger"):
-                    self.logger.warning(f"get_current_price({symbol}) failed: {e}")
+                    self.self.logger.warning(f"get_current_price({symbol}) failed: {e}")
             except Exception as e:
-                logger.debug(f"Expected error in [TradovateWebUIAPI.get_current_price]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI.get_current_price]: {e}")
                 # pass
-            logger.debug("get_current_price(%s) -> None (no selector matched)", symbol)
+            self.logger.debug("get_current_price(%s) -> None (no selector matched)", symbol)
             return None
 
 
@@ -923,7 +924,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
     def _place_order(self, symbol: str, side: str, quantity: float, order_type: str, price: Optional[float] = None) -> Dict[str, Any]:
         try:
-            logger.info(
+            self.logger.info(
                 "_place_order: symbol=%s side=%s qty=%s type=%s price=%s dry_run=%s ui_confirm=%s",
                 symbol,
                 side,
@@ -946,7 +947,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 pos = None
 
             if pos is None:
-                logger.warning("_place_order: Positions unknown/undeterminable — blocking order to avoid stacking.")
+                self.logger.warning("_place_order: Positions unknown/undeterminable — blocking order to avoid stacking.")
                 return {"error": "positions_unknown_block", "symbol": symbol, "side": side, "qty": quantity, "type": order_type, "price": price}
             
             # Quantity
@@ -957,16 +958,16 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
             # optional strict mode: only allow when flat
             if len(pos) > 0:
-                logger.warning("_place_order: Existing position(s) detected — blocking to avoid stacking. pos=%s", pos)
+                self.logger.warning("_place_order: Existing position(s) detected — blocking to avoid stacking. pos=%s", pos)
                 return {"error": "position_not_flat_block", "positions": pos, "symbol": symbol, "side": side, "qty": quantity, "type": order_type, "price": price}
 
             # Select side
             if side.upper() == "BUY":
-                logger.info("_place_order: clicking Buy Mkt (order.buy_market)")
+                self.logger.info("_place_order: clicking Buy Mkt (order.buy_market)")
                 # self._click_any(".market-buttons >> text=Buy Mkt", timeout_ms=self.timeout_ms)
                 self._click_any("order.buy_market", timeout_ms=self.timeout_ms)
             else:
-                logger.info("_place_order: clicking Sell Mkt (order.sell_market)")
+                self.logger.info("_place_order: clicking Sell Mkt (order.sell_market)")
                 # self._click_any(".market-buttons >> text=Sell Mkt", timeout_ms=self.timeout_ms)
                 self._click_any("order.sell_market", timeout_ms=self.timeout_ms)
             # self._click(f"[data-test-id='ticket-side-{side.lower()}']") # REPLACING
@@ -974,7 +975,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             if order_type.lower() in ("limit", "stop"):
                 if price is None:
                     raise ValueError("price/stop required for limit/stop")
-                logger.info("_place_order: filling price field with %s", price)
+                self.logger.info("_place_order: filling price field with %s", price)
                 # For stop orders, this might be a different field - adjust selector
                 # self._page.get_by_placeholder("price").fill(str(price))
                 # self._fill("[data-test-id='ticket-price']", str(price)) # REPLACING
@@ -987,17 +988,17 @@ class TradovateWebUIAPI(TradingAPIInterface):
             if self.dry_run:
                 try:
                     if getattr(self, "ui_confirm", False):
-                        logger.info("_place_order: dry_run+ui_confirm -> confirm_order()")
+                        self.logger.info("_place_order: dry_run+ui_confirm -> confirm_order()")
                         # the JSON has separate selectors for buy/sell
                         # if side.upper() == "BUY":
-                            # logger.info("UI confirm enabled, clicking %s", "confirm.submit_buy" if side.upper()=="BUY" else "confirm.submit_sell")
+                            # self.logger.info("UI confirm enabled, clicking %s", "confirm.submit_buy" if side.upper()=="BUY" else "confirm.submit_sell")
                             # self._maybe_click("confirm.submit_buy", 2000)
                         self.confirm_order(side=side, timeout_ms=3000)
                         # else:
                             # self._maybe_click("confirm.submit_sell", 2000)
                             # self.confirm_order(side=side, timeout_ms=2000)
                 except Exception as e:
-                    logger.warning(
+                    self.logger.warning(
                         "_place_order: dry_run confirm_order failed: %s", e
                     )
                     # don't break dry-run for a missing modal
@@ -1012,7 +1013,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     "price": price,
                     "status": "dry_run_only"
                 }
-            logger.info("_place_order: calling confirm_order() for real submit")
+            self.logger.info("_place_order: calling confirm_order() for real submit")
             # Real submit (when we are ready)
             # try real primary buttons first
             # if not self._maybe_click("confirm.submit_buy", 1200) and not self._maybe_click("confirm.submit_sell", 1200):
@@ -1034,9 +1035,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # self._maybe_click("text=Confirm", 3000)
             try:
                 self._wait("text=Order Submitted", self.timeout_ms) # To replace with an actual success marker
-                logger.info("_place_order: 'Order Submitted' toast detected")
+                self.logger.info("_place_order: 'Order Submitted' toast detected")
             except Exception:
-                logger.info(
+                self.logger.info(
                     "_place_order: did not see 'Order Submitted' toast, "
                     "but confirm click already attempted"
                 )
@@ -1094,15 +1095,20 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # start Playwright
             self._pw = await async_playwright().start()
 
-            # self.browser = await self._pw_chromium.launc(
-            #     headless=not getattr(self, "headful", True),
-            #     args=getattr(self, "_chromium_args", lambda: [])()
-            # )
-            # # reuse/open context
-            # if getattr(self, "_context", None) is None:
-            #     self._context = await self._browser.new_context()
-            # self._page = await self._context.new_page()
-            # await self._page.goto(self.base_url)
+            if getattr(sys, 'frozen', False):
+                # Packaged app: force CDP mode
+                self.self.logger.info("Packaged app: using CDP mode")
+                endpoint = f"http://localhost:{self._cdp_port}"
+                self._browser = await self._pw.chromium.connect_over_cdp(endpoint)
+                
+                if self._browser.contexts:
+                    self._context = self._browser.contexts[0]
+                else:
+                    self._context = await self._browser.new_context()
+                
+                self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
+                await self._page.goto(base_url, timeout=30000)
+                return  # Exit early - don't run code below
 
             if mode == "cdp":
                 # Connect to the Chrome we started manually
@@ -1146,8 +1152,6 @@ class TradovateWebUIAPI(TradingAPIInterface):
             await self._page.goto(base_url)
         
         self._run(_do_launch(), timeout=120)
-
-
 
         # Fallback (bundled Chromium; likely unsupported on macOS 10.15, but keep for completeness)
         # self._browser = self._pw.chromium.launch(headless=self.headless)
@@ -1200,7 +1204,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             self._run(self._page.goto(self.base_url, wait_until="domcontentloaded"))
         except Exception as e:
             # In CDP mode we might already be on the app page; ignoring navigation errors
-            logger.debug(f"Expected error in [TradovateWebUIAPI._logging_iif_needed]: {e}")
+            self.logger.debug(f"Expected error in [TradovateWebUIAPI._logging_iif_needed]: {e}")
             # pass
 
         # If already logged in on any page/frame, return immediately
@@ -1319,7 +1323,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 self._run(page.wait_for_selector(sel, timeout=per_attempt_ms, state="visible"), timeout=per_attempt_ms/1000 + 5)
                 return True
             except Exception as e:
-                logger.debug(f"Expected error in [TradovateWebUIAPI._any_visible_global]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI._any_visible_global]: {e}")
                 # pass
         # then every frame
         try:
@@ -1332,7 +1336,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     self._run(fr.wait_for_selector(sel, timeout=per_attempt_ms, state="visible"), timeout=per_attempt_ms/1000 + 5)
                     return True
                 except Exception as e:
-                    logger.debug(f"Expected error in [TradovateWebUIAPI._any_visible_global]: {e}")
+                    self.logger.debug(f"Expected error in [TradovateWebUIAPI._any_visible_global]: {e}")
                     # pass
         return False
 
@@ -1349,7 +1353,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             self._wait_any("symbol.first_result")
             self._click_any("symbol.first_result")
         except Exception as e:
-            logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
+            self.logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
             # pass
         
         self._wait_any("order.buy_market", timeout=self.timeout_ms)
@@ -1375,7 +1379,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     self._ensure_symbol_loaded(symbol) # your current implementation
             except Exception as e:
                 # non-fatal, continue with verification/heuristics
-                logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
                 # pass
             # 2) Verify chart header contains symbol (fast check)
             try:
@@ -1384,7 +1388,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 if cnt and cnt > 0:
                     return True
             except Exception as e:
-                logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
                 # pass
 
             # 3) Heuriostic: try a few generic symbol search inputs
@@ -1401,7 +1405,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     try:
                         self._run(loc.fill(""), timeout=0.8)
                     except Exception as e:
-                        logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
+                        self.logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
                         # pass
                     self._run(loc.type(symbol), timeout=1.2)
                     self._run(self._page.keyboard.press("Enter"), timeout=0.8)
@@ -1475,7 +1479,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 self._switch_to("positions.tab", "positions.tab_active")
             except Exception as e:
-                logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
                 # pass
             
             side = (side or "").strip().lower()
@@ -1487,10 +1491,10 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 # If popover already open, do NOT click outer button again.
                 existing = self._run(self._find_confirm_popover(target=target, max_wait_ms=1), timeout=0.5)
                 if existing is not None:
-                    logger.info("[click_market_button] confirm popover already open (%s); skipping outer click", target)
+                    self.logger.info("[click_market_button] confirm popover already open (%s); skipping outer click", target)
                     return True # let confirm_order() handle it
             except Exception as e:
-                logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
                 # pass
             
             if not skip_position_checks:
@@ -1501,12 +1505,12 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     pos = None
 
                 if pos is None:
-                    logger.warning("[click_market_button] Positions unknown - blocking click to avoid stacking.")
+                    self.logger.warning("[click_market_button] Positions unknown - blocking click to avoid stacking.")
                     return False
 
                 # Optional: block if any open positions exists
                 if len(pos) > 0:
-                    logger.warning("[click_market_button] Existing position(s) detected - blocking.")
+                    self.logger.warning("[click_market_button] Existing position(s) detected - blocking.")
                     return False
 
             # Clear any modal/backdrop that could intercept the click
@@ -1567,13 +1571,13 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 self._run(btn.scroll_into_view_if_needed(), timeout=min(1.5, t_ms/1000.0))
             except Exception as e:
-                logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
                 # pass
 
             try:
                 self._run(btn.wait_for(state="visible"), timeout=min(1.5, t_ms/1000.0))
             except Exception as e:
-                logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI.click_market_button]: {e}")
                 # pass
 
             # try normal click, then DOM click, then force click as last resort
@@ -1616,7 +1620,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         try:
             await page.keyboard.press("Escape")
         except Exception as e:
-            logger.debug(f"Expected error in [TradovateWebUIAPI._cleanup_backdrops]: {e}")
+            self.logger.debug(f"Expected error in [TradovateWebUIAPI._cleanup_backdrops]: {e}")
             # pass
 
         backdrop = page.locator("#placeholder-for-modals .modal-backdrop.in, .modal-backdrop.in")
@@ -1628,7 +1632,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 await page.mouse.click(5, 5)
             except Exception as e:
-                logger.debug(f"Expected error in [TradovateWebUIAPI._cleanup_backdrops]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI._cleanup_backdrops]: {e}")
                 # pass
 
     def cleanup_backdrops(self, timeout_ms: int = 1500) -> None:
@@ -1636,7 +1640,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         try:
             self._run(self._cleanup_backdrops(timeout_ms=timeout_ms), timeout=(timeout_ms/1000.0 + 1.0))
         except Exception as e:
-            logger.debug(f"Expected error in [TradovateWebUIAPI.cleanup_backdrops]: {e}")
+            self.logger.debug(f"Expected error in [TradovateWebUIAPI.cleanup_backdrops]: {e}")
             # pass
 
 
@@ -1659,7 +1663,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
         # CLICKABLE = ":is(button, div.btn, [role=button], a[role=button], span.btn)"
 
-        logger.info(
+        self.logger.info(
             "[confirm_order] Attempting UI confirm for side=%s timeout=%sms",
             side_norm.upper() if side_norm else "UNKNOWN",
             timeout_ms,
@@ -1673,7 +1677,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
         target = "Buy" if want_buy() else ("Sell" if want_sell() else None)
         if not target:
-            logger.warning("[confirm_order] Unknown side=%r; refusing to click", side)
+            self.logger.warning("[confirm_order] Unknown side=%r; refusing to click", side)
             return False
 
         def _all_contexts():
@@ -1722,7 +1726,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             return None
 
 
-        logger.info("[confirm_order] Attempting UI confirm for side=%s timeout=%sms", target.upper(), t_ms)
+        self.logger.info("[confirm_order] Attempting UI confirm for side=%s timeout=%sms", target.upper(), t_ms)
 
         async def wait_gone(container) -> bool:
             # accept either detached or hidden
@@ -1742,26 +1746,26 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 await locator.scroll_into_view_if_needed(timeout=min(t_ms, 1500))
             except Exception as e:
-                logger.warning(f"Expected error in [TradovateWebUIAPI._confirm_order_impl.safe_click]: {e}")
+                self.logger.warning(f"Expected error in [TradovateWebUIAPI._confirm_order_impl.safe_click]: {e}")
                 # pass
             
             # 1) normal click
             try:
                 await locator.click(timeout=t_ms, force=False)
-                logger.info(
+                self.logger.info(
                     "[confirm_order] clicked '%s' (force=False)", label
                 )
                 return True
             except Exception as e:
-                logger.warning("[confirm_order] click '%s' force=False failed: %s", label, e)
+                self.logger.warning("[confirm_order] click '%s' force=False failed: %s", label, e)
             
             # 2) force fallback
             try:
                 await locator.click(timeout=t_ms, force=True)
-                logger.info("[confirm_order] clicked '%s' (force=True)", label)
+                self.logger.info("[confirm_order] clicked '%s' (force=True)", label)
                 return True
             except Exception as e:
-                logger.warning("[confirm_order] click '%s' force=True failed: %s", label, e)
+                self.logger.warning("[confirm_order] click '%s' force=True failed: %s", label, e)
                 return False
 
 
@@ -1781,9 +1785,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                             vis.append(" ".join(txt.split()))
                     except Exception:
                         continue
-                logger.info("[confirm_order] %s; visible clickables: %r", where, vis)
+                self.logger.info("[confirm_order] %s; visible clickables: %r", where, vis)
             except Exception as e:
-                logger.warning("[confirm_order] global button dump failed: %s", e)
+                self.logger.warning("[confirm_order] global button dump failed: %s", e)
         
 
         # ======================================================================
@@ -1821,7 +1825,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             #     break
 
             if pop is not None:
-                logger.info("[confirm_order] using POPOVER confirmation (target=%s)", target)
+                self.logger.info("[confirm_order] using POPOVER confirmation (target=%s)", target)
 
                 # confirm_btn = pop.locator("div.btn.btn-success", has_text=re.compile(rf"^{target}$", re.I)).first
                 confirm_btn = pop.locator(self.clickable, has_text=re.compile(rf"^{target}$", re.I)).first
@@ -1832,7 +1836,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     try:
                         await page.keyboard.press("Escape")
                     except Exception as e:
-                        logger.debug(f"Expected error in [TradovateWebUIAPI._confirm_order_impl]: {e}")
+                        self.logger.debug(f"Expected error in [TradovateWebUIAPI._confirm_order_impl]: {e}")
                         # pass
                     cancel_btn = pop.locator("div.btn.btn-default", has_text=re.compile(r"^Cancel$", re.I)).first
                     await safe_click(cancel_btn, "Cancel")
@@ -1844,11 +1848,11 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     return True
 
                 # If it didn't disappear, attempt cleanup to avoid stacking
-                logger.warning("[confirm_order] popover still visible after clicking '%s'; attempting cleanup", target)
+                self.logger.warning("[confirm_order] popover still visible after clicking '%s'; attempting cleanup", target)
                 try:
                     await page.keyboard.press("Escape")
                 except Exception as e:
-                    logger.debug(f"Expected error in [TradovateWebUIAPI._confirm_order_impl]: {e}")
+                    self.logger.debug(f"Expected error in [TradovateWebUIAPI._confirm_order_impl]: {e}")
                     # pass
                 cancel_btn = pop.locator("div.btn.btn-default", has_text=re.compile(r"^Cancel$", re.I)).first
                 await safe_click(cancel_btn, "Cancel")
@@ -1856,7 +1860,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 return False
                 
         except Exception as e:
-            logger.warning("[confirm_order] popover confirm path failed: %s", e)
+            self.logger.warning("[confirm_order] popover confirm path failed: %s", e)
     
  
         # -----------------------------------------------------------------------
@@ -1865,7 +1869,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         # B) MODAL confirmation path (The original logic, kept as fallback)
         # ======================================================================
 
-        # logger.warning("[confirm_order] Found checkbox text but could not resolve popover container")
+        # self.logger.warning("[confirm_order] Found checkbox text but could not resolve popover container")
         # return False
         try:
 
@@ -1884,7 +1888,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             confirm_modal = await _find_confirm_modal_any(max_wait_ms=min(2500, t_ms))
             if confirm_modal is None:
                 await dump_visible_clickables("NO CONFIRM UI FOUND (popover+modal missed)")
-                logger.warning(
+                self.logger.warning(
                     "[confirm_order] No confirmation modal with Buy/Sell + Cancel found; "
                     "will NOT click generic 'Send'."
                 )
@@ -1900,14 +1904,14 @@ class TradovateWebUIAPI(TradingAPIInterface):
             if await wait_gone(confirm_modal):
                 return True
 
-            logger.warning(
+            self.logger.warning(
                 "[confirm_order] modal still visible after clicking '%s'; treating as failure",
                 target
             )
             return False
 
         except Exception as e:
-            logger.warning("[confirm_order] modal confirm path failed: %s", e)
+            self.logger.warning("[confirm_order] modal confirm path failed: %s", e)
             return False
 
     
@@ -1993,7 +1997,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             if (self._run(table.locator("text=/NET\\s*POS/i").count(), timeout=0.6) or 0) > 0:
                 return True
         except Exception as e:
-            logger.debug(f"Expected error in [TradovateWebUIAPI._looks_like_positions_table]: {e}")
+            self.logger.debug(f"Expected error in [TradovateWebUIAPI._looks_like_positions_table]: {e}")
             # pass
         return False
 
@@ -2258,7 +2262,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             self._run(self._page.wait_for_selector(selector, timeout=int(remaining * 1000), state="visible"), timeout=remaining + 0.5)
             return self._run(self._page.locator(selector).first.inner_text(), timeout=0.8)
         except Exception as e:
-            logger.debug(f"Expected error in [TradovateWebUIAPI._inner_text_any]: {e}")
+            self.logger.debug(f"Expected error in [TradovateWebUIAPI._inner_text_any]: {e}")
             # pass
 
         # Trying every frame
@@ -2274,7 +2278,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 except Exception:
                     continue
         except Exception as e:
-            logger.debug(f"Expected error in [TradovateWebUIAPI._inner_text_any]: {e}")
+            self.logger.debug(f"Expected error in [TradovateWebUIAPI._inner_text_any]: {e}")
             # pass
         return None
         # raise RuntimeError(f"Failed to read inner_text: {selector}")
@@ -2329,14 +2333,14 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     # small settle wait
                     self._run(self._page.wait_for_timeout(200))
                 except Exception as e:
-                    logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity._type_active]: {e}")
+                    self.logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity._type_active]: {e}")
                     # pass
 
                 # also try .fill() (some UIs need this)
                 try:
                     self._fill_any(sel, qty_text, timeout_ms=1000)
                 except Exception as e:
-                    logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity]: {e}")
+                    self.logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity]: {e}")
                     # pass
 
                 # 2) Verify it stuck (read back value via JS)
@@ -2387,10 +2391,10 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # if _type_active():
             #     return True
             except Exception as e:
-                logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity]: {e}")
                 # pass
         except Exception as e:
-            logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity]: {e}")
+            self.logger.debug(f"Expected error in [TradovateWebUIAPI._fill_quantity]: {e}")
             # pass
 
         return False
@@ -2448,7 +2452,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 return int(float(timeout) * 1000)
             except Exception as e:
-                logger.debug(f"Expected error in [TradovateWebUIAPI._norm_timeout_ms]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI._norm_timeout_ms]: {e}")
                 # pass
         return int(default_ms if default_ms is not None else getattr(self, "timeout_ms", 3000))
 
@@ -2589,19 +2593,19 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 # ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
                 await self._page.screenshot(path=f"ui_error_{label}_{ts}.png", full_page=True)
             except Exception as e:
-                self.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
                 # pass
             try:
                 html = await self._page.content()
                 with open(f"ui_error_{label}_{ts}.html", "w", encoding="utf-8") as f:
                     f.write(html)
             except Exception as e:
-                self.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
                 # pass
         try:
             self._run(_do(), timeout=20)
         except Exception as e:
-            self.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+            self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
             # pass
 
     
@@ -2735,7 +2739,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         try:
             self._snapshot(f"connect_fail_{label}")
         except Exception as e:
-            self.debug(f"Expected error in [TradovateWebUIAPI._connect_fail]: {e}")
+            self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._connect_fail]: {e}")
             # pass
 
 
@@ -2764,7 +2768,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     "() => { const bd = document.querySelector('.modal-backdrop.in'); if (bd) bd.remove(); }"
                 ), timeout=0.8)
             except Exception as e:
-                self.debug(f"Expected error in [TradovateWebUIAPI._close_any_modal]: {e}")
+                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._close_any_modal]: {e}")
                 # pass
 
 
@@ -2779,7 +2783,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 "() => { const bd = document.querySelector('.modal-backdrop.in'); if (bd) bd.remove(); }"
             ), timeout=0.8)
         except Exception as e:
-            self.debug(f"Expected error in [TradovateWebUIAPI._pre_click_hygiene]: {e}")
+            self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._pre_click_hygiene]: {e}")
             # pass
 
 
@@ -2963,7 +2967,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                                         if v is not None and is_price_like(v):
                                             avg_fill = v
                                 except Exception as e:
-                                    self.debug(f"Expected error in [TradovateWebUIAPI._get_latest_filled_ordert]: {e}")
+                                    self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._get_latest_filled_ordert]: {e}")
                                     # pass
                                 
                                 # 2) Backup
@@ -3028,9 +3032,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
                             try:
                                 for k in range(min(max_rows, 5)):
                                     rt = norm(self._run(rows.nth(k).inner_text(), timeout=0.8) or "")
-                                    logger.info("ORDERS ROW[%d]=%s", k, rt)
+                                    self.logger.info("ORDERS ROW[%d]=%s", k, rt)
                             except Exception as e:
-                                self.debug(f"Expected error in [TradovateWebUIAPI._get_latest_filled_order]: {e}")
+                                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._get_latest_filled_order]: {e}")
                                 # pass
                             return None
                         
@@ -3066,15 +3070,15 @@ class TradovateWebUIAPI(TradingAPIInterface):
                         table_sel = self._first_visible_selector(scoped)  or self._first_visible_selector(orders_table_sels)
                         if table_sel:
                             table = self._page.locator(table_sel).first
-                            logger.warning("get_latest_filled_order: table-first hit selector=%s", table_sel)
+                            self.logger.warning("get_latest_filled_order: table-first hit selector=%s", table_sel)
                             found = scan_orders_table(table)
                             if found:
                                 self._orders_cache = found
                                 self._orders_cache_ts = now
-                                logger.info("get_latest_filled_order: orders tab active but scan returned no match -> will wait/refresh")
+                                self.logger.info("get_latest_filled_order: orders tab active but scan returned no match -> will wait/refresh")
                                 return found
                         else:    
-                            logger.info("get_latest_filled_order: orders tab active but table not visible -> will wait/refresh")
+                            self.logger.info("get_latest_filled_order: orders tab active but table not visible -> will wait/refresh")
 
 
                     # -------- 2) click Orders tab robustly --------
@@ -3092,21 +3096,21 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     #         break
 
                     # if not clicked:
-                    #     logger.warning("get_latest_filled_order: could not click Orders tab (no visible+enabled match)")
+                    #     self.logger.warning("get_latest_filled_order: could not click Orders tab (no visible+enabled match)")
                     #     return None
 
-                    # logger.info("get_latest_filled_order: clicked orders.tab")
+                    # self.logger.info("get_latest_filled_order: clicked orders.tab")
                     # self.cleanup_backdrops(timeout_ms=1500)
                         
                     # -------- 3) wait for Orders table longer --------
                     # table_sel = self._wait_any(orders_table_sels, timeout_ms=8000)
                     table_sel = self._wait_any(self._expand("orders.table"), timeout_ms=8000)
                     if not table_sel:
-                        logger.warning("get_latest_filled_order: orders.table not found/visible after tab click")
+                        self.logger.warning("get_latest_filled_order: orders.table not found/visible after tab click")
                         return None
 
 
-                    # logger.info("get_latest_filled_order: using table selector=%s", table_sel)
+                    # self.logger.info("get_latest_filled_order: using table selector=%s", table_sel)
                     table = self._page.locator(table_sel).first
                     found = scan_orders_table(table)
 
@@ -3116,7 +3120,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
 
                 except Exception as e:
-                    logger.warning("get_latest_filled_order failed: %s", e)
+                    self.logger.warning("get_latest_filled_order failed: %s", e)
                     return None
 
     def ensure_trading_panels_ready(self, timeout_ms: int = 12000) -> bool:
@@ -3134,7 +3138,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 self.cleanup_backdrops(timeout_ms=1500)
             except Exception as e:
-                self.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
+                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
                 # pass
 
 
@@ -3147,15 +3151,15 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
 
             if not clicked:
-                logger.warning("ensure_trading_panels_ready: could not click positions.tab")
+                self.logger.warning("ensure_trading_panels_ready: could not click positions.tab")
             else:
-                logger.info("ensure_trading_panels_ready: clicked positions.tab")
+                self.logger.info("ensure_trading_panels_ready: clicked positions.tab")
 
 
             try:
                 self.cleanup_backdrops(timeout_ms=1500)
             except Exception as e:
-                self.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
+                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
                 # pass
 
 
@@ -3163,27 +3167,27 @@ class TradovateWebUIAPI(TradingAPIInterface):
             table_selectors = self._expand("positions.table")
             sel = self._wait_any(table_selectors, timeout_ms=timeout_ms)
             if not sel:
-                logger.warning("ensure_trading_panels_ready: positions.table not detectable after click")
+                self.logger.warning("ensure_trading_panels_ready: positions.table not detectable after click")
                 return False
 
 
-            logger.info("ensure_trading_panels_ready: positions.table ready selector=%s", sel)
+            self.logger.info("ensure_trading_panels_ready: positions.table ready selector=%s", sel)
 
 
             # --- Warm Orders tab too (optional but helps later scrapes) ---
             try:
                 self._click_any_first_visible("orders.tab", timeout_ms=2500)
-                logger.info("ensure_trading_panels_ready: clicked orders.tab (warm)")
+                self.logger.info("ensure_trading_panels_ready: clicked orders.tab (warm)")
                 # then go back to positions so steady state is Positions
                 self._click_any_first_visible("positions.tab", timeout_ms=2500)
-                logger.info("ensure_trading_panels_ready: returned to positions.tab")
+                self.logger.info("ensure_trading_panels_ready: returned to positions.tab")
             except Exception as e:
-                self.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
+                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
                 # pass
 
 
             return True
         except Exception as e:
-            logger.warning("ensure_trading_panels_ready failed: %s", e)
+            self.logger.warning("ensure_trading_panels_ready failed: %s", e)
             return False
 
