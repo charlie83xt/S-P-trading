@@ -908,14 +908,23 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
 
 
-
     # -------------------------- Internals -----------------------------
 
     def _load_selectors(self):
-        import json, os
-        path = os.getenv("TV_SELECTORS", "tradovate_selectors.json")
+        """Load UI selectors from JSON file."""
+        import sys
+        # Determine correct path for packaged app
+        if getattr(sys, 'frozen', False):
+            # Running in PyInstaller bundle
+            base_path = Path(sys._MEIPASS)
+        else:
+            # Running from source
+            base_path = Path(__file__).parent
+        
+        path = base_path / "tradovate_selectors.json"
+        
         with open(path, "r") as f:
-            self._sel = json.load(f)
+            data = json.load(f)
 
 
     def S(self, key):
@@ -1157,7 +1166,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             await self._page.goto(base_url)
         
         self._run(_do_launch(), timeout=120)
-        
+
 
     def _login_if_needed(self):
         # Load local fixture, if any

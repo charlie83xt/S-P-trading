@@ -276,6 +276,22 @@ for json_file in json_files:
         datas.append((json_file, '.'))
         print(f"  → {json_file}")
 
+# Playwright driver files (CRITICAL - includes lib/ folder)
+try:
+    import playwright
+    from pathlib import Path
+    pw_driver = Path(playwright.__file__).parent / 'driver'
+    
+    if pw_driver.exists():
+        # Add the entire driver/package folder with lib/ subdirectory
+        datas.append((str(pw_driver / 'package'), 'playwright/driver/package'))
+        print(f"  → Added Playwright driver package: {pw_driver / 'package'}")
+        
+        # Add Node.js binary
+        datas.append((str(pw_driver / 'node'), 'playwright/driver/node'))
+        print(f"  → Added Playwright Node.js runtime")
+except Exception as e:
+    print(f"  ⚠️  Warning: Could not bundle Playwright driver: {e}")
 
 # ============================================================================
 # ANALYSIS
