@@ -35,6 +35,8 @@ from debug_config import (
     production_print,
     WRENCH, CHART, LOADING, TERRA, MAGNI, CHECK, WARNING, FIRE
     )
+# if not DEBUG:
+#     loggin.getLogger('werkzeug').setLevel(logging.ERROR)z
 
 class UIWatchdog:
     """

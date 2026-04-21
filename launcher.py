@@ -222,7 +222,7 @@ def start_dashboard(logger, config: dict) -> bool:
             def run_flask():
                 try:
                     # Import web_app (it's bundled in _internal)
-                    # import web_app
+                    import web_app
                     # Run Flask
                     web_app.app.run(
                         host='0.0.0.0',
