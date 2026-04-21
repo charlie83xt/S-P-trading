@@ -216,7 +216,13 @@ def start_dashboard(logger, config: dict) -> bool:
             logger.info("Starting dashboard from packaged app...")
             
             # Set environment variables
+            os.environ['PW_MODE'] = 'cdp'
+            os.environ['BROWSER_MODE'] = 'cdp'
+            os.environ['CDP_PORT'] = '9222'
+            os.environ['CDP_URL'] = 'http://localhost:9222'
             os.environ['PORT'] = str(dashboard_port)
+
+            logger.info("Environment set: PW_MODE=cdp, CDP_PORT=9222")
             
             # Import and start Flask in a thread
             def run_flask():
