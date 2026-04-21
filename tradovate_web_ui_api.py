@@ -82,6 +82,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         self.fixture_html_path = fixture_html_path
         self.browser_mode = os.getenv("BROWSER_MODE", "cdp") # cdp|chrome|webkit|chromium
         self.manual_login = manual_login
+        self._cdp_port = int(os.getenv("CDP_PORT", "9222"))
 
         self._pw = None
         self._browser = None
@@ -1054,23 +1055,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     "status": "submitted",
                 }
 
-            # Submit and confirm
-            # self._click("[data-test-id='ticket-submit']") # REPLACING
-            # self._maybe_click("[data-test-id='confirm-submit']", 3000)# REPLACING
-
-            # # Wait for success + capture order id
-            # self._wait("[data-test-id='order-success']", self.timeout_ms) # REPLACING
-            # order_id = self._attr("[data-test-id='order-success']", "data-order-id") or ""
-
-            # return {
-            #     "orderId": order_id,
-            #     "symbol": symbol,
-            #     "side": side.upper(),
-            #     "qty": quantity,
-            #     "type": order_type.upper(),
-            #     "price": price,
-            #     "status": "submitted",
-            # }
+           
         except Exception as e:
             self._snapshot("place_order_error")
             logger.exception("_place_order failed: %s", e)
@@ -1097,14 +1082,38 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
             if getattr(sys, 'frozen', False):
                 # Packaged app: force CDP mode
-                self.logger.info("Packaged app: using CDP mode")
+                self.logger.info("Packaged app detected - using CDP mode")
                 endpoint = f"http://localhost:{self._cdp_port}"
-                self._browser = await self._pw.chromium.connect_over_cdp(endpoint)
-                self._context = self._browser.context[0] if self._browser.context else await self._browser.new_context()
                 
-                self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
-                await self._page.goto(base_url, timeout=30000)
-                return  # Exit early - don't run code below
+                try:
+                    self._browser = await self._pw.chromium.connect_over_cdp(endpoint)
+                    self.logger.info(f"Connected to Chrome via CDP: {endpoint}")
+                    
+                    # Get existing context (Chrome already has one open)
+                    if self._browser.contexts:
+                        self._context = self._browser.contexts[0]
+                        self.logger.info("Reusing existing browser context")
+                    else:
+                        self._context = await self._browser.new_context()
+                        self.logger.info("Created new browser context")
+                    
+                    # Get existing page or create new one
+                    if self._context.pages:
+                        self._page = self._context.pages[0]
+                        self.logger.info("Reusing existing page")
+                    else:
+                        self._page = await self._context.new_page()
+                        self.logger.info("Created new page")
+                    
+                    # Navigate to Tradovate
+                    await self._page.goto(base_url, wait_until="domcontentloaded", timeout=30000)
+                    self.logger.info(f"Navigated to {base_url}")
+                    
+                    return  # Exit early - CDP mode complete
+                    
+                except Exception as e:
+                    self.logger.error(f"CDP connection failed: {e}")
+                    raise RuntimeError(f"Failed to connect to Chrome on port {self._cdp_port}. Is Chrome running?") from e
 
             if mode == "cdp":
                 # Connect to the Chrome we started manually
@@ -1148,14 +1157,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             await self._page.goto(base_url)
         
         self._run(_do_launch(), timeout=120)
-
-        # Fallback (bundled Chromium; likely unsupported on macOS 10.15, but keep for completeness)
-        # self._browser = self._pw.chromium.launch(headless=self.headless)
-        # if os.path.exists(self.storage_state_file):
-        #     self._context = self._browser.new_context(storage_state=self.storage_state_file)
-        # else:
-        #     self._context = self._browser.new_context()
-        # self._page = self._context.new_page()
+        
 
     def _login_if_needed(self):
         # Load local fixture, if any
