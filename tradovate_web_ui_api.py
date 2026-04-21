@@ -692,7 +692,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 # self.logger.warning("get_positions: qty parse failed for at least one row; returning None (unknown)")
                 # try:
                     # Temporary row_text for check purposes
-                    # self.self.logger.info("PRINTING ROW_TEXT=%s", out[0].get("row_text"))
+                    # self.logger.info("PRINTING ROW_TEXT=%s", out[0].get("row_text"))
                 # except Exception:
                     # pass
                 return None
@@ -877,7 +877,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         except Exception as e:
             try:
                 if hasattr(self, "logger"):
-                    self.self.logger.warning(f"get_current_price({symbol}) failed: {e}")
+                    self.logger.warning(f"get_current_price({symbol}) failed: {e}")
             except Exception as e:
                 self.logger.debug(f"Expected error in [TradovateWebUIAPI.get_current_price]: {e}")
                 # pass
@@ -1097,14 +1097,10 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
             if getattr(sys, 'frozen', False):
                 # Packaged app: force CDP mode
-                self.self.logger.info("Packaged app: using CDP mode")
+                self.logger.info("Packaged app: using CDP mode")
                 endpoint = f"http://localhost:{self._cdp_port}"
                 self._browser = await self._pw.chromium.connect_over_cdp(endpoint)
-                
-                if self._browser.contexts:
-                    self._context = self._browser.contexts[0]
-                else:
-                    self._context = await self._browser.new_context()
+                self._context = self._browser.context[0] if self._browser.context else await self._browser.new_context()
                 
                 self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
                 await self._page.goto(base_url, timeout=30000)
@@ -2593,19 +2589,19 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 # ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
                 await self._page.screenshot(path=f"ui_error_{label}_{ts}.png", full_page=True)
             except Exception as e:
-                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
                 # pass
             try:
                 html = await self._page.content()
                 with open(f"ui_error_{label}_{ts}.html", "w", encoding="utf-8") as f:
                     f.write(html)
             except Exception as e:
-                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
                 # pass
         try:
             self._run(_do(), timeout=20)
         except Exception as e:
-            self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+            self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
             # pass
 
     
@@ -2739,7 +2735,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         try:
             self._snapshot(f"connect_fail_{label}")
         except Exception as e:
-            self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._connect_fail]: {e}")
+            self.logger.debug(f"Expected error in [TradovateWebUIAPI._connect_fail]: {e}")
             # pass
 
 
@@ -2768,7 +2764,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     "() => { const bd = document.querySelector('.modal-backdrop.in'); if (bd) bd.remove(); }"
                 ), timeout=0.8)
             except Exception as e:
-                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._close_any_modal]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI._close_any_modal]: {e}")
                 # pass
 
 
@@ -2783,7 +2779,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 "() => { const bd = document.querySelector('.modal-backdrop.in'); if (bd) bd.remove(); }"
             ), timeout=0.8)
         except Exception as e:
-            self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._pre_click_hygiene]: {e}")
+            self.logger.debug(f"Expected error in [TradovateWebUIAPI._pre_click_hygiene]: {e}")
             # pass
 
 
@@ -2967,7 +2963,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                                         if v is not None and is_price_like(v):
                                             avg_fill = v
                                 except Exception as e:
-                                    self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._get_latest_filled_ordert]: {e}")
+                                    self.logger.debug(f"Expected error in [TradovateWebUIAPI._get_latest_filled_ordert]: {e}")
                                     # pass
                                 
                                 # 2) Backup
@@ -3034,7 +3030,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                                     rt = norm(self._run(rows.nth(k).inner_text(), timeout=0.8) or "")
                                     self.logger.info("ORDERS ROW[%d]=%s", k, rt)
                             except Exception as e:
-                                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI._get_latest_filled_order]: {e}")
+                                self.logger.debug(f"Expected error in [TradovateWebUIAPI._get_latest_filled_order]: {e}")
                                 # pass
                             return None
                         
@@ -3138,7 +3134,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 self.cleanup_backdrops(timeout_ms=1500)
             except Exception as e:
-                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
                 # pass
 
 
@@ -3159,7 +3155,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
             try:
                 self.cleanup_backdrops(timeout_ms=1500)
             except Exception as e:
-                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
                 # pass
 
 
@@ -3182,7 +3178,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 self._click_any_first_visible("positions.tab", timeout_ms=2500)
                 self.logger.info("ensure_trading_panels_ready: returned to positions.tab")
             except Exception as e:
-                self.self.logger.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
+                self.logger.debug(f"Expected error in [TradovateWebUIAPI.ensure_trading_panels_ready]: {e}")
                 # pass
 
 

@@ -17,6 +17,7 @@ import subprocess
 from pathlib import Path
 from threading import Thread
 from debug_config import CHECK, CROSS, ROCKET, CHART, WRENCH, WARNING, INFO, NOTE, TERRA, RED, BOT
+import webbrowser
 
 # Add current directory to path so imports work
 sys.path.insert(0, str(Path(__file__).parent))
@@ -221,7 +222,7 @@ def start_dashboard(logger, config: dict) -> bool:
             def run_flask():
                 try:
                     # Import web_app (it's bundled in _internal)
-                    import web_app
+                    # import web_app
                     # Run Flask
                     web_app.app.run(
                         host='0.0.0.0',
@@ -294,16 +295,16 @@ def run_app(logger, config: dict):
     
     logger.info(f"Opening browser to {dashboard_url}...")
     
-    try:
-        import webbrowser
-        # Wait a moment for Flask to fully start
-        time.sleep(2)
-        # Open browser
-        webbrowser.open(dashboard_url)
-        logger.info(f"{CHECK} Browser opened")
-    except Exception as e:
-        logger.warning(f"Could not auto-open browser: {e}")
-        logger.info(f"Please open manually: {dashboard_url}")
+    # try:
+    #     # Wait a moment for Flask to fully start
+    #     time.sleep(2)
+    #     # Open browser
+    #     chrome = webbrowser.get('chrome')
+    #     chrome.open(dashboard_url, new=2)
+    #     logger.info(f"{CHECK} Browser opened")
+    # except Exception as e:
+    #     logger.warning(f"Could not auto-open browser: {e}")
+    #     logger.info(f"Please open manually: {dashboard_url}")
     
     # Load environment variables
     env_vars = load_env_file()
