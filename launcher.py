@@ -295,16 +295,16 @@ def run_app(logger, config: dict):
     
     logger.info(f"Opening browser to {dashboard_url}...")
     
-    # try:
-    #     # Wait a moment for Flask to fully start
-    #     time.sleep(2)
-    #     # Open browser
-    #     chrome = webbrowser.get('chrome')
-    #     chrome.open(dashboard_url, new=2)
-    #     logger.info(f"{CHECK} Browser opened")
-    # except Exception as e:
-    #     logger.warning(f"Could not auto-open browser: {e}")
-    #     logger.info(f"Please open manually: {dashboard_url}")
+    try:
+        # Wait a moment for Flask to fully start
+        time.sleep(2)
+        # Open browser
+        # webbrowser = webbrowser.get('chrome')
+        webbrowser.open(dashboard_url)
+        logger.info(f"{CHECK} Browser opened")
+    except Exception as e:
+        logger.warning(f"Could not auto-open browser: {e}")
+        logger.info(f"Please open manually: {dashboard_url}")
     
     # Load environment variables
     env_vars = load_env_file()
