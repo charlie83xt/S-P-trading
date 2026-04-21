@@ -279,19 +279,33 @@ for json_file in json_files:
 # Playwright driver files (CRITICAL - includes lib/ folder)
 try:
     import playwright
-    from pathlib import Path
+    
     pw_driver = Path(playwright.__file__).parent / 'driver'
     
     if pw_driver.exists():
-        # Add the entire driver/package folder with lib/ subdirectory
-        datas.append((str(pw_driver / 'package'), 'playwright/driver/package'))
-        print(f"  → Added Playwright driver package: {pw_driver / 'package'}")
+        # Add the entire driver/package folder (includes lib/ subdirectory)
+        package_dir = pw_driver / 'package'
+        if package_dir.exists():
+            datas.append((str(package_dir), 'playwright/driver/package'))
+            print(f"  → Added Playwright driver/package (includes lib/)")
         
-        # Add Node.js binary
-        datas.append((str(pw_driver / 'node'), 'playwright/driver/node'))
-        print(f"  → Added Playwright Node.js runtime")
+        # Add Node.js executable (it's a FILE, not a folder)
+        node_file = pw_driver / 'node'
+        if node_file.exists() and node_file.is_file():
+            datas.append((str(node_file), 'playwright/driver'))
+            print(f"  → Added Playwright Node.js executable")
+        
+        # Also check for Windows-specific node.exe
+        node_exe = pw_driver / 'node.exe'
+        if node_exe.exists():
+            datas.append((str(node_exe), 'playwright/driver'))
+            print(f"  → Added node.exe")
+            
 except Exception as e:
     print(f"  ⚠️  Warning: Could not bundle Playwright driver: {e}")
+    import traceback
+    traceback.print_exc()
+
 
 # ============================================================================
 # ANALYSIS
