@@ -282,6 +282,68 @@ for json_file in json_files:
 # PLAYWRIGHT BUNDLING - Not needed for cdp mode
 # ============================================================================
 
+# ============================================================================
+# PLAYWRIGHT BUNDLING - Manual file-by-file (no glob)
+# ============================================================================
+print("\n=== PLAYWRIGHT FILES ===")
+
+try:
+    import playwright
+    from pathlib import Path
+    
+    pw_path = Path(playwright.__file__).parent
+    driver_path = pw_path / 'driver'
+    
+    if driver_path.exists():
+        print(f"Found Playwright at: {pw_path}")
+        
+        # Add ONLY the files we need for CDP mode
+        
+        # 1. Critical: programWithTestStub.js
+        critical_file = driver_path / 'package' / 'lib' / 'cli' / 'programWithTestStub.js'
+        if critical_file.exists():
+            datas.append((str(critical_file), 'playwright/driver/package/lib/cli'))
+            print(f"  ✓ programWithTestStub.js")
+        else:
+            print(f"  ✗ programWithTestStub.js NOT FOUND")
+        
+        # 2. Other critical files in lib/cli/
+        cli_files = ['program.js', 'driver.js']
+        for filename in cli_files:
+            file_path = driver_path / 'package' / 'lib' / 'cli' / filename
+            if file_path.exists():
+                datas.append((str(file_path), 'playwright/driver/package/lib/cli'))
+                print(f"  ✓ {filename}")
+        
+        # 3. cli.js (entry point)
+        cli_js = driver_path / 'package' / 'cli.js'
+        if cli_js.exists():
+            datas.append((str(cli_js), 'playwright/driver/package'))
+            print(f"  ✓ cli.js")
+        
+        # 4. package.json
+        package_json = driver_path / 'package' / 'package.json'
+        if package_json.exists():
+            datas.append((str(package_json), 'playwright/driver/package'))
+            print(f"  ✓ package.json")
+        
+        # 5. node binary for Windows
+        node_exe = driver_path / 'node.exe'
+        if node_exe.exists():
+            datas.append((str(node_exe), 'playwright/driver'))
+            print(f"  ✓ node.exe")
+        
+        print("✓ Playwright critical files bundled")
+    else:
+        print(f"⚠️ Playwright driver not found")
+        
+except Exception as e:
+    print(f"❌ Playwright bundling error: {e}")
+    import traceback
+    traceback.print_exc()
+
+print()
+
 
 # ============================================================================
 # ANALYSIS
