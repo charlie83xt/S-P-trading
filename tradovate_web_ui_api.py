@@ -1089,6 +1089,13 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # start Playwright
             self._pw = await async_playwright().start()
 
+            # ⭐ ADD DIAGNOSTIC LOGGING HERE ⭐ 
+            self.logger.info(f"🔍 DETECTION DEBUG:") 
+            self.logger.info(f" sys.frozen = {getattr(sys, 'frozen', False)}") 
+            self.logger.info(f" sys._MEIPASS exists = {hasattr(sys, '_MEIPASS')}") 
+            self.logger.info(f" PW_MODE = {os.getenv('PW_MODE')}") 
+            self.logger.info(f" BROWSER_MODE = {os.getenv('BROWSER_MODE')}")
+
             # DIAGNOSTIC LOGGING (Helps debug Detection)
             self.logger.info(f"Detection: frozen={getattr(sys, 'frozen', False)}, _MEIPASS={hasattr(sys, '_MEIPASS')}, PW_MODE={os.getenv('PW_MODE')}")
 
@@ -1138,6 +1145,8 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     self.logger.error(f"    Make sure Chrome is running on port {self._cdp_port}")
                     raise RuntimeError(f"Failed to connect to Chrome on port {self._cdp_port}. Is Chrome running?") from e
 
+            # If we get here, is_packaged was False - this is the problem
+            self.logger.warning("Not in packaged mode - using default playwright launch")
 
             if mode == "cdp":
                 # Connect to the Chrome we started manually
