@@ -256,12 +256,12 @@ def start_dashboard(logger, config: dict) -> bool:
             # Use subprocess as before
             process = subprocess.Popen(
                 [sys.executable, "launch_web_dashboard.py"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                # stdout=subprocess.PIPE,
+                # stderr=subprocess.PIPE
             )
             
             # Wait a moment for startup
-            time.sleep(2)
+            time.sleep(3)
             
             if process.poll() is not None:
                 logger.error(f"{CROSS} Dashboard process exited unexpectedly")
