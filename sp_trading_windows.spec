@@ -276,35 +276,37 @@ for json_file in json_files:
         datas.append((json_file, '.'))
         print(f"  → {json_file}")
 
-# Playwright driver files (CRITICAL - includes lib/ folder)
+
+# ============================================================================
+# PLAYWRIGHT BUNDLING - Use PyInstaller's collect functions
+# ============================================================================
+
+print("Bundling Playwright driver files...")
 try:
+    from PyInstaller.utils.hooks import collect_data_files
     import playwright
     
-    pw_driver = Path(playwright.__file__).parent / 'driver'
+    # Collect ALL data files from playwright package
+    pw_datas = collect_data_files('playwright', include_py_files=False)
     
-    if pw_driver.exists():
-        # Add the entire driver/package folder (includes lib/ subdirectory)
-        package_dir = pw_driver / 'package'
-        if package_dir.exists():
-            datas.append((str(package_dir), 'playwright/driver/package'))
-            print(f"  → Added Playwright driver/package (includes lib/)")
+    if pw_datas:
+        datas.extend(pw_datas)
+        print(f"  ✓ Added {len(pw_datas)} Playwright data files")
         
-        # Add Node.js executable (it's a FILE, not a folder)
-        node_file = pw_driver / 'node'
-        if node_file.exists() and node_file.is_file():
-            datas.append((str(node_file), 'playwright/driver'))
-            print(f"  → Added Playwright Node.js executable")
+        # Show first few files
+        for src, dest in pw_datas[:5]:
+            print(f"    - {Path(src).name} → {dest}")
+        if len(pw_datas) > 5:
+            print(f"    ... and {len(pw_datas) - 5} more")
+    else:
+        print("  ⚠️  No Playwright data files found")
         
-        # Also check for Windows-specific node.exe
-        node_exe = pw_driver / 'node.exe'
-        if node_exe.exists():
-            datas.append((str(node_exe), 'playwright/driver'))
-            print(f"  → Added node.exe")
-            
 except Exception as e:
-    print(f"  ⚠️  Warning: Could not bundle Playwright driver: {e}")
+    print(f"  ❌ Playwright bundling failed: {e}")
     import traceback
     traceback.print_exc()
+
+print()
 
 
 # ============================================================================
