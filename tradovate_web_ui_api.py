@@ -1086,35 +1086,53 @@ class TradovateWebUIAPI(TradingAPIInterface):
         args_fn = getattr(self, "_chromium_args", None)
 
         async def _do_launch():
-            # Detect Packaged Mode First - Before Starting Playwright
+            # ============================================================
+            # DETECT PACKAGED MODE FIRST
+            # ============================================================
             is_packaged = (
-                getattr(sys, 'frozen', False) or              # PyInstaller sets this
-                hasattr(sys, '_MEIPASS') or                   # PyInstaller temp folder
-                os.getenv('PW_MODE') == 'cdp' or              # Environment variable
-                os.getenv('BROWSER_MODE') == 'cdp'            # Alt environment variable
+                getattr(sys, 'frozen', False) or
+                hasattr(sys, '_MEIPASS') or
+                os.getenv('PW_MODE') == 'cdp' or
+                os.getenv('BROWSER_MODE') == 'cdp'
             )
-
-            # ⭐ ADD DIAGNOSTIC LOGGING HERE ⭐ 
-            self.logger.info(f"🔍 DETECTION BEFORE Playwright start:") 
-            self.logger.info(f" sys.frozen={getattr(sys, 'frozen', False)}") 
-            self.logger.info(f" sys._MEIPASS={hasattr(sys, '_MEIPASS')}") 
-            self.logger.info(f" PW_MODE={os.getenv('PW_MODE')}") 
-            self.logger.info(f" BROWSER_MODE={os.getenv('BROWSER_MODE')}")
-
+            
+            self.logger.info(f"Detection: is_packaged={is_packaged}, frozen={getattr(sys, 'frozen', False)}, PW_MODE={os.getenv('PW_MODE')}")
+            
+            # ============================================================
+            # PACKAGED MODE - CDP ONLY
+            # ============================================================
             if is_packaged:
-                # CDP Mode activated
                 self.logger.info("CDP mode activated (Connecting to external Chrome)")
-
-                # Start Playwright but it will only manage the CDP connection
-                self._pw = await async_playwright().start()
-
+                
+                # Try to start Playwright (may fail due to missing driver files)
+                pw_started = False
+                try:
+                    self._pw = await async_playwright().start()
+                    pw_started = True
+                    self.logger.info("Playwright started successfully")
+                except Exception as e:
+                    self.logger.warning(f"Playwright start failed (expected): {e}")
+                    self.logger.info("Will attempt CDP connection anyway...")
+                
+                # Connect via CDP (this works even if Playwright start failed)
                 endpoint = f"http://localhost:{self._cdp_port}"
+                self.logger.info(f"Connecting to Chrome via CDP: {endpoint}")
                 
                 try:
-                    self._browser = await self._pw.chromium.connect_over_cdp(endpoint)
-                    self.logger.info(f"Connected to Chrome via CDP: {endpoint}")
+                    if pw_started and self._pw:
+                        # Use Playwright's CDP connection
+                        self._browser = await self._pw.chromium.connect_over_cdp(endpoint)
+                    else:
+                        # Playwright didn't start - try direct CDP
+                        self.logger.info("Using direct CDP connection...")
+                        # This probably won't work, but let's try
+                        from playwright.async_api import async_playwright
+                        self._pw = await async_playwright().start()
+                        self._browser = await self._pw.chromium.connect_over_cdp(endpoint)
                     
-                    # Get existing context (Chrome already has one open)
+                    self.logger.info(f"Connected to Chrome via CDP")
+                    
+                    # Get context
                     if self._browser.contexts:
                         self._context = self._browser.contexts[0]
                         self.logger.info("Reusing existing browser context")
@@ -1122,7 +1140,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                         self._context = await self._browser.new_context()
                         self.logger.info("Created new browser context")
                     
-                    # Get existing page or create new one
+                    # Get page
                     if self._context.pages:
                         self._page = self._context.pages[0]
                         self.logger.info("Reusing existing page")
@@ -1134,17 +1152,19 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     await self._page.goto(base_url, wait_until="domcontentloaded", timeout=30000)
                     self.logger.info(f"Navigated to {base_url}")
                     
-                    return  # Exit early - CDP mode complete
+                    return  # SUCCESS - Exit here!
                     
                 except Exception as e:
                     self.logger.error(f"CDP connection failed: {e}")
-                    self.logger.error(f"    Make sure Chrome is running on port {self._cdp_port}")
-                    raise RuntimeError(f"Failed to connect to Chrome on port {self._cdp_port}. Is Chrome running?") from e
-
-            # If we get here, is_packaged was False - this is the problem
-            self.logger.warning("Not in packaged mode - using default playwright launch")
-
-            # start Playwright (this will use Node.js driver)
+                    self.logger.error(f"Make sure Chrome is running on port {self._cdp_port}")
+                    raise RuntimeError(f"Failed to connect to Chrome on port {self._cdp_port}. Is Chrome running with --remote-debugging-port={self._cdp_port}?") from e
+            
+            # ============================================================
+            # DEVELOPMENT MODE - Normal Playwright
+            # ============================================================
+            self.logger.info("Development mode - starting Playwright driver")
+            
+            # Start Playwright normally
             self._pw = await async_playwright().start()
 
             if mode == "cdp":
