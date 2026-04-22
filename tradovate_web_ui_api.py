@@ -1086,20 +1086,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         args_fn = getattr(self, "_chromium_args", None)
 
         async def _do_launch():
-            # start Playwright
-            self._pw = await async_playwright().start()
-
-            # ⭐ ADD DIAGNOSTIC LOGGING HERE ⭐ 
-            self.logger.info(f"🔍 DETECTION DEBUG:") 
-            self.logger.info(f" sys.frozen = {getattr(sys, 'frozen', False)}") 
-            self.logger.info(f" sys._MEIPASS exists = {hasattr(sys, '_MEIPASS')}") 
-            self.logger.info(f" PW_MODE = {os.getenv('PW_MODE')}") 
-            self.logger.info(f" BROWSER_MODE = {os.getenv('BROWSER_MODE')}")
-
-            # DIAGNOSTIC LOGGING (Helps debug Detection)
-            self.logger.info(f"Detection: frozen={getattr(sys, 'frozen', False)}, _MEIPASS={hasattr(sys, '_MEIPASS')}, PW_MODE={os.getenv('PW_MODE')}")
-
-            # Detect if running from packaged app (multiple methods)
+            # Detect Packaged Mode First - Before Starting Playwright
             is_packaged = (
                 getattr(sys, 'frozen', False) or              # PyInstaller sets this
                 hasattr(sys, '_MEIPASS') or                   # PyInstaller temp folder
@@ -1107,11 +1094,20 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 os.getenv('BROWSER_MODE') == 'cdp'            # Alt environment variable
             )
 
-            self.logger.info(f"CDP mode: {is_packaged}")
+            # ⭐ ADD DIAGNOSTIC LOGGING HERE ⭐ 
+            self.logger.info(f"🔍 DETECTION BEFORE Playwright start:") 
+            self.logger.info(f" sys.frozen={getattr(sys, 'frozen', False)}") 
+            self.logger.info(f" sys._MEIPASS={hasattr(sys, '_MEIPASS')}") 
+            self.logger.info(f" PW_MODE={os.getenv('PW_MODE')}") 
+            self.logger.info(f" BROWSER_MODE={os.getenv('BROWSER_MODE')}")
 
             if is_packaged:
                 # CDP Mode activated
                 self.logger.info("CDP mode activated (Connecting to external Chrome)")
+
+                # Start Playwright but it will only manage the CDP connection
+                self._pw = await async_playwright().start()
+
                 endpoint = f"http://localhost:{self._cdp_port}"
                 
                 try:
@@ -1147,6 +1143,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
             # If we get here, is_packaged was False - this is the problem
             self.logger.warning("Not in packaged mode - using default playwright launch")
+
+            # start Playwright (this will use Node.js driver)
+            self._pw = await async_playwright().start()
 
             if mode == "cdp":
                 # Connect to the Chrome we started manually
