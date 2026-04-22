@@ -11,6 +11,7 @@ import sys
 import os
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
+from PyInstaller.building.datastruct import Tree
 import glob
 
 block_cipher = None
@@ -280,32 +281,39 @@ for json_file in json_files:
 # ============================================================================
 # PLAYWRIGHT BUNDLING - Preserve exact directory structure
 # ============================================================================
-
-print("Bundling Playwright driver files...")
+print("\nBundling Playwright driver files...")
 try:
     import playwright
     from pathlib import Path
-    from PyInstaller.building.datastruct import Tree
+    import glob as glob_module
     
     pw_path = Path(playwright.__file__).parent
     driver_path = pw_path / 'driver'
     
     if driver_path.exists():
-        # Use Tree() to preserve exact directory structure
-        # This bundles the entire driver/ folder with all subdirectories intact
+        print(f"  Found Playwright at: {pw_path}")
         
-        # Add driver/package/ (includes lib/ with full structure)
-        package_tree = Tree(
-            str(driver_path / 'package'),
-            prefix='playwright/driver/package',
-            excludes=[]
-        )
-        datas.extend(package_tree)
-        print(f"  ✓ Added Playwright driver/package tree (preserves lib/ structure)")
+        # Bundle entire driver/package folder recursively
+        package_dir = driver_path / 'package'
+        if package_dir.exists():
+            all_files = glob_module.glob(str(package_dir / '**' / '*'), recursive=True)
+            file_count = 0
+            
+            for file_path in all_files:
+                if os.path.isfile(file_path):
+                    # Calculate relative path to preserve structure
+                    rel_path = os.path.relpath(file_path, str(package_dir))
+                    dest_dir = os.path.join('playwright', 'driver', 'package', os.path.dirname(rel_path))
+                    
+                    # Add to datas
+                    datas.append((file_path, dest_dir))
+                    file_count += 1
+            
+            print(f"  ✓ Added {file_count} files from driver/package (preserves lib/ structure)")
         
-        # Add node binary if it exists
+        # Add node binary
         node_file = driver_path / 'node'
-        if node_file.exists():
+        if node_file.exists() and os.path.isfile(str(node_file)):
             datas.append((str(node_file), 'playwright/driver'))
             print(f"  ✓ Added node binary")
             
@@ -325,7 +333,6 @@ except Exception as e:
     traceback.print_exc()
 
 print()
-
 
 # ============================================================================
 # ANALYSIS
