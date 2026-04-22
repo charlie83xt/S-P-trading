@@ -1086,6 +1086,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         args_fn = getattr(self, "_chromium_args", None)
 
         async def _do_launch():
+            from playwright.async_api import async_playwright
             # ============================================================
             # DETECT PACKAGED MODE FIRST
             # ============================================================
@@ -1126,7 +1127,6 @@ class TradovateWebUIAPI(TradingAPIInterface):
                         # Playwright didn't start - try direct CDP
                         self.logger.info("Using direct CDP connection...")
                         # This probably won't work, but let's try
-                        from playwright.async_api import async_playwright
                         self._pw = await async_playwright().start()
                         self._browser = await self._pw.chromium.connect_over_cdp(endpoint)
                     
