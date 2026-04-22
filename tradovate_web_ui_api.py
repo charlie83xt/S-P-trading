@@ -1089,6 +1089,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # start Playwright
             self._pw = await async_playwright().start()
 
+            # DIAGNOSTIC LOGGING (Helps debug Detection)
+            self.logger.info(f"Detection: frozen={getattr(sys, 'frozen', False)}, _MEIPASS={hasattr(sys, '_MEIPASS')}, PW_MODE={os.getenv('PW_MODE')}")
+
             # Detect if running from packaged app (multiple methods)
             is_packaged = (
                 getattr(sys, 'frozen', False) or              # PyInstaller sets this
@@ -1097,10 +1100,11 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 os.getenv('BROWSER_MODE') == 'cdp'            # Alt environment variable
             )
 
+            self.logger.info(f"CDP mode: {is_packaged}")
 
             if is_packaged:
-                # Packaged explicitly CDP Mode
-                self.logger.info("CDP mode activated (packaged app or environment variable)")
+                # CDP Mode activated
+                self.logger.info("CDP mode activated (Connecting to external Chrome)")
                 endpoint = f"http://localhost:{self._cdp_port}"
                 
                 try:
@@ -1131,6 +1135,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
                     
                 except Exception as e:
                     self.logger.error(f"CDP connection failed: {e}")
+                    self.logger.error(f"    Make sure Chrome is running on port {self._cdp_port}")
                     raise RuntimeError(f"Failed to connect to Chrome on port {self._cdp_port}. Is Chrome running?") from e
 
 
