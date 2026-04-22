@@ -278,28 +278,46 @@ for json_file in json_files:
 
 
 # ============================================================================
-# PLAYWRIGHT BUNDLING - Use PyInstaller's collect functions
+# PLAYWRIGHT BUNDLING - Preserve exact directory structure
 # ============================================================================
 
 print("Bundling Playwright driver files...")
 try:
-    from PyInstaller.utils.hooks import collect_data_files
     import playwright
+    from pathlib import Path
+    from PyInstaller.building.datastruct import Tree
     
-    # Collect ALL data files from playwright package
-    pw_datas = collect_data_files('playwright', include_py_files=False)
+    pw_path = Path(playwright.__file__).parent
+    driver_path = pw_path / 'driver'
     
-    if pw_datas:
-        datas.extend(pw_datas)
-        print(f"  ✓ Added {len(pw_datas)} Playwright data files")
+    if driver_path.exists():
+        # Use Tree() to preserve exact directory structure
+        # This bundles the entire driver/ folder with all subdirectories intact
         
-        # Show first few files
-        for src, dest in pw_datas[:5]:
-            print(f"    - {Path(src).name} → {dest}")
-        if len(pw_datas) > 5:
-            print(f"    ... and {len(pw_datas) - 5} more")
+        # Add driver/package/ (includes lib/ with full structure)
+        package_tree = Tree(
+            str(driver_path / 'package'),
+            prefix='playwright/driver/package',
+            excludes=[]
+        )
+        datas.extend(package_tree)
+        print(f"  ✓ Added Playwright driver/package tree (preserves lib/ structure)")
+        
+        # Add node binary if it exists
+        node_file = driver_path / 'node'
+        if node_file.exists():
+            datas.append((str(node_file), 'playwright/driver'))
+            print(f"  ✓ Added node binary")
+            
+        # Add node.exe for Windows
+        node_exe = driver_path / 'node.exe'
+        if node_exe.exists():
+            datas.append((str(node_exe), 'playwright/driver'))
+            print(f"  ✓ Added node.exe")
+        
+        print(f"  ✓ Playwright bundled with correct directory structure")
     else:
-        print("  ⚠️  No Playwright data files found")
+        print(f"  ⚠️  Playwright driver folder not found at {driver_path}")
         
 except Exception as e:
     print(f"  ❌ Playwright bundling failed: {e}")
