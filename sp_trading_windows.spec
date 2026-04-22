@@ -279,60 +279,9 @@ for json_file in json_files:
 
 
 # ============================================================================
-# PLAYWRIGHT BUNDLING - Preserve exact directory structure
+# PLAYWRIGHT BUNDLING - Not needed for cdp mode
 # ============================================================================
-print("\nBundling Playwright driver files...")
-try:
-    import playwright
-    from pathlib import Path
-    import glob as glob_module
-    
-    pw_path = Path(playwright.__file__).parent
-    driver_path = pw_path / 'driver'
-    
-    if driver_path.exists():
-        print(f"  Found Playwright at: {pw_path}")
-        
-        # Bundle entire driver/package folder recursively
-        package_dir = driver_path / 'package'
-        if package_dir.exists():
-            all_files = glob_module.glob(str(package_dir / '**' / '*'), recursive=True)
-            file_count = 0
-            
-            for file_path in all_files:
-                if os.path.isfile(file_path):
-                    # Calculate relative path to preserve structure
-                    rel_path = os.path.relpath(file_path, str(package_dir))
-                    dest_dir = os.path.join('playwright', 'driver', 'package', os.path.dirname(rel_path))
-                    
-                    # Add to datas
-                    datas.append((file_path, dest_dir))
-                    file_count += 1
-            
-            print(f"  ✓ Added {file_count} files from driver/package (preserves lib/ structure)")
-        
-        # Add node binary
-        node_file = driver_path / 'node'
-        if node_file.exists() and os.path.isfile(str(node_file)):
-            datas.append((str(node_file), 'playwright/driver'))
-            print(f"  ✓ Added node binary")
-            
-        # Add node.exe for Windows
-        node_exe = driver_path / 'node.exe'
-        if node_exe.exists():
-            datas.append((str(node_exe), 'playwright/driver'))
-            print(f"  ✓ Added node.exe")
-        
-        print(f"  ✓ Playwright bundled with correct directory structure")
-    else:
-        print(f"  ⚠️  Playwright driver folder not found at {driver_path}")
-        
-except Exception as e:
-    print(f"  ❌ Playwright bundling failed: {e}")
-    import traceback
-    traceback.print_exc()
 
-print()
 
 # ============================================================================
 # ANALYSIS
