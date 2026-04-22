@@ -434,3 +434,31 @@ print('  cd "dist\\S-P Trading"')
 print('  & ".\\S-P Trading.exe" --setup')
 print("="*70 + "\n")
 
+# ============================================================================
+# POST-BUILD - Copy missing Playwright file
+# ============================================================================
+
+
+import shutil
+
+print("\n=== POST-BUILD: Copying missing Playwright file ===")
+
+try:
+    import playwright
+    pw_path = Path(playwright.__file__).parent
+    src_file = pw_path / 'driver' / 'package' / 'lib' / 'cli' / 'programWithTestStub.js'
+    
+    dest_file = Path('dist') / 'S-P Trading' / '_internal' / 'playwright' / 'driver' / 'package' / 'lib' / 'cli' / 'programWithTestStub.js'
+    
+    if src_file.exists():
+        dest_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_file, dest_file)
+        print(f"✓ Copied programWithTestStub.js ({dest_file.stat().st_size} bytes)")
+    else:
+        print(f"✗ Source not found: {src_file}")
+        
+except Exception as e:
+    print(f"❌ Post-build failed: {e}")
+
+print("="*70)
+
