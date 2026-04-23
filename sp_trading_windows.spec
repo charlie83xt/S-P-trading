@@ -88,6 +88,9 @@ python_modules = [
     'query_analytics.py',
     'chrome_helper.py',
     'debug_config.py',
+    # -- New Phase 2/3 modules --
+    'first_run.py',
+    'update_manager.py'
 ]
 
 # Verify each module exists
@@ -120,6 +123,8 @@ hiddenimports = [
     'app_config',
     'version',
     'authorization',
+    'first_run',
+    'update_manager',
     
     # Data & API
     'data_manager',
@@ -211,6 +216,8 @@ hiddenimports = [
     # Supabase (optional but include if installed)
     'supabase',
     'httpx',
+    'packaging',
+    'packaging.version',
     'gotrue',
     'postgrest',
     'realtime',

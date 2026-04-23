@@ -432,11 +432,15 @@ def run_app(logger, config: dict):
         # Wait a moment for Flask to fully start
         time.sleep(2)
         # Open browser
-        webbrowser.open(dashboard_url)
+        from first_run import is_first_run
+        startup_url = f"http://localhost:{dashboard_port}/setup" if is_first_run else dashboard_url
+        webbrowser.open(startup_url)
         logger.info(f"{CHECK} Browser opened")
     except Exception as e:
         logger.warning(f"Could not auto-open browser: {e}")
         logger.info(f"Please open manually: {dashboard_url}")
+    
+    
     
     # Load environment variables
     env_vars = load_env_file()
