@@ -494,7 +494,7 @@ def main():
         print(f"Version: {APP_VERSION}")
         return 0
 
-     if args.machine_id:
+    if args.machine_id:
         mid = MachineFingerPrint.get_machine_id()
         print(f"\n{NOTE} Your Machine ID: {mid}")
         print("Send this to the developer to receive your license key.\n")
