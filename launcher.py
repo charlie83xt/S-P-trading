@@ -32,7 +32,7 @@ from app_config import (
 from version import APP_VERSION, load_version_info
 from authorization import (
     check_authorization_before_launch, register_machine,
-    AuthorizationManager, LicenseManager, MachineFingerPrint,
+    AuthorizationManager, LicenseManager, MachineFingerprint,
     LICENSE_TYPES
 )
 
