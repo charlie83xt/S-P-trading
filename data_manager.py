@@ -11,6 +11,7 @@ import os
 import math
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from pathlib import Path
 
 from api_factory import APIFactory
 from api_interface import TradingAPIInterface
@@ -27,6 +28,7 @@ except ImportError:
 
 import sys
 import traceback
+from debug_config import debug_print, production_print, GREEN, MAGNI, FIRE, CHECK, YELLOW, BLUE, CHART, CROSS, WARNING
 
 _TRACE = False
 
@@ -35,7 +37,7 @@ def trace_call(func):
     def wrapper(*args, **kwargs):
         if _TRACE:
             print(f"{'='*80}")
-            print(f"🔍 TRACE: {func.__name__} called")
+            print(f"{MAGNI} TRACE: {func.__name__} called")
             print(f"   args: {args[:2]}")  # First 2 args only
             print(f"   Stack: {traceback.format_stack()[-3:-1]}")
             print(f"{'='*80}")
@@ -143,10 +145,11 @@ class DataManager:
                 f"Failed to create API for platform: {config.TRADING_PLATFORM}. "
                 f"Check your configuration and credentials."
             )
-        self.logger.info(f"✅ API created successfully: {self.api.get_platform_name()}")
+        self.logger.info(f"{CHECK} API created successfully: {self.api.get_platform_name()}")
 
         # self.db_path = 'market_data.db'
         self.db_path = getattr(self.config, 'DATABASE_PATH', 'data/db/market_data.db')
+        
         self._init_database()
         self._tick_buf = None
 
@@ -164,7 +167,7 @@ class DataManager:
                 return None
 
             client = create_client(url, key)
-            self.logger.info("✅ Supabase connected for historical data")
+            self.logger.info(f"{CHECK} Supabase connected for historical data")
             return client
 
         except Exception as e:
@@ -439,6 +442,10 @@ class DataManager:
         
     def _init_database(self):
         """Initialize SQLite database for storing market data."""
+        # Ensure database directory exists
+        db_path = Path(self.db_path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -475,30 +482,6 @@ class DataManager:
         """Check if connected to the trading platform."""
         return self.api.is_connected()
 
-    # def get_current_price(self, symbol: str) -> Optional[float]:
-    #     """Get current price and feed to LiveBarStore"""
-    #     try:
-    #         price = self.api.get_current_price(symbol)
-            
-    #         if price is None:
-    #             return None
-            
-    #         # Feed to LiveBarStore IMMEDIATELY
-    #         now_ts = time.time()
-    #         self.live.ingest_tick(symbol, now_ts, float(price))
-
-    #         # DEBUG: Log every 10 calls 
-    #         self._price_call_count = getattr(self, '_price_call_count', 0) + 1 
-    #         if self._price_call_count % 10 == 0: 
-    #             bars = self.live.get_last_n(symbol, n=5) 
-    #             self.logger.info(f"📊 PRICE CALLS: {self._price_call_count} | BARS: {len(bars)}")
-
-            
-    #         return price
-            
-    #     except Exception as e:
-    #         self.logger.error(f"get_current_price failed: {e}")
-    #         return None
 
     
     def get_current_price(self, symbol: str) -> Optional[float]:
@@ -513,7 +496,7 @@ class DataManager:
         """
         price = self.api.get_current_price(symbol)
         # ADD THIS AS FIRST LINE: 
-        self.logger.info(f"🟢 get_current_price() got price={price} from API")
+        self.logger.info(f"{GREEN} get_current_price() got price={price} from API")
 
         try:
             if price is None:
@@ -530,7 +513,7 @@ class DataManager:
                 return price
 
             # ADD THIS LINE BEFORE TICK INGESTION:
-            self.logger.info(f"🔥 About to ingest tick: symbol={symbol} price={p} live={self.live}")
+            self.logger.info(f"{FIRE} About to ingest tick: symbol={symbol} price={p} live={self.live}")
 
 
             # self.live.ingest_tick(symbol, time.time(), p)
@@ -543,21 +526,21 @@ class DataManager:
             now_ts = time.time()
             ingest = getattr(self.live, "ingest_tick", None)
 
-            self.logger.info(f"🔵 ingest callable check: {callable(ingest)}")
+            self.logger.info(f"{BLUE} ingest callable check: {callable(ingest)}")
 
             if callable(ingest):
-                self.logger.info(f"🔵 Calling ingest_tick: symbol={symbol} ts={now_ts} price={p}") # ADD THIS
+                self.logger.info(f"{BLUE} Calling ingest_tick: symbol={symbol} ts={now_ts} price={p}") # ADD THIS
                 ingest(symbol, now_ts, p)
 
                 # VERIFY IT WORKED
                 bars = self.live.get_last_n(symbol, n=5)
-                self.logger.info(f"📊After Ingest: BAR COUNT: {len(bars)}")
+                self.logger.info(f"{CHART} After Ingest: BAR COUNT: {len(bars)}")
             else:
                 self.logger.error(f"X ingest_tick is not callable!")
                 # fallback to update(symbol, ts_epoch, price) if that's what you have
                 upd = getattr(self.live, "update", None)
                 if callable(upd):
-                    self.logger.info(f"🟡 Falling back to update()")
+                    self.logger.info(f"{YELLOW} Falling back to update()")
                     upd(symbol, now_ts, p)
 
 
@@ -903,6 +886,65 @@ class DataManager:
             self.logger.warning(f"Unsupported timeframe: {timeframe}")
             return []
 
+    def get_recent_bars(self, symbol: str, timeframe: str = '1m', count: int = 20) -> pd.DataFrame:
+        """
+        Get recent completed price bars for intelligent entry filtering.
+        
+        🎯 PURPOSE: Feed entry filters to avoid market maker traps
+        
+        This method provides clean, completed bars for:
+        - Volume confirmation (avoid low-volume fakeouts)
+        - Momentum validation (trend strength)
+        - Order flow analysis (buyer/seller pressure)
+        - Trend alignment (with SMA confirmation)
+        
+        CRITICAL: Returns ONLY completed bars (excludes current incomplete bar)
+        to avoid false signals from mid-bar data.
+        
+        Args:
+            symbol: Trading symbol (e.g., 'MES', 'ES')
+            timeframe: Bar timeframe ('1m' or '5m')
+            count: Number of bars to retrieve (default: 20)
+            
+        Returns:
+            DataFrame with columns: ts, open, high, low, close, volume
+            Empty DataFrame if insufficient data
+            
+        Example:
+            >>> bars = data_manager.get_recent_bars('MES', '5m', 20)
+            >>> if not bars.empty:
+            >>>     avg_volume = bars['volume'].mean()
+            >>>     current_volume = bars.iloc[-1]['volume']
+            >>>     is_high_volume = current_volume > avg_volume * 1.5
+        """
+        # Use existing get_last_closed_candles method (already excludes incomplete bar)
+        candles = self.get_last_closed_candles(symbol, timeframe, n=count)
+        
+        if not candles:
+            self.logger.debug(f"No recent bars available for {symbol} {timeframe}")
+            return pd.DataFrame()
+        
+        # Convert to DataFrame for easy analysis
+        df = pd.DataFrame(candles)
+        
+        # Ensure required columns exist
+        required_cols = ['ts', 'open', 'high', 'low', 'close', 'volume']
+        for col in required_cols:
+            if col not in df.columns:
+                if col == 'volume':
+                    df[col] = 0  # Default volume if not available
+                else:
+                    self.logger.warning(f"Missing required column: {col}")
+                    return pd.DataFrame()
+        
+        self.logger.debug(
+            f"Retrieved {len(df)} bars for {symbol} {timeframe} "
+            f"(range: {df.iloc[0]['ts']:.0f} to {df.iloc[-1]['ts']:.0f})"
+        )
+        
+        return df
+
+
     def get_sma(self, symbol: str, length: int, timeframe: str = "5m", 
                 offset: int = 0) -> float:
         """
@@ -945,106 +987,34 @@ class DataManager:
         closes = [c["close"] for c in relevant_candles]
         return sum(closes) / len(closes)
 
-    # def get_candles(self, symbol: str, timeframe: str, start_ts: float, 
-    #                 end_ts: float) -> List[Dict[str, Any]]:
-    #     """
-    #     Returns historical candles for a specific time range.
-        
-    #     Required by ORB Retest for computing the opening range
-    #     (e.g., 9:30-9:45 AM ET = 15 minute window).
-        
-    #     Args:
-    #         symbol: Trading symbol
-    #         timeframe: "1m", "2m", "5m"
-    #         start_ts: Start timestamp (epoch seconds)
-    #         end_ts: End timestamp (epoch seconds)
-            
-    #     Returns:
-    #         List of dicts with keys: ts, open, high, low, close, volume
-    #         Ordered oldest -> newest
-    #     """
-    #     if not hasattr(self, 'bar_store') or self.bar_store is None:
-    #         return []
-        
-    #     # Get all available 1m bars
-    #     all_bars = self.bar_store.get_last_n(symbol, n=10000)  # Get as many as we have
-        
-    #     if timeframe == "1m":
-    #         # Filter bars within time range
-    #         result = [
-    #             {
-    #                 "ts": b.ts_open,
-    #                 "open": b.open,
-    #                 "high": b.high,
-    #                 "low": b.low,
-    #                 "close": b.close,
-    #                 "volume": getattr(b, 'volume', 0),
-    #             }
-    #             for b in all_bars
-    #             if start_ts <= b.ts_open < end_ts
-    #         ]
-    #         return result
-        
-    #     elif timeframe in ("2m", "5m"):
-    #         # First, filter 1m bars to the time range
-    #         bars_in_range = [
-    #             b for b in all_bars
-    #             if start_ts <= b.ts_open < end_ts
-    #         ]
-            
-    #         if not bars_in_range:
-    #             return []
-            
-    #         # Aggregate into requested timeframe
-    #         period_minutes = int(timeframe.replace("m", ""))
-    #         candles = []
-            
-    #         for i in range(0, len(bars_in_range), period_minutes):
-    #             chunk = bars_in_range[i:i+period_minutes]
-    #             if chunk:  # Accept partial chunks at the end
-    #                 candles.append({
-    #                     "ts": chunk[0].ts_open,
-    #                     "open": chunk[0].open,
-    #                     "high": max(b.high for b in chunk),
-    #                     "low": min(b.low for b in chunk),
-    #                     "close": chunk[-1].close,
-    #                     "volume": sum(getattr(b, 'volume', 0) for b in chunk),
-    #                 })
-            
-    #         return candles
-        
-    #     else:
-    #         self.logger.warning(f"Unsupported timeframe: {timeframe}")
-    #         return []
-
 
     def get_candles(self, symbol: str, timeframe: str, start_ts: float, end_ts: float):
         """Debug version with extensive logging"""
         
         # Check 1: Does live exist?
         if not hasattr(self, 'live'):
-            self.logger.error("❌ live attribute doesn't exist!")
+            self.logger.error(f"{CROSS} live attribute doesn't exist!")
             return []
         
         # Check 2: Is live None?
         if self.live is None:
-            self.logger.error("❌ live is None!")
+            self.logger.error(f"{CROSS} live is None!")
             return []
         
         # Check 3: Can we get bars?
         try:
             all_bars = self.live.get_last_n(symbol, n=100)
-            self.logger.info(f"✓ Got {len(all_bars)} bars from live for {symbol}")
+            self.logger.info(f"{CHECK} Got {len(all_bars)} bars from live for {symbol}")
         except Exception as e:
-            self.logger.error(f"❌ Failed to get bars: {e}")
+            self.logger.error(f"{CROSS} Failed to get bars: {e}")
             return []
         
         # Check 4: Filter to time range
         filtered = [b for b in all_bars if start_ts <= b.ts_open < end_ts]
-        self.logger.info(f"✓ Filtered to {len(filtered)} bars in range {start_ts}-{end_ts}")
+        self.logger.info(f"{CHECK} Filtered to {len(filtered)} bars in range {start_ts}-{end_ts}")
         
         if not filtered:
-            self.logger.warning(f"⚠️  No bars in time range! Got {len(all_bars)} total bars")
+            self.logger.warning(f"{WARNING}  No bars in time range! Got {len(all_bars)} total bars")
             if all_bars:
                 self.logger.info(f"   First bar: {all_bars[0].ts_open}, Last bar: {all_bars[-1].ts_open}")
                 self.logger.info(f"   Requested: {start_ts} to {end_ts}")

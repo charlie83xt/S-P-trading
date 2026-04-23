@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional, Tuple, List
 from data_manager import DataManager
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from debug_config import PRINT_STRATEGY_STATE, should_log_throttled
 
 
 
@@ -110,7 +111,8 @@ class OpeningRangeStrategy:
         if lo_hi:
             self._or_bounds = lo_hi
             self._or_computed_at = now
-            self.logger.info("Opening range ready for %s: low=%.2f high=%.2f", symbol, lo_hi[0], lo_hi[1])
+            if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                self.logger.info("Opening range ready for %s: low=%.2f high=%.2f", symbol, lo_hi[0], lo_hi[1])
         else:
             # keep previous bounds if we had them; otherwise stay None
             if self._or_bounds is None:
@@ -178,13 +180,14 @@ class OpeningRangeStrategy:
         if self._or_computed_at > 0:
             minutes_since_or = (time.time() - self._or_computed_at) / 60.0
             if minutes_since_or < 5.0:
-                self.logger.debug(
-                    "Skipping signal: only %.1f min since OR completed",
-                    minutes_since_or
-                )
+                if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                    self.logger.debug(
+                        "Skipping signal: only %.1f min since OR completed",
+                        minutes_since_or
+                    )
                 return None
 
-        thr_pct = self.breakout_threshold / 100.0   # convert percent → fraction
+        thr_pct = self.breakout_threshold / 100.0   # convert percent -> fraction
 
         buy_trigger_pct = or_high * (1.0 + thr_pct)
         sell_trigger_pct = or_low * (1.0 - thr_pct)
@@ -205,28 +208,31 @@ class OpeningRangeStrategy:
         if up_trig:
             move_size = current_price - or_high
             if move_size < self.min_move_from_or:
-                self.logger.debug(
-                    "BUY signal suppressed: move %.2f pts < min %.2f pts",
-                    move_size, self.min_move_from_or
-                )
+                if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                    self.logger.debug(
+                        "BUY signal suppressed: move %.2f pts < min %.2f pts",
+                        move_size, self.min_move_from_or
+                    )
                 return None
 
         if dn_trig:
             move_size = or_low - current_price
             if move_size < self.min_move_from_or:
-                self.logger.debug(
-                    "SELL signal suppressed: move %.2f pts < min %.2f pts",
-                    move_size, self.min_move_from_or
-                )
+                if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                    self.logger.debug(
+                        "SELL signal suppressed: move %.2f pts < min %.2f pts",
+                        move_size, self.min_move_from_or
+                    )
                 return None
 
         # Long breakout
         if up_trig and self._cooldown_ok():
             self.last_signal_ts = self._now()
-            self.logger.info(
-                "OpeningRange BUY %s @ %.2f (OR high=%.2f trigger=%.2f move=%.2f pts)",
-                symbol, float(current_price), or_high, buy_trigger, current_price - or_high
-            )
+            if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                self.logger.info(
+                    "OpeningRange BUY %s @ %.2f (OR high=%.2f trigger=%.2f move=%.2f pts)",
+                    symbol, float(current_price), or_high, buy_trigger, current_price - or_high
+                )
             return {
                 "type": "BUY",
                 "symbol": symbol,
@@ -238,10 +244,11 @@ class OpeningRangeStrategy:
         # Short breakdown
         if dn_trig and self._cooldown_ok():
             self.last_signal_ts = self._now()
-            self.logger.info(
-                "OpeningRange SELL %s @ %.2f (OR low=%.2f trigger=%.2f move=%.2f pts)",
-                symbol, float(current_price), or_low, sell_trigger, or_low - current_price
-            )
+            if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                self.logger.info(
+                    "OpeningRange SELL %s @ %.2f (OR low=%.2f trigger=%.2f move=%.2f pts)",
+                    symbol, float(current_price), or_low, sell_trigger, or_low - current_price
+                )
             return {
                 "type": "SELL",
                 "symbol": symbol,

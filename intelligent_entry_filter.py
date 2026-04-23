@@ -20,7 +20,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, time, timezone
 from typing import Optional, Dict, Tuple
- 
+from debug_config import CHECK, CROSS
  
 class IntelligentEntryFilter:
     """
@@ -60,47 +60,54 @@ class IntelligentEntryFilter:
         # Layer 1: Volume Confirmation
         volume_ok, volume_reason = self._check_volume(symbol, signal_type)
         if not volume_ok:
-            self.logger.warning(f"❌ Entry BLOCKED: {volume_reason}")
+            self.logger.warning(f"{CROSS} Entry BLOCKED: {volume_reason}")
             return False, volume_reason
         
         # Layer 2: Momentum Confirmation
         momentum_ok, momentum_reason = self._check_momentum(symbol, signal_type, signal_price)
         if not momentum_ok:
-            self.logger.warning(f"❌ Entry BLOCKED: {momentum_reason}")
+            self.logger.warning(f"{CROSS} Entry BLOCKED: {momentum_reason}")
             return False, momentum_reason
         
         # Layer 3: Order Flow Confirmation (if we have tick data)
         flow_ok, flow_reason = self._check_order_flow(symbol, signal_type)
         if not flow_ok:
-            self.logger.warning(f"❌ Entry BLOCKED: {flow_reason}")
+            self.logger.warning(f"{CROSS} Entry BLOCKED: {flow_reason}")
             return False, flow_reason
         
         # Layer 4: Trend Context
         trend_ok, trend_reason = self._check_trend_context(symbol, signal_type)
         if not trend_ok:
-            self.logger.warning(f"❌ Entry BLOCKED: {trend_reason}")
+            self.logger.warning(f"{CROSS} Entry BLOCKED: {trend_reason}")
             return False, trend_reason
         
         # ALL CHECKS PASSED!
-        self.logger.info(f"✅ Entry APPROVED: All filters passed")
+        self.logger.info(f"{CHECK} Entry APPROVED: All filters passed")
         return True, "all_filters_passed"
   
     def _check_volume(self, symbol: str, signal_type: str) -> Tuple[bool, str]:
-        """
-        Volume Confirmation: Real breakouts have volume surge.
-        False breakouts happen on low volume.
-        """
+        """Volume Confirmation."""
         try:
             # Get last 50 bars
             bars = self.dm.get_recent_bars(symbol, count=50, timeframe="1m")
-            if len(bars) < 20:
+            
+            # FIX: Check if bars is empty
+            if bars is None or (hasattr(bars, 'empty') and bars.empty):
+                self.logger.warning("Insufficient data for volume check")
                 return True, "insufficient_data"  # Allow if no data
             
-            # Current bar volume
-            current_volume = bars[-1].volume
+            # FIX: Check if bars has enough rows
+            if len(bars) < 20:
+                self.logger.warning(f"Only {len(bars)} bars, need 20+")
+                return True, "insufficient_data"
             
-            # Average volume (last 20 bars, excluding current)
-            avg_volume = bars[-21:-1]['volume'].mean()
+            # Get volume
+            try:
+                current_volume = bars.iloc[-1]['volume']
+                avg_volume = bars.iloc[-21:-1]['volume'].mean()
+            except (KeyError, IndexError) as e:
+                self.logger.error(f"Volume column error: {e}")
+                return True, "volume_data_error"
             
             if avg_volume == 0:
                 return True, "no_volume_data"
@@ -110,12 +117,13 @@ class IntelligentEntryFilter:
             if volume_ratio < self.min_volume_ratio:
                 return False, f"low_volume (ratio={volume_ratio:.2f}, need {self.min_volume_ratio})"
             
-            self.logger.debug(f"✅ Volume OK: {volume_ratio:.2f}x average")
+            self.logger.debug(f"{CHECK} Volume OK: {volume_ratio:.2f}x average")
             return True, "volume_confirmed"
             
         except Exception as e:
             self.logger.error(f"Volume check error: {e}")
             return True, "volume_check_error"  # Don't block on errors
+
   
     def _check_momentum(
         self,
@@ -123,38 +131,48 @@ class IntelligentEntryFilter:
         signal_type: str,
         signal_price: float
     ) -> Tuple[bool, str]:
-        """
-        Momentum Confirmation: Price should be accelerating in signal direction.
-        
-        Calculates:
-        - Recent price change velocity (3-bar vs 10-bar)
-        - RSI (not overbought/oversold extremes)
-        - Price position vs recent range
-        """
+        """Momentum Confirmation."""
         try:
             bars = self.dm.get_recent_bars(symbol, count=50, timeframe="1m")
-            if len(bars) < 20:
+            
+            # FIX: Check if bars is valid
+            if bars is None or (hasattr(bars, 'empty') and bars.empty):
+                self.logger.warning("Insufficient data for momentum check")
                 return True, "insufficient_data"
             
-            closes = bars['close'].values
+            if len(bars) < 20:
+                self.logger.warning(f"Only {len(bars)} bars, need 20+")
+                return True, "insufficient_data"
+            
+            # Get closes
+            try:
+                closes = bars['close'].values
+            except KeyError:
+                self.logger.error("No 'close' column in bars")
+                return True, "data_error"
             
             # Recent momentum (last 3 bars)
+            if len(closes) < 4:
+                return True, "insufficient_data"
+            
             recent_change = (closes[-1] - closes[-4]) / closes[-4]
             
             # Longer momentum (last 10 bars)
-            longer_change = (closes[-1] - closes[-11]) / closes[-11]
+            if len(closes) < 11:
+                longer_change = recent_change
+            else:
+                longer_change = (closes[-1] - closes[-11]) / closes[-11]
             
-            # Momentum score: recent should be stronger than longer (acceleration)
+            # Momentum score
             if signal_type == "BUY":
-                # Want positive momentum, accelerating up
+                # Want positive momentum
                 if recent_change <= 0:
                     return False, f"no_upward_momentum (change={recent_change:.4f})"
                 
-                # Check if accelerating
                 momentum_score = recent_change / max(abs(longer_change), 0.0001)
                 
             else:  # SELL
-                # Want negative momentum, accelerating down
+                # Want negative momentum
                 if recent_change >= 0:
                     return False, f"no_downward_momentum (change={recent_change:.4f})"
                 
@@ -163,19 +181,20 @@ class IntelligentEntryFilter:
             if momentum_score < self.min_momentum_score:
                 return False, f"weak_momentum (score={momentum_score:.2f}, need {self.min_momentum_score})"
             
-            # Check RSI - avoid extremes
+            # Check RSI
             rsi = self._calculate_rsi(closes, period=14)
             if signal_type == "BUY" and rsi > 75:
                 return False, f"overbought (RSI={rsi:.1f})"
             if signal_type == "SELL" and rsi < 25:
                 return False, f"oversold (RSI={rsi:.1f})"
             
-            self.logger.debug(f"✅ Momentum OK: score={momentum_score:.2f}, RSI={rsi:.1f}")
+            self.logger.debug(f"{CHECK} Momentum OK: score={momentum_score:.2f}, RSI={rsi:.1f}")
             return True, "momentum_confirmed"
             
         except Exception as e:
             self.logger.error(f"Momentum check error: {e}")
             return True, "momentum_check_error"
+
   
     def _check_order_flow(self, symbol: str, signal_type: str) -> Tuple[bool, str]:
         """
@@ -223,7 +242,7 @@ class IntelligentEntryFilter:
             if signal_type == "SELL" and flow_score > -self.min_order_flow_score:
                 return False, f"buying_pressure (flow={flow_score:.2f})"
             
-            self.logger.debug(f"✅ Order Flow OK: score={flow_score:.2f}")
+            self.logger.debug(f"{CHECK} Order Flow OK: score={flow_score:.2f}")
             return True, "order_flow_confirmed"
             
         except Exception as e:
@@ -261,7 +280,7 @@ class IntelligentEntryFilter:
             if signal_type == "SELL" and trend_score > self.max_against_trend:
                 return False, f"strong_uptrend (trend={trend_score:.4f})"
             
-            self.logger.debug(f"✅ Trend OK: score={trend_score:.4f}, strength={trend_strength:.4f}")
+            self.logger.debug(f"{CHECK} Trend OK: score={trend_score:.4f}, strength={trend_strength:.4f}")
             return True, "trend_context_ok"
             
         except Exception as e:

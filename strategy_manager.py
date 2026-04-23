@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from trade_analytics import TradeAnalytics
 from strategy_factory import create as create_strategy
+from debug_config import LOADING, WARNING, CHECK, WRENCH, CHART
 
 ET_TZ = ZoneInfo("America/New_York")
 
@@ -119,7 +120,7 @@ class StrategyManager:
             manual_name = getattr(self, 'manual_strategy_name', None)
             if manual_name and manual_name in self.strategies:
                 if self.current_strategy_name != manual_name:
-                    self.logger.info(f"🔧 MANUAL MODE: {manual_name}")
+                    self.logger.info(f"{WRENCH} MANUAL MODE: {manual_name}")
                     self.current_strategy_name = manual_name
                     self.current_strategy = self.strategies[manual_name]
                 return self.current_strategy
@@ -142,7 +143,7 @@ class StrategyManager:
         # Switch strategies if needed
         if strategy_name != self.current_strategy_name:
             self.logger.info(
-                f"🔄 STRATEGY SWITCH: {self.current_strategy_name} → {strategy_name} "
+                f"{LOADING} STRATEGY SWITCH: {self.current_strategy_name} -> {strategy_name} "
                 f"(ET time: {current_et.strftime('%H:%M')})"
             )
             self.current_strategy_name = strategy_name
@@ -171,11 +172,11 @@ class StrategyManager:
 
             if current_day % 2 == 0:
                 # Even days: use old strategy
-                self.logger.debug(f"📊 A/B: Even day {current_day} -> MeanReversion")
+                self.logger.debug(f"{CHART} A/B: Even day {current_day} -> MeanReversion")
                 return "MeanReversion"
             else:
                 # Odd days: Use new strategy
-                self.logger.debug(f"📊 A/B: Odd day {current_day} -> PreviousDayHL")
+                self.logger.debug(f"{CHART} A/B: Odd day {current_day} -> PreviousDayHL")
                 return "PreviousDayHL"
 
         elif 8 <= hour_et < 9:
@@ -216,7 +217,7 @@ class StrategyManager:
             if perf['win_rate'] < 40:
                 self.paused_strategies.add(strategy_name)
                 self.logger.warning(
-                    f"⚠️  PAUSING {strategy_name}: "
+                    f"{WARNING}  PAUSING {strategy_name}: "
                     f"Win rate {perf['win_rate']}% < 40%"
                 )
            
@@ -224,7 +225,7 @@ class StrategyManager:
             elif perf['total_pnl'] < -500:  # Adjust threshold
                 self.paused_strategies.add(strategy_name)
                 self.logger.warning(
-                    f"⚠️  PAUSING {strategy_name}: "
+                    f"{WARNING}  PAUSING {strategy_name}: "
                     f"Total PnL ${perf['total_pnl']:.2f} < -$500"
                 )
            
@@ -233,7 +234,7 @@ class StrategyManager:
                   perf['win_rate'] > 50 and perf['total_pnl'] > 0):
                 self.paused_strategies.discard(strategy_name)
                 self.logger.info(
-                    f"✅ RESUMING {strategy_name}: "
+                    f"{CHECK} RESUMING {strategy_name}: "
                     f"Win rate {perf['win_rate']}%, PnL ${perf['total_pnl']:.2f}"
                 )
        

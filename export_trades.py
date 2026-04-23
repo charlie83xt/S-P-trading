@@ -10,6 +10,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import os
 import sys
+from debug_config import debug_print, production_print, CHART, LOADING, CHECK, CROSS, DISK, FOLDER, 
 
 # Configuration
 DATABASE_PATH = 'data/db/market_data.db'  # Adjust to your actual database location
@@ -52,7 +53,7 @@ def export_today_trades():
         conn.close()
         
         if len(df) == 0:
-            print(f"📊 No trades found for {today_display}")
+            print(f"{CHART} No trades found for {today_display}")
             return None
         
         # Create filename
@@ -67,9 +68,9 @@ def export_today_trades():
         losing_trades = len(df[df['pnl'] < 0]) if 'pnl' in df.columns else 0
         total_pnl = df['pnl'].sum() if 'pnl' in df.columns else 0
         
-        print(f"\n✅ Exported {total_trades} trades for {today_display}")
-        print(f"   📁 File: {filename}")
-        print(f"\n   📈 Summary:")
+        print(f"\n{CHECK} Exported {total_trades} trades for {today_display}")
+        print(f"    {FOLDER}File: {filename}")
+        print(f"\n   {TREND} Summary:")
         print(f"      Winning trades: {winning_trades}")
         print(f"      Losing trades: {losing_trades}")
         print(f"      Total P&L: ${total_pnl:.2f}")
@@ -80,7 +81,7 @@ def export_today_trades():
 
         # Show Breakdown by Strategy
         if 'strategy' in df.columns:
-            print(f"\n  📊 By Strategy:")
+            print(f"\n  {CHART} By Strategy:")
             for strategy in df["strategy"].unique():
                 strategy_df = df[df['strategy'] == strategy]
                 strat_wins = len(strategy_df[strategy_df['pnl'] > 0])
@@ -94,10 +95,10 @@ def export_today_trades():
         return filename
         
     except sqlite3.Error as e:
-        print(f"❌ Database error: {e}")
+        print(f"{CROSS} Database error: {e}")
         return None
     except Exception as e:
-        print(f"❌ Export error: {e}")
+        print(f"{CROSS} Export error: {e}")
         return None
 
 
@@ -128,7 +129,7 @@ def export_week_summary():
         conn.close()
         
         if len(df) == 0:
-            print(f"\n📊 No trades found for week {week_display}")
+            print(f"\n{CHART} No trades found for week {week_display}")
             return None
         
         # Export weekly summary
@@ -146,9 +147,9 @@ def export_week_summary():
             daily_pnl = df.groupby('date')['pnl'].sum()
             winning_days = len(daily_pnl[daily_pnl > 0])
         
-        print(f"\n✅ Exported weekly summary for {week_display}")
-        print(f"   📁 File: {filename}")
-        print(f"\n   📊 Weekly Statistics:")
+        print(f"\n{CHECK} Exported weekly summary for {week_display}")
+        print(f"   {FOLDER} File: {filename}")
+        print(f"\n   {CHART} Weekly Statistics:")
         print(f"      Total trades: {total_trades}")
         print(f"      Total P&L: ${total_pnl:.2f}")
         print(f"      Winning days: {winning_days}/5")
@@ -156,7 +157,7 @@ def export_week_summary():
         return filename
         
     except Exception as e:
-        print(f"❌ Weekly export error: {e}")
+        print(f"{CROSS} Weekly export error: {e}")
         return None
 
 
@@ -176,21 +177,21 @@ def backup_entire_database():
         # Get file size
         size_mb = os.path.getsize(backup_path) / (1024 * 1024)
         
-        print(f"\n✅ Database backup created")
-        print(f"   📁 File: {backup_path}")
-        print(f"   💾 Size: {size_mb:.2f} MB")
+        print(f"\n{CHECK} Database backup created")
+        print(f"   {FOLDER} File: {backup_path}")
+        print(f"   {DISK} Size: {size_mb:.2f} MB")
         
         return backup_path
         
     except Exception as e:
-        print(f"❌ Database backup error: {e}")
+        print(f"{CROSS} Database backup error: {e}")
         return None
 
 
 def main():
     """Main export function"""
     print("=" * 60)
-    print("📊 DAILY TRADE EXPORT TOOL")
+    print(f"{CHART} DAILY TRADE EXPORT TOOL")
     print("=" * 60)
     
     # Ensure directories exist
@@ -198,24 +199,24 @@ def main():
     
     # Check if database exists
     if not os.path.exists(DATABASE_PATH):
-        print(f"\n❌ Database not found: {DATABASE_PATH}")
+        print(f"\n{CROSS} Database not found: {DATABASE_PATH}")
         print("   Make sure you're in the correct directory.")
         sys.exit(1)
     
     # Export today's trades
-    print("\n🔄 Exporting today's trades...")
+    print(f"\n{LOADING} Exporting today's trades...")
     export_today_trades()
     
     # Check if it's Friday (end of week)
     if datetime.now().weekday() == 4:  # Friday = 4
-        print("\n🔄 It's Friday! Exporting weekly summary...")
+        print(f"\n{LOADING} It's Friday! Exporting weekly summary...")
         export_week_summary()
         
-        print("\n🔄 Creating weekly database backup...")
+        print(f"\n{LOADING} Creating weekly database backup...")
         backup_entire_database()
     
     print("\n" + "=" * 60)
-    print("✅ Export complete!")
+    print(f"{CHECK} Export complete!")
     print("=" * 60)
 
 

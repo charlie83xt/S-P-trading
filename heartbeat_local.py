@@ -9,6 +9,7 @@ import time
 import threading
 from datetime import datetime, timedelta
 import logging
+from debug_config import debug_print, production_print, LOADING, STICKS, CHECK, WRENCH, WARNING
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class LocalSessionKeepAlive:
         self.thread.start()
         
         timestamp = datetime.now().strftime('%H:%M:%S')
-        logger.info(f"🔄 [{timestamp}] Session keepalive started (ping every {self.interval.total_seconds()/60:.0f} minutes)")
+        logger.info(f"{LOADING} [{timestamp}] Session keepalive started (ping every {self.interval.total_seconds()/60:.0f} minutes)")
     
     def stop(self):
         """Stop keepalive when you end trading session"""
@@ -60,7 +61,7 @@ class LocalSessionKeepAlive:
             self.thread.join(timeout=5)
         
         timestamp = datetime.now().strftime('%H:%M:%S')
-        logger.info(f"⏸️  [{timestamp}] Session keepalive stopped ({self.ping_count} pings sent today)")
+        logger.info(f"{STICKS}  [{timestamp}] Session keepalive stopped ({self.ping_count} pings sent today)")
     
     def _heartbeat_loop(self):
         """Background loop that sends periodic pings"""
@@ -101,27 +102,27 @@ class LocalSessionKeepAlive:
                     loop.run_until_complete(
                         self.api._page.evaluate("() => console.log('keepalive ping')")
                     )
-                    logger.info(f"✓ [{timestamp}] Session ping #{self.ping_count + 1} sent (Playwright)")
+                    logger.info(f"{CHECK} [{timestamp}] Session ping #{self.ping_count + 1} sent (Playwright)")
                     return
                 except Exception as e:
-                    logger.warning(f"⚠️  [{timestamp}] Playwright ping failed: {e}")
+                    logger.warning(f"{WARNING}  [{timestamp}] Playwright ping failed: {e}")
             
             # Fallback: Try REST API if available
             elif hasattr(self.api, 'get_account_info'):
                 try:
                     account_info = self.api.get_account_info()
                     if account_info and 'error' not in account_info:
-                        logger.info(f"✓ [{timestamp}] Session ping #{self.ping_count + 1} sent (REST API)")
+                        logger.info(f"{CHECK} [{timestamp}] Session ping #{self.ping_count + 1} sent (REST API)")
                         return
                 except Exception as e:
-                    logger.warning(f"⚠️  [{timestamp}] REST API ping failed: {e}")
+                    logger.warning(f"{WARNING}  [{timestamp}] REST API ping failed: {e}")
             
             # If nothing worked
-            logger.warning(f"⚠️  [{timestamp}] No valid ping method found")
+            logger.warning(f"{WARNING}  [{timestamp}] No valid ping method found")
                 
         except Exception as e:
             timestamp = datetime.now().strftime('%H:%M:%S')
-            logger.warning(f"⚠️  [{timestamp}] Ping failed: {e} (will retry next interval)")
+            logger.warning(f"{WARNING}  [{timestamp}] Ping failed: {e} (will retry next interval)")
 
     
     def force_ping(self):
@@ -131,7 +132,7 @@ class LocalSessionKeepAlive:
         Usage:
             keepalive.force_ping()
         """
-        logger.info("🔧 Manual ping requested")
+        logger.info(f"{WRENCH} Manual ping requested")
         self._ping()
         self.last_heartbeat = datetime.now()
     
@@ -171,7 +172,7 @@ if __name__ == "__main__":
         def __init__(self):
             self.driver = True  # Simulate browser driver
     
-    print("=== Local Session Keepalive Test ===\n")
+    debug_print("=== Local Session Keepalive Test ===\n")
     
     # Create mock API
     api = MockTradovateUI()
@@ -179,28 +180,28 @@ if __name__ == "__main__":
     # Create keepalive with 1-minute interval (for testing - normally use 15)
     keepalive = LocalSessionKeepAlive(api, interval_minutes=1)
     
-    print("Starting keepalive...")
+    debug_print("Starting keepalive...")
     keepalive.start()
     
     # Simulate trading session for 5 minutes
-    print("\nSimulating 5-minute trading session...")
-    print("(In real use, this runs in background while your bot trades)")
+    debug_print("\nSimulating 5-minute trading session...")
+    debug_print("(In real use, this runs in background while your bot trades)")
     
     for i in range(5):
         time.sleep(60)
         status = keepalive.get_status()
-        print(f"\nAfter {i+1} minutes:")
-        print(f"  Pings sent: {status['pings_sent']}")
-        print(f"  Last ping: {status['last_ping']}")
-        print(f"  Next ping in: {status['next_ping_in_seconds']}s")
+        debug_print(f"\nAfter {i+1} minutes:")
+        debug_print(f"  Pings sent: {status['pings_sent']}")
+        debug_print(f"  Last ping: {status['last_ping']}")
+        debug_print(f"  Next ping in: {status['next_ping_in_seconds']}s")
     
-    print("\n\nStopping keepalive...")
+    debug_print("\n\nStopping keepalive...")
     keepalive.stop()
     
-    print("\nTest complete!")
-    print("\nTo use in your bot:")
-    print("  from heartbeat_local import LocalSessionKeepAlive")
-    print("  keepalive = LocalSessionKeepAlive(api, interval_minutes=15)")
-    print("  keepalive.start()  # When you start trading")
-    print("  # ... your bot runs ...")
-    print("  keepalive.stop()   # When you stop trading")
+    debug_print("\nTest complete!")
+    debug_print("\nTo use in your bot:")
+    debug_print("  from heartbeat_local import LocalSessionKeepAlive")
+    debug_print("  keepalive = LocalSessionKeepAlive(api, interval_minutes=15)")
+    debug_print("  keepalive.start()  # When you start trading")
+    debug_print("  # ... your bot runs ...")
+    debug_print("  keepalive.stop()   # When you stop trading")

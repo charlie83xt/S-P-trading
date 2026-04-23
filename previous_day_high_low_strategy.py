@@ -8,6 +8,7 @@ from datetime import datetime, time, timedelta
 from typing import Optional, Dict, Any, List
 from zoneinfo import ZoneInfo
 from dataclasses import dataclass
+from debug_config import PRINT_STRATEGY_STATE, should_log_throttled, SNOW, FIRE, CHECK, CHART
 
 
 @dataclass
@@ -54,8 +55,8 @@ class PreviousDayHighLowStrategy:
     1. Calculate previous day's high and low at session start
     2. Wait for price to touch previous day's high or low
     3. Look for reversal candle pattern:
-       - Shooting Star at previous high → SHORT signal
-       - Hanging Man at previous low → LONG signal
+       - Shooting Star at previous high -> SHORT signal
+       - Hanging Man at previous low -> LONG signal
     4. Enter trade targeting opposite level
     
     Pattern Definitions:
@@ -161,7 +162,7 @@ class PreviousDayHighLowStrategy:
             self.prev_day_date = self._today_str()
             
             self.logger.info(
-                f"PrevDayHL: ✅ Levels from Supabase - "
+                f"PrevDayHL: {CHECK} Levels from Supabase - "
                 f"Date={yesterday_bar.timestamp}, "
                 f"High={self.prev_day_high:.2f}, "
                 f"Low={self.prev_day_low:.2f}, "
@@ -285,7 +286,7 @@ class PreviousDayHighLowStrategy:
             else:
                 status_parts.append("NO LEVELS YET")
             
-            self.logger.info(f"📊 PrevDayHL Status: {' | '.join(status_parts)}")
+            self.logger.info(f"{CHART} PrevDayHL Status: {' | '.join(status_parts)}")
 
         # Check trade limit
         if self.trades_today >= self.max_trades_per_day:
@@ -306,12 +307,13 @@ class PreviousDayHighLowStrategy:
                 return None
 
         if self.prev_day_high:
-            self.logger.info(
-                f"📊 PrevDayHL Active: High={self.prev_day_high:.2f}, "
-                f"Low={self.prev_day_low:.2f}, "
-                f"Trades={self.trades_today}/{self.max_trades_per_day}"
-            )
-            # Only log this once per minute, not every tick
+            if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                self.logger.info(
+                    f"{CHART} PrevDayHL Active: High={self.prev_day_high:.2f}, "
+                    f"Low={self.prev_day_low:.2f}, "
+                    f"Trades={self.trades_today}/{self.max_trades_per_day}"
+                )
+                # Only log this once per minute, not every tick
         
         # Get current price
         current_price = self.dm.get_current_price(symbol)
@@ -324,11 +326,11 @@ class PreviousDayHighLowStrategy:
         distance_to_low = abs(current_price - self.prev_day_low)
 
         if distance_to_high < 5.0:  # Within 5 points of high
-            self.logger.info(f"🔥 Approaching prev high: {distance_to_high:.2f} pts away")
+            self.logger.info(f"{FIRE} Approaching prev high: {distance_to_high:.2f} pts away")
 
 
         if distance_to_low < 5.0:  # Within 5 points of low
-            self.logger.info(f"❄️  Approaching prev low: {distance_to_low:.2f} pts away")
+            self.logger.info(f"{SNOW}  Approaching prev low: {distance_to_low:.2f} pts away")
         
         # Get recent bars to build current candle
         try:
@@ -358,10 +360,10 @@ class PreviousDayHighLowStrategy:
         dist_to_low = abs(current_candle.low - self.prev_day_low)
         
         if dist_to_high < 5.0 and not self.high_touched:
-            self.logger.info(f"🔥 Approaching prev high: {dist_to_high:.2f}pts away")
+            self.logger.info(f"{FIRE} Approaching prev high: {dist_to_high:.2f}pts away")
         
         if dist_to_low < 5.0 and not self.low_touched:
-            self.logger.info(f"❄️  Approaching prev low: {dist_to_low:.2f}pts away")
+            self.logger.info(f"{SNOW}  Approaching prev low: {dist_to_low:.2f}pts away")
 
         # Check for SHORT signal: Touch prev high + Shooting Star
         if self._touches_prev_high(current_candle) and not self.high_touched:

@@ -161,6 +161,13 @@ class TradeAnalytics:
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+
+        # Check if signal already exists
+        cursor.execute('SELECT signal_id FROM signals WHERE signal_id = ?', (signal_id,))
+        if cursor.fetchone():
+            self.logger.debug(f"Signal {signal_id} already logged, skipping")
+            conn.close()
+            return
         
         now = datetime.now(timezone.utc)
         ts_epoch = now.timestamp()

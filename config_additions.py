@@ -19,7 +19,7 @@ ORB_RETEST_MIN_GAP_SEC = float(os.getenv("ORB_RETEST_MIN_GAP_SEC", "30.0"))
 ORB_RETEST_MAX_TRADES = int(os.getenv("ORB_RETEST_MAX_TRADES", "2"))
 ORB_RETEST_ONE_SIDE_ONLY = bool(os.getenv("ORB_RETEST_ONE_SIDE", "true").lower() == "true")
 
-# Parse trade window times (format: "9,45" → (9, 45))
+# Parse trade window times (format: "9,45" -> (9, 45))
 _start_str = os.getenv("ORB_RETEST_START", "9,45")
 _end_str = os.getenv("ORB_RETEST_END", "12,0")
 ORB_RETEST_TRADE_START = tuple(map(int, _start_str.split(",")))

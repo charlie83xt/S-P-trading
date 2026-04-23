@@ -2,8 +2,9 @@
 import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
+from debug_config import PRINT_STRATEGY_STATE, should_log_throttled
 
-class MeanReversionStrategyOld:
+class MeanReversionStrategyLight:
     """
     Simple mean reversion strategy using Bollinger Bands.
    
@@ -81,9 +82,10 @@ class MeanReversionStrategyOld:
         # Buy when price below lower band (oversold)
         if price <= lower_band:
             self.trades_today += 1
-            self.logger.info(
-                f"Mean Reversion BUY: price={price:.2f} <= lower_band={lower_band:.2f}"
-            )
+            if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                self.logger.info(
+                    f"Mean Reversion BUY: price={price:.2f} <= lower_band={lower_band:.2f}"
+                )
            
             return {
                 "type": "BUY",
@@ -101,9 +103,10 @@ class MeanReversionStrategyOld:
         # Sell when price above upper band (overbought)
         elif price >= upper_band:
             self.trades_today += 1
-            self.logger.info(
-                f"Mean Reversion SELL: price={price:.2f} >= upper_band={upper_band:.2f}"
-            )
+            if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                self.logger.info(
+                    f"Mean Reversion SELL: price={price:.2f} >= upper_band={upper_band:.2f}"
+                )
            
             return {
                 "type": "SELL",

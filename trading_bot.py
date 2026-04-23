@@ -19,6 +19,25 @@ from trade_analytics import TradeAnalytics
 from strategy_manager import StrategyManager
 from intelligent_entry_filter import IntelligentEntryFilter
 from symbol_manager import SymbolManager
+from debug_config import (
+    PRINT_HEARTBEATS, 
+    should_log_throttled, 
+    CHECK, 
+    CROSS, 
+    ROCKET, 
+    CHART, 
+    WRENCH, 
+    WARNING, 
+    INFO, 
+    NOTE, 
+    TRASH, 
+    BOX, 
+    CALENDAR,
+    BLOCKED,
+    FIRE,
+    TARGET
+)
+
 
 # ================= tiny helpers =====================
 import uuid
@@ -77,7 +96,7 @@ class TradingBot:
             data_manager = self.data_manager,
             logger = self.logger
         )
-        self.logger.info("✅ Filter initialised")
+        self.logger.info(f"{CHECK} Filter initialised")
         
         self.risk_manager.instant_close = getattr(self.config, "INSTANT_CLOSE_TRADES", "hold")
         self.risk_manager.emit_closed_on_hold = getattr(self.config, "RM_EMIT_CLOSED_ON_HOLD", True)
@@ -131,7 +150,7 @@ class TradingBot:
         # Clear risk manager positions for new symbol
         self.risk_manager.positions.clear()
     
-        self.logger.info(f"✅ Trading symbol changed to: {new_symbol}")
+        self.logger.info(f"{CHECK} Trading symbol changed to: {new_symbol}")
 
         
     def _setup_logging(self):
@@ -261,7 +280,7 @@ class TradingBot:
                         self.logger.warning(f"failed to ingest tick: {e}")
                 ########################
 
-                self.logger.debug(f"🎯 BOT GOT PRICE: {price}") # ADD THIS
+                self.logger.debug(f"{TARGET} BOT GOT PRICE: {price}") # ADD THIS
                 
                 ## ---- NEW ----
                 if price is None:
@@ -400,26 +419,14 @@ class TradingBot:
                     )
 
 
-                # 4) Optional: update analysis cache (for /api/market_analysis)
-                # try:
-                #     self._latest_analysis = self.strategy.analyze_market_context(symbol)
-                # except Exception:
-                #     self._latest_analysis = {"current_price": price}
-
-                #####
-                # if not self.data_manager.is_connected():
-                #     if not self.connect():
-                #         self.logger.error("Cannot connect, aborting start()")
-                #         return False
-                #####
-
                 # 5) Heartbeat every ~10s
                 now = time.time()
                 if now - last_log > 10:
                     # adding new here
                     rm = getattr(self, "risk_manager", None)
                     rh_len = len(getattr(rm, "trade_history", []))
-                    self.logger.info("HB: price=%s strategy=%s running=%s | RM id=%s trade_history_len=%d", price, type(self.strategy).__name__, self.is_running, id(rm), rh_len)
+                    if PRINT_HEARTBEATS or should_log_throttled('heartbeat', 60):
+                        self.logger.info("HB: price=%s strategy=%s running=%s | RM id=%s trade_history_len=%d", price, type(self.strategy).__name__, self.is_running, id(rm), rh_len)
                     last_log = now
                 time.sleep(1)
             except Exception as e:
@@ -563,7 +570,7 @@ class TradingBot:
                 )
 
                 if not allow_entry:
-                    self.logger.warning(f"⛔️ ENTRY BLOCKED: {block_reason}")
+                    self.logger.warning(f"{BLOCKED} ENTRY BLOCKED: {block_reason}")
                     self.analytics.log_signal(
                         signal_id=signal_id,
                         symbol=sym,
@@ -575,7 +582,7 @@ class TradingBot:
                     )
                     return # EXIT - Don't execute!
                 
-                self.logger.info(f"✅ ENTRY APPROVED")
+                self.logger.info(f"{CHECK} ENTRY APPROVED")
 
             # ------------------------
             # DRY-RUN BRANCH
@@ -950,10 +957,11 @@ class TradingBot:
                 )
 
                 # 4) Only now do we record the fill
-                self.logger.info(
-                    "LIVE %s %s x%s @ %s | sig=%s att=%s",
-                    side, sym, qty, px_exec, signal_id, attempt_id
-                )
+                if PRINT_HEARTBEATS:
+                    self.logger.info(
+                        "LIVE %s %s x%s @ %s | sig=%s att=%s",
+                        side, sym, qty, px_exec, signal_id, attempt_id
+                    )
                 # self.logger.info("LIVE %s %s x%s @ %s", side, sym, qty, px)
                 # Only after UI worked, record live fill
                 # self._record_fill(sym, side, qty, px, dry_run=(acct_mode != "false"))
@@ -1232,7 +1240,7 @@ class TradingBot:
         Swap the active strategy at runtime.
         Safe to call before start(), or while paused.
         """
-        self.logger.info(f"🔥 SET_STRATEGY CALLED: name={name} params={params}")
+        self.logger.info(f"{FIRE} SET_STRATEGY CALLED: name={name} params={params}")
         params = params or {}
 
         # 1) Persist user params on the bot (so the trading loop can read them later)
@@ -1263,7 +1271,7 @@ class TradingBot:
             data_manager=self.data_manager,
             **merged
         )
-        self.logger.info(f"✅ STRATEGY NOW: {type(self.strategy).__name__}")
+        self.logger.info(f"{CHECK} STRATEGY NOW: {type(self.strategy).__name__}")
 
         # 3) (Optional) also reflect params onto strategy instance for convenience
         for k in ("opening_range_minutes", "breakout_threshold", "stop_loss_percent", "take_profit_percent", "breakout_points", "min_move_from_or"):
@@ -1382,13 +1390,15 @@ class TradingBot:
 
         qty = rm.get_position_qty(symbol)
         if qty == 0:
-            self.logger.debug("EXIT-CHECK: qty=0 -> skip (sym=%s px=%s)", symbol, current_price)
+            if PRINT_HEARTBEATS or should_log_throttled('exit_check', 60):
+                self.logger.debug("EXIT-CHECK: qty=0 -> skip (sym=%s px=%s)", symbol, current_price)
             return
 
         # prevent exit spam (2s)
         now = time.time()
         if (now - self._last_exit_ts.get(symbol, 0.0)) < 2.0:
-            self.logger.info("EXIT-CHECK: rate-limited -> skip (sym=%s)", symbol)
+            if PRINT_HEARTBEATS or should_log_throttled('exit_check', 60):
+                self.logger.info("EXIT-CHECK: rate-limited -> skip (sym=%s)", symbol)
             return
 
         # Option B: Clean - Use helper from RM)
@@ -1398,14 +1408,16 @@ class TradingBot:
         # logging the position state we are using
         sym = (symbol or "").upper()
         pos = rm.positions.get(sym) or {}
-        self.logger.info(
-            "EXIT-CHECK: sym=%s qty=%s px=%s avg=%s stop_pts=%s take_pts=%s", 
-            symbol, qty, current_price, pos.get("avg_price"), stop_pts, take_pts
-        )
+        if PRINT_HEARTBEATS or should_log_throttled('exit_check', 60):
+            self.logger.info(
+                "EXIT-CHECK: sym=%s qty=%s px=%s avg=%s stop_pts=%s take_pts=%s", 
+                symbol, qty, current_price, pos.get("avg_price"), stop_pts, take_pts
+            )
         
         reason = rm.check_exit_points(symbol, current_price, stop_pts, take_pts)
         if not reason:
-            self.logger.info("EXIT-CHECK: no trigger (sym=%s)", symbol)
+            if PRINT_HEARTBEATS:
+                self.logger.info("EXIT-CHECK: no trigger (sym=%s)", symbol)
             return
 
         self._last_exit_ts[symbol] = now
@@ -1483,7 +1495,7 @@ class TradingBot:
     
         self.strategy_manager.manual_override = True
         self.strategy_manager.manual_strategy_name = strategy_name
-        self.logger.info(f"🔧 MANUAL OVERRIDE: {strategy_name}")
+        self.logger.info(f"{WRENCH} MANUAL OVERRIDE: {strategy_name}")
         return True
 
 
@@ -1492,7 +1504,7 @@ class TradingBot:
         if hasattr(self, 'strategy_manager'):
             self.strategy_manager.manual_override = False
             self.strategy_manager.manual_strategy_name = None
-            self.logger.info("✅ Returning to auto-switching")
+            self.logger.info(f"{CHECK} Returning to auto-switching")
             return True
         return False
 
