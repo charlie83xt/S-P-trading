@@ -243,7 +243,7 @@ def setup_wizard(logger):
     print(f"{NOTE} Step 1: Machine Registration")
     print("-" * 40)
     # config_dir = get_app_config_dir()
-    machine_id = MachineFingerPrint.get_machine_id()
+    machine_id = MachineFingerprint.get_machine_id()
     print(f"Your Machine ID: {machine_id}")
     user_email = input("Enter your email address (for license tracking): ").strip()
     
@@ -495,7 +495,7 @@ def main():
         return 0
 
     if args.machine_id:
-        mid = MachineFingerPrint.get_machine_id()
+        mid = MachineFingerprint.get_machine_id()
         print(f"\n{NOTE} Your Machine ID: {mid}")
         print("Send this to the developer to receive your license key.\n")
         return 0
