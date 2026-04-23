@@ -41,11 +41,11 @@ if errorlevel 1 (
 )
 
 if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" (
-    set ISCC="%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
+    set ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe
 ) else if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (
-    set ISCC="C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    set ISCC=C:\Program Files (x86)\Inno Setup 6\ISCC.exe
 ) else if exist "C:\Program Files\Inno Setup 6\ISCC.exe" (
-    set ISCC="C:\Program Files\Inno Setup 6\ISCC.exe"
+    set ISCC=C:\Program Files\Inno Setup 6\ISCC.exe
 ) else (
     echo [ERROR] Inno Setup 6 not found.
     echo         Download from: https://jrsoftware.org/isdl.php
@@ -136,7 +136,7 @@ echo.
 
 :: ── Step 5: Build installer ──────────────────────────────────────────────────
 echo [5/6] Building installer with Inno Setup...
-%ISCC% /DMyAppVersion=%VERSION% installer.iss
+"%ISCC%" /DMyAppVersion=%VERSION% installer.iss
 if errorlevel 1 (
     echo [ERROR] Inno Setup build failed!
     pause & exit /b 1
