@@ -40,16 +40,18 @@ if errorlevel 1 (
     pause & exit /b 1
 )
 
-if not exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (
-    if not exist "C:\Program Files\Inno Setup 6\ISCC.exe" (
-        echo [ERROR] Inno Setup 6 not found.
-        echo         Download from: https://jrsoftware.org/isdl.php
-        pause & exit /b 1
-    )
+if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" (
+    set ISCC="%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
+) else if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (
+    set ISCC="C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+) else if exist "C:\Program Files\Inno Setup 6\ISCC.exe" (
     set ISCC="C:\Program Files\Inno Setup 6\ISCC.exe"
 ) else (
-    set ISCC="C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    echo [ERROR] Inno Setup 6 not found.
+    echo         Download from: https://jrsoftware.org/isdl.php
+    pause & exit /b 1
 )
+
 
 echo [OK]  All prerequisites found.
 echo.
