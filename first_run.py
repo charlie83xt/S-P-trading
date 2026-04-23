@@ -121,7 +121,7 @@ def setup_page():
     If setup is already done, redirect to the main dashboard.
     """
     if not is_first_run():
-        return redirect(url_for("index"))          # adjust "index" to your main route name
+        return redirect(url_for("dashboard"))          # adjust "index" to your main route name
     return render_template("setup.html")
 
 
