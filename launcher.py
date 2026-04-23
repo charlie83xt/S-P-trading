@@ -477,7 +477,7 @@ def main():
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     parser.add_argument('--version', action='store_true', help='Show version')
     parser.add_argument('--auth-info', action='store_true', help='Show authorization info')
-    parser.add_argument('--macine-id', action='store_true', help="Show this machine's license ID")
+    parser.add_argument('--machine-id', action='store_true', help="Show this machine's license ID")
     
     args = parser.parse_args()
     
