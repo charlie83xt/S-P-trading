@@ -3,9 +3,11 @@ Main launcher for S-P Trading App.
 Cross-platform startup that handles Chrome, dashboard, and authorization.
 
 Usage:
-    python launcher.py              # Run with default settings
-    python launcher.py --setup      # First-time setup wizard
-    python launcher.py --debug      # Debug mode (verbose logging)
+    python launcher.py               # Run with default settings
+    python launcher.py --setup       # First-time setup wizard
+    python launcher.py --debug       # Debug mode (verbose logging)
+     python launcher.py --machine-id # Show machine ID (for license requests)
+
 """
 
 import sys
@@ -30,7 +32,8 @@ from app_config import (
 from version import APP_VERSION, load_version_info
 from authorization import (
     check_authorization_before_launch, register_machine,
-    AuthorizationManager
+    AuthorizationManager,
+    LICENSE_TYPES
 )
 
 # Setup logging
@@ -74,9 +77,7 @@ def validate_installation() -> bool:
         
         # Check critical imports can be loaded
         try:
-            import trading_bot
-            import web_app
-            import config
+            import trading_bot, web_app, config
             logger.info("[OK] Core modules loaded successfully")
             return True
         except ImportError as e:
@@ -99,6 +100,132 @@ def validate_installation() -> bool:
         logger.info("[OK] Installation validation passed")
         return True
 
+
+# ============================================================================
+# LICENSE / AUTHORIZATION  (new — replaces the old single check)
+# ============================================================================
+ 
+def _show_license_menu(
+   logger,
+   config_dir: Path,
+   machine_fingerprint: str,
+   license_manager: LicenseManager,
+) -> bool:
+   """
+   Interactive license menu shown when no valid license is found.
+   Returns True if a valid license was successfully activated.
+   """
+   machine_id = machine_fingerprint[:4].upper()
+ 
+   print("\n" + "=" * 60)
+   print(f"{CROSS} LICENSE REQUIRED")
+   print("=" * 60)
+   print(f"\nMachine ID: {machine_id}")
+   print("\nOptions:")
+   print("  1) Start free 14-day trial (no key needed)")
+   print("  2) Enter license key (if you purchased one)")
+   print("  3) Show machine ID (to request a key from developer)")
+   print("  4) Exit")
+   print()
+ 
+   choice = input("Enter choice (1-4): ").strip()
+ 
+   # ── Option 1: Trial ─────────────────────────────────────────────────────
+   if choice == "1":
+       key = license_manager.generate_trial(machine_fingerprint)
+       print(f"\n{CHECK} 14-day trial activated!")
+       print(f"   Key: {key}")
+       print("   The trial starts now. Upgrade any time to continue after it expires.\n")
+       return True
+ 
+   # ── Option 2: Enter customer key ────────────────────────────────────────
+   elif choice == "2":
+       print("\nYou need the license key AND the expiry string from your purchase email.")
+       key_input    = input("License key  (SP-XXXX-XXXX-XXXX-XXXX): ").strip()
+       expiry_input = input("Expiry string (YYYYMMDD or 'none' for lifetime): ").strip()
+       email_input  = input("Your email (optional, press Enter to skip): ").strip() or None
+ 
+       result = license_manager.activate(
+           key_input,
+           machine_fingerprint,
+           user_email=email_input,
+           expiry_str=expiry_input if expiry_input else None,
+       )
+ 
+       if result["valid"]:
+           print(f"\n{CHECK} License activated — {result.get('label', '')} plan")
+           if result.get("days_remaining") is not None:
+               print(f"   Expires in {result['days_remaining']} days")
+           else:
+               print("   Lifetime license — never expires")
+           return True
+       else:
+           print(f"\n{CROSS} Activation failed: {result['error']}")
+           logger.error(f"License activation failed: {result['error']}")
+           return False
+ 
+   # ── Option 3: Show machine ID ────────────────────────────────────────────
+   elif choice == "3":
+       print(f"\n{NOTE} Your Machine ID: {machine_id}")
+       print("Send this to the developer along with your payment confirmation.")
+       print("You will receive your license key and expiry string by email.\n")
+       input("Press Enter to continue...")
+       return _show_license_menu(logger, config_dir, machine_fingerprint, license_manager)
+ 
+   # ── Option 4: Exit ───────────────────────────────────────────────────────
+   else:
+       return False
+ 
+ 
+def check_license(logger, config_dir: Path) -> bool:
+   """
+   Full license gate called from main().
+ 
+   1. Generate machine fingerprint
+   2. Ask LicenseManager if we have a valid, unexpired license
+   3. If not → show interactive menu (trial / enter key / exit)
+   4. Print a friendly summary on success
+ 
+   Returns True to allow startup, False to block it.
+   """
+   auth_mgr   = AuthorizationManager(config_dir)
+   lic_mgr    = LicenseManager(config_dir)
+   fingerprint = MachineFingerprint.generate_fingerprint()
+ 
+   result = lic_mgr.check_license_valid(fingerprint)
+ 
+   if not result["valid"]:
+       logger.warning(f"License check: {result.get('error')}")
+       granted = _show_license_menu(logger, config_dir, fingerprint, lic_mgr)
+       if not granted:
+           return False
+       # Re-check after activation
+       result = lic_mgr.check_license_valid(fingerprint)
+       if not result["valid"]:
+           logger.error("License still invalid after activation attempt")
+           return False
+ 
+   # ── Print license status ─────────────────────────────────────────────────
+   label  = result.get("label", result.get("license_type", ""))
+   days   = result.get("days_remaining")
+   expiry = result.get("expiry_str", "none")
+ 
+   print(f"{CHECK} License: {label}", end="")
+   if days is None:
+       print(" (Lifetime)")
+   else:
+       print(f" — {days} days remaining")
+       if days <= 7:
+           print(f"{WARNING} License expires soon! Visit https://your-website.com/renew")
+ 
+   return True
+ 
+ 
+# ============================================================================
+# SETUP WIZARD  (updated to call register_machine + show machine ID)
+# ============================================================================
+
+
 def setup_wizard(logger):
     """
     First-time setup wizard.
@@ -110,11 +237,14 @@ def setup_wizard(logger):
     print("="*60 + "\n")
     
     config = load_config()
+    confir_dir = get_app_config_dir()
     
     # AUTHORIZATION: Register this machine
     print(f"{NOTE} Step 1: Machine Registration")
     print("-" * 40)
-    config_dir = get_app_config_dir()
+    # config_dir = get_app_config_dir()
+    machine_id = MachineFingerPrint.get_machine_id()
+    print(f"Your Machine ID: {machine_id}")
     user_email = input("Enter your email address (for license tracking): ").strip()
     
     if not register_machine(config_dir, user_email):
@@ -125,12 +255,14 @@ def setup_wizard(logger):
     # Ask for trading platform
     print(f"\n{NOTE} Step 2: Trading Configuration")
     print("-" * 40)
-    print("Which trading platform do you want to use?")
+    # print("Which trading platform do you want to use?")
+    # print("  1) Tradovate (Recommended for S&P 500 futures)")
+    # print("  2) Binance (Cryptocurrency futures)")
+    # print("  3) NinjaTrader (Desktop platform)")
+    print("Setting up trading platform of use...")
     print("  1) Tradovate (Recommended for S&P 500 futures)")
-    print("  2) Binance (Cryptocurrency futures)")
-    print("  3) NinjaTrader (Desktop platform)")
-    
-    choice = input("Enter choice (1-3): ").strip()
+    choice = "1"
+    # choice = input("Enter choice (1-3): ").strip()
     platforms = {"1": "tradovate_ui", "2": "binance", "3": "ninjatrader"}
     config["trading_platform"] = platforms.get(choice, "tradovate_ui")
     
@@ -211,9 +343,6 @@ def start_dashboard(logger, config: dict) -> bool:
     try:
         # FIX: Check if running from PyInstaller bundle
         if getattr(sys, 'frozen', False):
-            # Running from packaged .exe
-            # Import and run directly (don't subprocess)
-            logger.info("Starting dashboard from packaged app...")
 
             # Import and start Flask in a thread
             def run_flask():
@@ -226,8 +355,6 @@ def start_dashboard(logger, config: dict) -> bool:
                     os.environ['PORT'] = str(dashboard_port)
 
                     logger.info("Environment set: PW_MODE=cdp, CDP_PORT=9222")
-                    logger.info(f"  PW_MODE={os.environ.get('PW_MODE')}")
-                    logger.info(f"   CDP_PORT={os.environ.get('CDP_PORT')}")
                     
                     # Import web_app (it's bundled in _internal)
                     import web_app
@@ -301,13 +428,10 @@ def run_app(logger, config: dict):
     dashboard_port = config.get('dashboard_port', 5000)
     dashboard_url = f"http://localhost:{dashboard_port}"
     
-    logger.info(f"Opening browser to {dashboard_url}...")
-    
     try:
         # Wait a moment for Flask to fully start
         time.sleep(2)
         # Open browser
-        # webbrowser = webbrowser.get('chrome')
         webbrowser.open(dashboard_url)
         logger.info(f"{CHECK} Browser opened")
     except Exception as e:
@@ -342,17 +466,18 @@ def main():
         description='S-P Trading Application Launcher',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  python launcher.py              Run the app
-  python launcher.py --setup      Run setup wizard
-  python launcher.py --debug      Enable debug logging
-        """
+        Examples:
+            python launcher.py              Run the app
+            python launcher.py --setup      Run setup wizard
+            python launcher.py --debug      Enable debug logging
+    """
     )
     
     parser.add_argument('--setup', action='store_true', help='Run setup wizard')
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     parser.add_argument('--version', action='store_true', help='Show version')
     parser.add_argument('--auth-info', action='store_true', help='Show authorization info')
+    parser.add_argument('--macine-id', action='store_true', help="Show this machine's license ID")
     
     args = parser.parse_args()
     
@@ -361,24 +486,31 @@ Examples:
     
     # Print header
     print_header()
+
+    config_dir = get_app_config_dir()
     
     # Handle version flag
     if args.version:
         print(f"Version: {APP_VERSION}")
         return 0
+
+     if args.machine_id:
+        mid = MachineFingerPrint.get_machine_id()
+        print(f"\n{NOTE} Your Machine ID: {mid}")
+        print("Send this to the developer to receive your license key.\n")
+        return 0
     
     # Handle auth-info flag
     if args.auth_info:
-        config_dir = get_app_config_dir()
-        auth = AuthorizationManager(config_dir)
         import json
+        # config_dir = get_app_config_dir()
+        auth = AuthorizationManager(config_dir)
         print(json.dumps(auth.get_authorization_info(), indent=2))
         return 0
     
     # ========================================================
     # AUTHORIZATION CHECK
     # ========================================================
-    config_dir = get_app_config_dir()
     
     # If setup is requested, allow it unconditionally
     if args.setup:
@@ -386,13 +518,17 @@ Examples:
         return 0
     
     # Otherwise, check authorization before doing anything
-    if not check_authorization_before_launch(config_dir):
-        print(f"\n{CROSS} AUTHORIZATION FAILED")
-        print(f"Authorization file: {config_dir / 'authorization.json'}")
-        print("\nTo register this machine:")
-        print(f"  python launcher.py --setup")
-        logger.error("Authorization check failed - access denied")
+    # if not check_authorization_before_launch(config_dir):
+    if not check_license(logger, config_dir):
+        # print(f"\n{CROSS} AUTHORIZATION FAILED")
+        print(f"\n{CROSS} License check failed - access denied")
+        # print(f"Authorization file: {config_dir / 'authorization.json'}")
+        print(f"Run with --setup to register, or choose the trial option. \n")
+        # print("\nTo register this machine:")
+        # print(f"  python launcher.py --setup")
+        # logger.error("Authorization check failed - access denied")
         sys.exit(1)
+
     
     logger.info(f"{CHECK} Authorization check passed")
     
