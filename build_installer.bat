@@ -12,7 +12,7 @@ setlocal EnableDelayedExpansion
 set VERSION=%~1
 if "%VERSION%"=="" (
     :: Read version from version.py
-    for /f "tokens=2 delims==''" %%A in ('findstr /i "APP_VERSION" version.py') do (
+    for /f "tokens=*" %%A in ('python -c "from version import APP_VERSION; print(APP_VERSION)"') do (
         set VERSION=%%A
     )
 )
