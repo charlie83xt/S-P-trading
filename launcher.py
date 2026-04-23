@@ -237,7 +237,7 @@ def setup_wizard(logger):
     print("="*60 + "\n")
     
     config = load_config()
-    confir_dir = get_app_config_dir()
+    config_dir = get_app_config_dir()
     
     # AUTHORIZATION: Register this machine
     print(f"{NOTE} Step 1: Machine Registration")
