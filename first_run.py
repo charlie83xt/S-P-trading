@@ -108,9 +108,7 @@ def complete_first_run() -> None:
 # ============================================================================
 
 
-setup_bp = Blueprint("setup", __name__)
-
-
+setup_bp = Blueprint("setup", __name__, template_folder="templates")
 
 
 # ── Setup page (GET /setup) ───────────────────────────────────────────────────
@@ -125,15 +123,11 @@ def setup_page():
     return render_template("setup.html")
 
 
-
-
 # ── Machine ID ────────────────────────────────────────────────────────────────
 @setup_bp.route("/api/setup/machine_id")
 def api_machine_id():
     mid = MachineFingerprint.get_machine_id()
     return jsonify({"machine_id": mid})
-
-
 
 
 # ── Trial activation ──────────────────────────────────────────────────────────
@@ -171,7 +165,6 @@ def api_trial():
     except Exception as e:
         logger.error(f"Trial activation error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
-
 
 
 
