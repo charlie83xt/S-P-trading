@@ -88,9 +88,9 @@ Name: "autostart";       Description: "Launch S-P Trading on Windows &startup"; 
 Source: "dist\S-P Trading\*";  DestDir: "{app}";  Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Documentation
-Source: "dist_assets\README.txt";     DestDir: "{app}"; Flags: isreadme ignoreversion
+Source: "dist_assets\INSTALL_INFO.txt";     DestDir: "{app}"; Flags: isreadme ignoreversion
 Source: "dist_assets\LICENSE.txt";    DestDir: "{app}"; Flags: ignoreversion
-Source: "dist_assets\CHANGELOG.txt";  DestDir: "{app}"; Flags: ignoreversion
+Source: "dist_assets\POST_INSTALL.txt";  DestDir: "{app}"; Flags: ignoreversion
 
 ; ============================================================
 ; SHORTCUTS
