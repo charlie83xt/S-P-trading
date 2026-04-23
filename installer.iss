@@ -76,9 +76,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 ; TASKS  (checkboxes shown to user during install)
 ; ============================================================
 [Tasks]
-Name: "desktopicon";      Description: "Create a &desktop shortcut";      GroupDescription: "Additional shortcuts:"; Flags: checked
-Name: "startmenufolder";  Description: "Create a &Start Menu folder";      GroupDescription: "Additional shortcuts:"; Flags: checked
-Name: "autostart";        Description: "Launch S-P Trading on &Windows startup"; GroupDescription: "Startup:"; Flags: unchecked
+Name: "desktopicon";     Description: "Create a &desktop shortcut";           GroupDescription: "Additional shortcuts:"
+Name: "startmenufolder"; Description: "Create a &Start Menu folder";           GroupDescription: "Additional shortcuts:"
+Name: "autostart";       Description: "Launch S-P Trading on Windows &startup"; GroupDescription: "Startup:"; Flags: unchecked
 
 ; ============================================================
 ; FILES  — copy the PyInstaller dist folder
