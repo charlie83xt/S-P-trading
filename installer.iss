@@ -218,7 +218,7 @@ begin
     // ── Write first_run marker so the app shows setup UI ────────────────────
     SaveStringToFile(
       AppDataDir + '\first_run',
-      DateTimeToStr(Now),
+      GetDateTimeString('yyyy-mm-dd hh:nn:ss', '-', ':'),
       False
     );
   end;
