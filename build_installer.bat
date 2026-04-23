@@ -48,7 +48,7 @@ if not exist "%INNO_PATH%" (
     echo         Download from: https://jrsoftware.org/isdl.php
     pause & exit /b 1
 )
-set ISCC="%INNO_PATH%"
+set "ISCC=%INNO_PATH%"
 echo [OK]  Inno Setup found at: %INNO_PATH%
 
 echo [OK]  All prerequisites found.
@@ -134,7 +134,7 @@ echo.
 
 :: ── Step 5: Build installer ──────────────────────────────────────────────────
 echo [5/6] Building installer with Inno Setup...
-"%ISCC%" /DMyAppVersion=%VERSION% installer.iss
+"%ISCC%" /DMyAppVersion="%VERSION%" installer.iss
 if errorlevel 1 (
     echo [ERROR] Inno Setup build failed!
     pause & exit /b 1
