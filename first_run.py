@@ -120,7 +120,18 @@ def setup_page():
     """
     if not is_first_run():
         return redirect(url_for("dashboard"))          # adjust "index" to your main route name
-    return render_template("setup.html")
+    
+    # Determine why we're showing setup
+    config_dir  = _get_config_dir()
+    fingerprint = MachineFingerprint.generate_fingerprint()
+    lic_mgr     = LicenseManager(config_dir)
+    result      = lic_mgr.check_license_valid(fingerprint)
+    
+    # If license exists but expired — renewal mode, no trial
+    expired = (not result["valid"] and 
+               result.get("error") == "License has expired — please renew")
+    
+    return render_template("setup.html", expired=expired)
 
 
 # ── Machine ID ────────────────────────────────────────────────────────────────
@@ -137,7 +148,13 @@ def api_trial():
         config_dir  = _get_config_dir()
         fingerprint = MachineFingerprint.generate_fingerprint()
         lic_mgr     = LicenseManager(config_dir)
+        stored      = lic_mgr._load_license()
 
+        if stored is not None:
+            return jsonify({
+                "success": False,
+                "error": "A trial has already been used on this machine. Please purchase a license"
+            }), 403
 
         # Don't allow generating a second trial if one already exists
         existing = lic_mgr.check_license_valid(fingerprint)
