@@ -521,19 +521,43 @@ def main():
         setup_wizard(logger)
         return 0
     
-    # Otherwise, check authorization before doing anything
-    # if not check_authorization_before_launch(config_dir):
-    if not check_license(logger, config_dir):
-        # print(f"\n{CROSS} AUTHORIZATION FAILED")
-        print(f"\n{CROSS} License check failed - access denied")
-        # print(f"Authorization file: {config_dir / 'authorization.json'}")
-        print(f"Run with --setup to register, or choose the trial option. \n")
-        # print("\nTo register this machine:")
-        # print(f"  python launcher.py --setup")
-        # logger.error("Authorization check failed - access denied")
-        sys.exit(1)
+    # # Otherwise, check authorization before doing anything
+    # # if not check_authorization_before_launch(config_dir):
+    # if not check_license(logger, config_dir):
+    #     # print(f"\n{CROSS} AUTHORIZATION FAILED")
+    #     print(f"\n{CROSS} License check failed - access denied")
+    #     # print(f"Authorization file: {config_dir / 'authorization.json'}")
+    #     print(f"Run with --setup to register, or choose the trial option. \n")
+    #     # print("\nTo register this machine:")
+    #     # print(f"  python launcher.py --setup")
+    #     # logger.error("Authorization check failed - access denied")
+    #     sys.exit(1)
 
-    
+    # ── LICENSE CHECK ──
+    # If no license exists, don't block here — let the web UI handle it
+    # The browser will open to /setup where the user activates trial/license
+    lic_mgr     = LicenseManager(config_dir)
+    fingerprint = MachineFingerprint.generate_fingerprint()
+    result      = lic_mgr.check_license_valid(fingerprint)
+
+
+    if not result["valid"]:
+        logger.info("No valid license — first run setup will handle activation")
+        # Mark as first run so browser opens to /setup
+        first_run_marker = config_dir / "first_run"
+        first_run_marker.touch()
+    else:
+        label = result.get("label", "")
+        days  = result.get("days_remaining")
+        print(f"{CHECK} License: {label}", end="")
+        if days is None:
+            print(" (Lifetime)")
+        else:
+            print(f" — {days} days remaining")
+            if days <= 7:
+                print(f"{WARNING} License expires soon!")
+
+
     logger.info(f"{CHECK} Authorization check passed")
     
     # ========================================================
