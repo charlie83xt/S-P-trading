@@ -144,7 +144,7 @@ echo.
 
 :: ── Step 6: Generate checksum ────────────────────────────────────────────────
 echo [6/6] Generating SHA-256 checksum...
-set INSTALLER=installer_output\SP-Trading-Setup-v%VERSION%.exe
+set "INSTALLER=installer_output\SP-Trading-Setup-v%VERSION%.exe"
 if exist "%INSTALLER%" (
     certutil -hashfile "%INSTALLER%" SHA256 > "%INSTALLER%.sha256"
     echo [OK]  Checksum written to %INSTALLER%.sha256
