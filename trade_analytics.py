@@ -24,14 +24,57 @@ class TradeAnalytics:
         self.logger = logging.getLogger(__name__)
         self._init_analytics_tables()
 
-        # Remote Supabase (Permanent, accessible)
-        self.supabase_enabled = use_supabase
+        # -- Supabase (optional -- never clashes the app) --------------------------
+        self.supabase = None
+        self.supabase.enabled = False
+
         if use_supabase:
+            self._init_supabase()
+
+    def _init_supabase(self):
+        """
+            Connect to Supabase backend analytics.
+            Uses hardcoded credentials from Config (our backend, not user-provided).
+            Fails silently — app always runs without it.
+        """
+        try:
             from supabase import create_client
-            self.supabase = create_client(
-                os.getenv("SUPABASE_URL"),
-                os.getenv("SUPABASE_KEY")
-            )
+            from config import Config
+
+            url = Config.SUPABASE_URL,
+            key = Config.SUPABASE_KEY
+
+            if not url or not key:
+               self.logger.info("Supabase credentials not configured — local DB only")
+               return
+
+            self.supabase = create_client(url, key)
+            # Remote Supabase (Permanent, accessible)
+            self.supabase_enabled = use_supabase
+            self.logger.info("Supabase analytics connected")
+            
+        except ImportError:
+            self.logger.info("Supabase library not installed — local DB only")
+        except Exception as e:
+            # Never crash the app because of analytics connectivity
+            self.logger.warning(f"Supabase connection failed (non-critical): {e}")
+            self.supabase = None
+            self.supabase_enabled = False
+ 
+    def _supabase_write(self, table: str, data: dict) -> bool:
+        """
+        Safe Supabase write — never raises, always returns bool.
+        Use this for all Supabase inserts/upserts.
+        """
+        if not self.supabase:
+            return False
+        try:
+            self.supabase.table(table).upsert(data).execute()
+            return True
+        except Exception as e:
+            self.logger.warning(f"Supabase write to {table} failed: {e}")
+            return False
+            
     
     def _init_analytics_tables(self):
         """Create analytics tables if they don't exist"""
