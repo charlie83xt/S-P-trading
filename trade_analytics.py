@@ -26,7 +26,7 @@ class TradeAnalytics:
 
         # -- Supabase (optional -- never clashes the app) --------------------------
         self.supabase = None
-        self.supabase.enabled = False
+        self.supabase_enabled = False
 
         if use_supabase:
             self._init_supabase()
