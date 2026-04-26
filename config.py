@@ -76,6 +76,9 @@ class Config:
     # Bot control settings
     COOLDOWN_PERIOD = int(os.getenv('COOLDOWN_PERIOD', '300'))  # 5 minutes
     MAX_DAILY_TRADES = int(os.getenv('MAX_DAILY_TRADES', '10'))
+
+    SUPABASE_URL="https://ndqtzugtnnqyhnqjxeta.supabase.co"
+    SUPABASE_KEY="sb_publishable__aPkSACT6LNsLmoLSopOFQ_VPQ3iJ0U"
     
     # Binance configuration
     BINANCE_API_KEY = os.getenv('BINANCE_API_KEY', '')
