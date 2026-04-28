@@ -26,7 +26,7 @@ This controls:
 # ============================================================================
 
 
-DEBUG = True  # Set to False before building for distribution
+DEBUG = False  # Set to False before building for distribution
 
 
 # ============================================================================
@@ -319,6 +319,7 @@ if DEBUG:
    print(f"  Platform: {_platform}")
    print(f"  USE_EMOJIS: {USE_EMOJIS}")
    print(f"  CHECK: '{CHECK}'")
-   print(f"  sys.stdout.encoding: {sys.stdout.encoding}")
+   print(f"  sys.stdout.encoding: {sys.stdout.encoding if sys.stdout else 'None (no console)'}")
+
 
 
