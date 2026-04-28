@@ -1,7 +1,7 @@
 {
-  "version": "0.1.1",
+  "version": "0.1.2",
   "release_date": "2026-04-28",
-  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.1",
+  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.2",
   "files": [
     {
       "filename": "trading_bot.py",
@@ -26,6 +26,11 @@
     {
       "filename": "trade_analytics.py",
       "sha256": "3e70bb34d38055962385ec90d8408cc0b4d44db7b1fb4c2a38591da363a31d55",
+      "description": ""
+    },
+    {
+      "filename": "intelligent_entry_filter.py",
+      "sha256": "ee559113ad7879aca327d1492188d5f7f406d4a0871d8dc2e2b76a8fcb6bc920",
       "description": ""
     },
     {
