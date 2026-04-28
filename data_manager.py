@@ -159,8 +159,8 @@ class DataManager:
 
     def _init_supabase(self):
         try:
-            url = os.getenv('SUPABASE_URL')
-            key = os.getenv('SUPABASE_KEY')
+            url = self.config.SUPABASE_URL
+            key = self.config.SUPABASE_KEY
 
             if not url or not key:
                 self.logger.info("Supabase not configured (Optional)")

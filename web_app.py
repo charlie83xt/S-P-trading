@@ -35,6 +35,8 @@ from debug_config import (
     production_print,
     WRENCH, CHART, LOADING, TERRA, MAGNI, CHECK, WARNING, FIRE
     )
+from first_run import register_setup_routes
+
 # if not DEBUG:
 #     loggin.getLogger('werkzeug').setLevel(logging.ERROR)z
 
@@ -234,6 +236,8 @@ class UIWatchdog:
 app = Flask(__name__, static_folder=None)
 app.logger.info("=== web_app boot ===")
 app.secret_key = 'trading_bot_secret_key_2024'
+
+register_setup_routes(app)
 
 log.info("Loaded trading_bot from: %s", trading_bot.__file__)
 log.info("Loaded api_factory from: %s", api_factory.__file__)
