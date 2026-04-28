@@ -359,16 +359,16 @@ class UpdateManager:
         if not auto_apply:
         # Write pending update to a file for the dashboard to pick up
         # The dashboard will show a banner and call /api/update/apply
-        pending_file = self.app_dir / ".updates" / "pending_update.json"
-        pending_file.parent.mkdir(parents=True, exist_ok=True)
-        pending_file.write_text(json.dumps({
-            "version":   version,
-            "changelog": changelog,
-            "files":     files,
-            "download_base_url": update_info.get("download_base_url", ""),
-        }, indent=2))
-        logger.info(f"Update v{version} available — dashboard notified")
-        return False   # Not applied yet — waiting for user confirmation
+            pending_file = self.app_dir / ".updates" / "pending_update.json"
+            pending_file.parent.mkdir(parents=True, exist_ok=True)
+            pending_file.write_text(json.dumps({
+                "version":   version,
+                "changelog": changelog,
+                "files":     files,
+                "download_base_url": update_info.get("download_base_url", ""),
+            }, indent=2))
+            logger.info(f"Update v{version} available — dashboard notified")
+            return False   # Not applied yet — waiting for user confirmation
 
         # auto_apply=True path — download and apply immediately
         if not self.download_update_files(update_info):
