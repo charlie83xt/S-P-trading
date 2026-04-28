@@ -1397,6 +1397,66 @@ def change_symbol():
         app.logger.error(f"Change symbol error: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/update/status')
+def update_status():
+    """Check if a pending update is waiting for user confirmation."""
+    try:
+        import sys
+        from pathlib import Path
+        if getattr(sys, 'frozen', False):
+            app_dir = Path(sys._MEIPASS).parent
+        else:
+            app_dir = Path(__file__).parent
+
+        pending_file = app_dir / ".updates" / "pending_update.json"
+        if pending_file.exists():
+            import json
+            data = json.loads(pending_file.read_text())
+            return jsonify({
+                "update_available": True,
+                "version": data.get("version"),
+                "changelog": data.get("changelog", ""),
+                "file_count": len(data.get("files", []))
+            })
+        return jsonify({"update_available": False})
+    except Exception as e:
+        return jsonify({"update_available": False, "error": str(e)})
+
+
+@app.route('/api/update/apply', methods=['POST'])
+def apply_update():
+    """User confirmed — download and apply the pending update."""
+    try:
+        import sys
+        from pathlib import Path
+        from update_manager import UpdateManager
+
+        if getattr(sys, 'frozen', False):
+            app_dir = Path(sys._MEIPASS).parent
+        else:
+            app_dir = Path(__file__).parent
+
+        pending_file = app_dir / ".updates" / "pending_update.json"
+        if not pending_file.exists():
+            return jsonify({"success": False, "error": "No pending update found"})
+
+        import json
+        update_info = json.loads(pending_file.read_text())
+        updater = UpdateManager(app_dir)
+
+        # Apply with auto_apply=True since user already confirmed
+        success = updater.perform_update(update_info, auto_apply=True)
+        if success:
+            return jsonify({
+                "success": True,
+                "message": f"Updated to v{update_info['version']} — please restart the app"
+            })
+            return jsonify({"success": False, "error": "Update failed — check logs"})
+
+    except Exception as e:
+        logger.error(f"Update apply error: {e}")
+        return jsonify({"success": False, "error": str(e)})
+
 
 def _log_routes():
     debug_print("\nRegistered routes:")

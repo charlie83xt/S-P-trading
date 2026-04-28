@@ -345,46 +345,51 @@ class UpdateManager:
         changelog = update_info.get("changelog", "").strip()
 
 
-        print(f"\n{'='*60}")
-        print(f"  UPDATE AVAILABLE: v{version}")
-        print(f"{'='*60}")
-        if changelog:
-            # Show first 500 chars of release notes
-            notes = changelog[:500] + ("…" if len(changelog) > 500 else "")
-            print(f"\nWhat's new:\n{notes}\n")
-        print(f"Files to update: {len(files)}")
-        for f in files:
-            print(f"  • {f['filename']}")
-
+        # print(f"\n{'='*60}")
+        # print(f"  UPDATE AVAILABLE: v{version}")
+        # print(f"{'='*60}")
+        # if changelog:
+        #     # Show first 500 chars of release notes
+        #     notes = changelog[:500] + ("…" if len(changelog) > 500 else "")
+        #     print(f"\nWhat's new:\n{notes}\n")
+        # print(f"Files to update: {len(files)}")
+        # for f in files:
+        #     print(f"  • {f['filename']}")
 
         if not auto_apply:
-            answer = input("\nInstall update now? (yes/no): ").strip().lower()
-            if answer not in ("yes", "y"):
-                logger.info("User declined update")
-                return False
+        # Write pending update to a file for the dashboard to pick up
+        # The dashboard will show a banner and call /api/update/apply
+        pending_file = self.app_dir / ".updates" / "pending_update.json"
+        pending_file.parent.mkdir(parents=True, exist_ok=True)
+        pending_file.write_text(json.dumps({
+            "version":   version,
+            "changelog": changelog,
+            "files":     files,
+            "download_base_url": update_info.get("download_base_url", ""),
+        }, indent=2))
+        logger.info(f"Update v{version} available — dashboard notified")
+        return False   # Not applied yet — waiting for user confirmation
 
-
-        # Download
+        # auto_apply=True path — download and apply immediately
         if not self.download_update_files(update_info):
             logger.error("Download failed — update aborted")
             return False
 
-
-        # Backup
         backup_name = self.backup_current_files(files)
         if backup_name is None:
             logger.error("Backup failed — update aborted")
             return False
 
-
-        # Apply
         if not self.apply_updates(files):
             logger.error("Apply failed — attempting rollback")
             self.rollback(backup_name)
             return False
 
-
         logger.info(f"Successfully updated to v{version}")
+        # Clean up pending file
+        pending_file = self.app_dir / ".updates" / "pending_update.json"
+        if pending_file.exists():
+            pending_file.unlink()
         return True
 
     # ------------------------------------------------------------------
