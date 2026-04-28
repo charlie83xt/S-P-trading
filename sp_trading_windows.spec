@@ -261,6 +261,15 @@ if os.path.isdir('static'):
             dest_folder = os.path.dirname(static_file)
             datas.append((static_file, dest_folder))
 
+# Verify icon exists before building
+icon_path = 'assets/icon.ico'
+if os.path.isfile(icon_path):
+    print(f"✓ Icon found: {icon_path} ({os.path.getsize(icon_path)} bytes)")
+else:
+    print(f"✗ Icon NOT found at: {icon_path}")
+    icon_path = None
+
+
 # Config and docs
 config_files = [
     '.env.example',
@@ -405,7 +414,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/icon.ico',
+    icon=icon_path,
 )
 
 # ============================================================================
