@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📈 Futures Trading Bot Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* === BASE THEME === */
+        body {
+            background: #0d1117;  /* GitHub dark background */
+            color: #c9d1d9;  /* High contrast text */
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+       
+        /* === HEADER === */
+        .dashboard-header {
+            background: #161b22;  /* Slightly lighter than body */
+            border-bottom: 1px solid #21262d;
+            padding: 1.5rem 0;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 0 rgba(0, 255, 136, 0.1);
+        }
+       
+        .dashboard-header h1 {
+            color: #f0f6fc;  /* Brightest white for title */
+            font-weight: 600;
+            margin: 0;
+        }
+       
+        /* === CARDS === */
+        .card {
+            background: #161b22;  /* Card background */
+            border: 1px solid #30363d;  /* Subtle border */
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+            transition: border-color 0.2s ease;
+        }
+       
+        .card:hover {
+            border-color: #484f58;
+        }
+       
+        .card-header {
+            background: #1c2128;
+            border-bottom: 1px solid #30363d;
+            padding: 1rem 1.25rem;
+            border-radius: 8px 8px 0 0;
+            color: #f0f6fc;
+            font-weight: 600;
+        }
+       
+        .card-body {
+            padding: 1.25rem;
+            color: #c9d1d9;
+        }
+       
+        /* === BUTTONS === */
+        .btn {
+            border: none;
+            border-radius: 6px;
+            padding: 0.625rem 1.25rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+       
+        .btn-success {
+            background: #238636;  /* GitHub green */
+            color: #ffffff;
+            box-shadow: 0 0 transparent, 0 0 transparent, 0 1px 0 rgba(0, 0, 0, 0.1);
+        }
+       
+        .btn-success:hover {
+            background: #2ea043;
+            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.1), 0 4px 12px rgba(35, 134, 54, 0.4);
+            transform: translateY(-1px);
+        }
+       
+        .btn-success:active {
+            background: #26a641;
+            transform: translateY(0);
+        }
+       
+        .btn-danger {
+            background: #da3633;  /* GitHub red */
+            color: #ffffff;
+        }
+       
+        .btn-danger:hover {
+            background: #e5534b;
+            box-shadow: 0 4px 12px rgba(218, 54, 51, 0.4);
+            transform: translateY(-1px);
+        }
+       
+        .btn-warning {
+            background: #d29922;  /* GitHub yellow/orange */
+            color: #ffffff;
+        }
+       
+        .btn-warning:hover {
+            background: #e2a336;
+            box-shadow: 0 4px 12px rgba(210, 153, 34, 0.4);
+            transform: translateY(-1px);
+        }
+       
+        .btn-info {
+            background: #1f6feb;  /* GitHub blue */
+            color: #ffffff;
+        }
+       
+        .btn-info:hover {
+            background: #388bfd;
+            box-shadow: 0 4px 12px rgba(31, 111, 235, 0.4);
+            transform: translateY(-1px);
+        }
+       
+        .btn:disabled {
+            background: #21262d;
+            color: #6e7681;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+       
+        /* === FORM CONTROLS === */
+        .form-label {
+            color: #f0f6fc;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+       
+        .form-control, .form-select {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            border-radius: 6px;
+            padding: 0.625rem 0.875rem;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+        }
+       
+        .form-control:focus, .form-select:focus {
+            background: #161b22;
+            border-color: #1f6feb;
+            color: #f0f6fc;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.3);
+        }
+       
+        .form-control::placeholder {
+            color: #6e7681;
+        }
+       
+        .form-select option {
+            background: #161b22;
+            color: #c9d1d9;
+        }
+       
+        /* === STATUS INDICATORS === */
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            box-shadow: 0 0 8px currentColor;
+        }
+       
+        .status-running {
+            background-color: #3fb950;  /* GitHub success green */
+        }
+       
+        .status-paused {
+            background-color: #d29922;  /* GitHub warning yellow */
+        }
+       
+        .status-stopped {
+            background-color: #f85149;  /* GitHub danger red */
+        }
+       
+        /* === BADGES === */
+        .badge {
+            border-radius: 12px;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+       
+        .bg-success {
+            background: #238636 !important;
+        }
+       
+        .bg-danger {
+            background: #da3633 !important;
+        }
+       
+        .bg-warning {
+            background: #d29922 !important;
+        }
+       
+        /* === METRIC CARDS === */
+        .metric-card {
+            text-align: center;
+            padding: 1.5rem;
+            background: #0d1117;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+        }
+       
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #3fb950;  /* Success green */
+            margin-bottom: 0.5rem;
+        }
+       
+        .metric-label {
+            font-size: 0.75rem;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+       
+        /* === PRICE DISPLAY === */
+        .price-display {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #3fb950;
+            text-shadow: 0 0 20px rgba(63, 185, 80, 0.3);
+        }
+       
+        /* === TRADE LOG === */
+        .trade-log {
+            max-height: 300px;
+            overflow-y: auto;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 1rem;
+        }
+       
+        .trade-entry {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-left: 3px solid #3fb950;
+            background: #161b22;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+       
+        /* === SCROLLBAR STYLING === */
+        ::-webkit-scrollbar {
+            width: 12px;
+        }
+       
+        ::-webkit-scrollbar-track {
+            background: #0d1117;
+        }
+       
+        ::-webkit-scrollbar-thumb {
+            background: #30363d;
+            border-radius: 6px;
+            border: 2px solid #0d1117;
+        }
+       
+        ::-webkit-scrollbar-thumb:hover {
+            background: #484f58;
+        }
+       
+        /* === ALERTS === */
+        .alert {
+            border-radius: 6px;
+            border: 1px solid;
+            padding: 0.875rem 1rem;
+            margin-bottom: 1rem;
+        }
+       
+        .alert-success {
+            background: rgba(35, 134, 54, 0.15);
+            border-color: #238636;
+            color: #7ee787;
+        }
+       
+        .alert-danger {
+            background: rgba(218, 54, 51, 0.15);
+            border-color: #da3633;
+            color: #ff7b72;
+        }
+       
+        .alert-warning {
+            background: rgba(210, 153, 34, 0.15);
+            border-color: #d29922;
+            color: #ffd666;
+        }
+       
+        /* === MANUAL MODE TOGGLE (SLEEK!) === */
+        .manual-mode-toggle {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            user-select: none;
+        }
+       
+        .manual-mode-toggle:hover {
+            border-color: #1f6feb;
+            background: #1c2128;
+        }
+       
+        .manual-mode-toggle.active {
+            border-color: #d29922;
+            background: rgba(210, 153, 34, 0.1);
+        }
+       
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #c9d1d9;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+       
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: #21262d;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+       
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: #6e7681;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+       
+        .manual-mode-toggle.active .toggle-switch {
+            background: #d29922;
+        }
+       
+        .manual-mode-toggle.active .toggle-switch::after {
+            left: 22px;
+            background: #ffffff;
+        }
+       
+        /* Hide the actual checkbox */
+        #manual-mode-checkbox {
+            display: none;
+        }
+       
+        .toggle-hint {
+            font-size: 0.75rem;
+            color: #8b949e;
+            margin-top: 0.25rem;
+        }
+       
+        .manual-mode-toggle.active .toggle-hint {
+            color: #e3b341;
+        }
+       
+        /* === TEXT UTILITIES === */
+        .text-muted {
+            color: #8b949e !important;
+        }
+       
+        small {
+            font-size: 0.875rem;
+        }
+       
+        /* === CONTROL PANEL STICKY === */
+        .control-panel {
+            position: sticky;
+            top: 20px;
+        }
+       
+        /* === LOADING STATE === */
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+            cursor: wait;
+        }
+       
+        /* === RESPONSIVE === */
+        @media (max-width: 768px) {
+            .dashboard-header {
+                padding: 1rem 0;
+            }
+           
+            .price-display {
+                font-size: 1.25rem;
+            }
+           
+            .metric-value {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+<!-- -- UPDATE NOTIFICATION BANNER -- -->
+<div id="update-banner" style="
+    display:none;
+    background:#0d2137;
+    border-bottom:2px solid #1f6feb;
+    padding:10px 20px;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    color:#c9d1d9;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    position:sticky;
+    top:0;
+    z-index:1000;">
+  <div style="display:flex; align-items:center; gap:10px;">
+    <span style="color:#1f6feb; font-size:18px;">🔄</span>
+    <div>
+      <span style="color:#f0f6fc; font-weight:600;">Update available — </span>
+      <span id="update-version" style="color:#1f6feb;"></span>
+      <span id="update-changelog" style="color:#8b949e; font-size:12px; margin-left:8px;"></span>
+    </div>
+  </div>
+  <div style="display:flex; gap:8px; flex-shrink:0;">
+    <button onclick="applyUpdate()" style="
+        background:#238636; color:#fff; border:none;
+        padding:6px 16px; border-radius:6px;
+        cursor:pointer; font-weight:600; font-size:13px;">
+      Install now
+    </button>
+    <button onclick="dismissUpdate()" style="
+        background:transparent; color:#8b949e;
+        border:1px solid #30363d; padding:6px 16px;
+        border-radius:6px; cursor:pointer; font-size:13px;">
+      Later
+    </button>
+  </div>
+</div>
+<!-- ── END UPDATE BANNER ── -->    
+    <div class="dashboard-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h1 class="mb-0">
+                        <i class="fad fa-sort-amount-up-alt"></i> <!-- fas fa-robot-->
+                        Futures Trading Bot v0.1.2
+                        <span class="badge bg-danger ms-2" id="status-badge">
+                            <span class="status-indicator status-stopped"></span>
+                            <span id="status-text">Stopped</span>
+                        </span>
+                    </h1>
+                </div>
+                <div class="col-md-6 text-end">
+                    <div class="price-display" id="current-price">$0.00</div>
+                    <small class="text-muted" id="symbol-display">-</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="row">
+            <!-- Control Panel -->
+            <div class="col-md-4">
+                <div class="control-panel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-cogs"></i> Bot Controls</h5>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-cog"></i> Control Panel</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label">
+                                        <i class="fas fa-server"></i> Platform
+                                    </label>
+                                    <select class="form-select" id="platform-select">
+                                        <option value="tradovate_ui">Tradovate</option>
+                                    </select>
+                                </div>
+    
+                                <!-- Strategy Selection -->
+                                <div class="mb-3">
+                                    <label class="form-label">
+                                        <i class="fas fa-chart-line"></i> Strategy
+                                    </label>
+                                    <!-- <select class="form-select" id="strategy-select">
+                                        <option value="">🤖 Auto (Time-Based)</option>
+                                        <option value="ORBRetest">📊 ORB Retest</option>
+                                        <option value="OpeningRange">📈 Opening Range</option>
+                                    </select> -->
+                                    <select class="form-select" id="strategy-select"></select>
+                                </div>
+                        
+                        
+                                <!-- SLEEK Manual Mode Toggle -->
+                                <div class="mb-3">
+                                    <label class="form-label">
+                                        <i class="fas fa-sliders-h"></i> Mode
+                                    </label>
+                                   
+                                    <input type="checkbox" id="manual-mode-checkbox" style="display: none;">
+                                   
+                                    <div class="manual-mode-toggle" id="manual-mode-toggle" onclick="toggleManualMode()">
+                                        <div class="toggle-label">
+                                            <i class="fas fa-magic"></i>
+                                            <span id="mode-label-text">Auto-Switching</span>
+                                        </div>
+                                        <div class="toggle-switch"></div>
+                                    </div>
+                                    <div class="toggle-hint" id="mode-hint">
+                                        Strategies switch based on time
+                                    </div>
+                                </div>
+                                <!-- Symbol Input -->
+                                <div class="mb-3">
+                                    <label class="form-label">
+                                        <i class="fas fa-tag"></i> Symbol
+                                    </label>
+                                    <input type="text" class="form-control" id="symbol-input" placeholder="ES" value="ES">
+                                </div>
+                        
+                                <!-- Action Buttons -->
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-success" id="start-btn" onclick="startBot()">
+                                        <i class="fas fa-play"></i> Start Bot
+                                    </button>
+                                    <button class="btn btn-warning" id="pause-btn" onclick="pauseBot()" disabled>
+                                        <i class="fas fa-pause"></i> Pause Bot
+                                    </button>
+                                    <button class="btn btn-danger" id="stop-btn" onclick="stopBot()" disabled>
+                                        <i class="fas fa-stop"></i> Stop Bot
+                                    </button>
+                                    <button class="btn btn-outline-light w-100" onclick="testConnection()">
+                                        <i class="fas fa-wifi"></i> Test Connection
+                                    </button>                             
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>  
+                   
+                    
+                    <!-- Strategy Settings -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-chart-line"></i> Strategy Settings</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="mb-3">
+                                    <label class="form-label">Opening Range (min)</label>
+                                    <input type="number" class="form-control" id="or-minutes" value="30" min="1" max="120">
+                                    <!-- <div class="fw-bold" id="opening-range-minutes">30 min</div> -->
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Breakout Threshold (%)</label>
+                                    <input type="number" step="0.01" class="form-control" id="breakout-threshold" value="0.1">
+                                    <!-- <div class="fw-bold" id="breakout-threshold">0.1%</div> -->
+                                </div>
+                            </div>
+                            <hr>
+                            <div class="row">
+                                <div class="mb-3">
+                                    <label class="form-label">Stop Loss (%)</label>
+                                    <input type="number" step="0.1" class="form-control" id="sl-pct" value="2.0">
+                                    <!-- <div class="fw-bold text-danger" id="stop-loss">2.0%</div> -->
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Take Profit (%)</label>
+                                    <input type="number" step="0.1" class="form-control" id="tp-pct" value="4.0">
+                                    <!-- <div class="fw-bold text-success" id="take-profit">4.0%</div> -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Main Dashboard -->
+            <div class="col-md-8">
+                <!-- Metrics Row -->
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="card metric-card">
+                            <div class="metric-value" id="total-signals">0</div>
+                            <div class="metric-label">Signals</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card metric-card">
+                            <div class="metric-value" id="executed-trades">0</div>
+                            <div class="metric-label">Trades</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card metric-card">
+                            <div class="metric-value" id="daily-pnl">$0.00</div>
+                            <div class="metric-label">Daily P&L</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card metric-card">
+                            <div class="metric-value" id="win-rate">0%</div>
+                            <div class="metric-label">Win Rate</div>
+                        </div>
+                    </div>
+                    <!-- Realized P&L -->
+                    <div class="col">
+                        <div class="card shadow-sm">
+                            <div class="card-body py-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="text-muted small mb-1">Realized P&L</div>
+                                        <div id="stat-realized-pnl" class="fw-bold">$0.00</div>
+                                    </div>
+                                    <i class="fas fa-dollar-sign text-secondary"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Unrealized P&L -->
+                    <div class="col">
+                        <div class="card shadow-sm">
+                            <div class="card-body py-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="text-muted small mb-1">Unrealized P&L</div>
+                                        <div id="stat-unrealized-pnl" class="fw-bold">$0.00</div>
+                                    </div>
+                                    <i class="fas fa-chart-line text-secondary"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Open Positions -->
+                    <div class="col">
+                        <div class="card shadow-sm">
+                            <div class="card-body py-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="text-muted small mb-1">Open Positions</div>
+                                        <div id="stat-open-positions" class="fw-bold">0</div>
+                                    </div>
+                                    <i class="fas fa-briefcase text-secondary"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Alerts -->
+                <div id="alerts-container"></div>
+                
+                <!-- Current Positions -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-area"></i> Current Positions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="positions-container">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-inbox fa-2x mb-2"></i>
+                                <p>No open positions</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Trade History -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-history"></i> Trade History</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="trade-log" id="trade-history">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-clock fa-2x mb-2"></i>
+                                <p>No trades yet</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Market Analysis -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-analytics"></i> Market Analysis</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="market-analysis">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-chart-line fa-2x mb-2"></i>
+                                <p>Start bot to see market analysis</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let updateInterval;
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConfig();
+            loadAvailableStrategies();
+            updateStatus();
+            startAutoUpdate();
+            
+            // ===== ADD THIS ENTIRE SECTION =====
+            const symbolInput = document.getElementById('symbol-input');
+            
+            if (symbolInput) {
+                symbolInput.addEventListener('change', async function(e) {
+                    const newSymbol = e.target.value.trim().toUpperCase();
+                    if (!newSymbol) return;
+                    
+                    console.log(`🔄 Changing symbol to: ${newSymbol}`);
+                    
+                    try {
+                        const response = await fetch('/api/change_symbol', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({symbol: newSymbol})
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok && data.success) {
+                            symbolInput.value = data.symbol;
+                            console.log(`✅ Symbol changed to ${data.symbol} ($${data.multiplier}/pt)`);
+                            
+                            // Update symbol display
+                            const symbolDisplay = document.getElementById('symbol-display');
+                            if (symbolDisplay) {
+                                symbolDisplay.textContent = data.symbol;
+                            }
+                            
+                            // Show alert if showAlert function exists
+                            if (typeof showAlert === 'function') {
+                                showAlert(`✅ Symbol: ${data.symbol} ($${data.multiplier}/pt)`, 'success');
+                            }
+                        } else {
+                            console.error('❌ Symbol change failed:', data);
+                            alert(`Error: ${data.error || 'Symbol change failed'}`);
+                        }
+                    } catch (error) {
+                        console.error('❌ Symbol change error:', error);
+                        alert('Failed to change symbol');
+                    }
+                });
+                
+                // Enter key triggers change
+                symbolInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        symbolInput.blur();
+                    }
+                });
+                
+                console.log('✅ Symbol change handler registered');
+            } else {
+                console.warn('⚠️ symbol-input not found');
+            }
+            // ===== END SECTION =====
+        });
+
+        async function loadAvailableStrategies() {
+            try {
+                const response = await fetch('/api/strategies');
+                const data = await response.json();
+
+                if (!data.success || !data.strategies) {
+                    console.error('Failed to load strategies');
+                    return;
+                }
+
+                const select = document.getElementById('strategy-select');
+                if (!select) return;
+
+                // Clear existing options
+                select.innerHTML = "";
+
+                // Add Auto option first
+                const autoOption = document.createElement('option');
+                autoOption.value = '';
+                autoOption.textContent = '🤖 Auto (Time-Based Switching)';
+                select.appendChild(autoOption);
+            
+                // Add each strategy
+                data.strategies.forEach(strategy => {
+                    if (!strategy.enabled) return;  // Skip disabled
+                
+                    const option = document.createElement('option');
+                    option.value = strategy.name;
+                
+                    // Add emoji based on strategy
+                    const emoji = {
+                        'ORBRetest': '📊',
+                        'MeanReversion': '📈',
+                        'OpeningRange': '📉',
+                        'Test': '🧪'
+                    }[strategy.name] || '📊';
+                
+                    option.textContent = `${emoji} ${strategy.name}`;
+                
+                    // Add description as tooltip
+                    if (strategy.description) {
+                        option.title = strategy.description;
+                    }
+                
+                    select.appendChild(option);
+                });
+            
+                console.log('✅ Loaded', data.strategies.length, 'strategies');
+            
+            } catch (error) {
+                console.error('Error loading strategies:', error);
+            
+                // Fallback: Show basic options
+                const select = document.getElementById('strategy-select');
+                if (select && select.options.length === 0) {
+                    select.innerHTML = `
+                        <option value="">🤖 Auto</option>
+                        <option value="ORBRetest">📊 ORB Retest</option>
+                        <option value="MeanReversion">📈 Mean Reversion</option>
+                    `;
+                }
+            }
+        }
+        
+        function startAutoUpdate() {
+            updateInterval = setInterval(updateStatus, 1000); // Update every 2 seconds
+        }
+        
+        function stopAutoUpdate() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+        }
+        
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                if (!response.ok) throw new Error('config fetch failed');
+                const cfg = await response.json();
+
+                // helpers
+                const setVal = (id, value) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    if ('value' in el) el.value = value;
+                    else el.textContent = value;
+                };
+
+                // only set what exist in your HTML
+                setVal('platform-select', (cfg.current_platform || 'tradovate_ui'));
+                setVal('strategy-select', 'OpeningRange');
+                setVal('symbol-input', (cfg.default_symbol || 'ES'));
+                setVal('or-minutes', (cfg.opening_range_minutes ?? 30));
+                setVal('breakout-threshold', (cfg.breakout_threshold ?? 0.1));
+                setVal('sl-pct', (cfg.stop_loss_percentage ?? 2.0));
+                setVal('tp-pct', (cfg.take_profit_percentage ?? 4.0));
+                // header symbol (exist in HTML)
+                setVal('symbol-display', (cfg.default_symbol || 'ES'));
+              
+            } catch (error) {
+                // Soft-fallback defaults if /api/config is missing or errors out
+                const setVal = (id, value) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    if ('value' in el) el.value = value;
+                    else el.textContent = value;
+                };
+                setVal('platform-select', 'tradovate_ui');
+                setVal('symbol-input', 'ES');
+                setVal('symbol-display', 'ES');
+                // console.error('Error loading config:', error);
+                console.warn('loadConfig() skipped/soft-failed:', error)
+            }
+        }
+        
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/status');
+                // const payload = await response.json();
+
+                const {success, status} = await response.json();
+                if (!success || !status) return;
+                
+                // Update status indicator
+                const statusBadge = document.getElementById('status-badge');
+                const statusText = document.getElementById('status-text');
+                const statusIndicator = statusBadge ? statusBadge.querySelector('.status-indicator') : null;
+
+                // Realized / unrealized/ open positions
+                const realized = Number(status.risk_metrics?.realized_total ?? 0);
+                const unreal = Number(status.risk_metrics?.unrealized_total ?? 0);
+                // NOTE: open_positions_count is top-level on status
+                const openCnt = Number(status.risk_metrics?.open_positions_count ?? 0);
+
+                const elReal = document.getElementById('stat-realized-pnl');
+                const elUnrl = document.getElementById('stat-unrealized-pnl');
+                const elOpen = document.getElementById('stat-open-positions');
+
+                if (elReal) { elReal.textContent = fmtUsd(realized); setSigned(elReal, realized); }
+                if (elUnrl) { elUnrl.textContent = fmtUsd(unreal); setSigned(elUnrl, unreal); }
+                if (elOpen) { elOpen.textContent = String(openCnt); }
+                
+                if (status.is_running) {
+                    if (status.is_paused) {
+                        statusBadge.className = 'badge bg-warning ms-2';
+                        if (statusIndicator) statusIndicator.className = 'status-indicator status-paused';
+                        statusText.textContent = 'Paused';
+                    } else {
+                        statusBadge.className = 'badge bg-success ms-2';
+                        if (statusIndicator) statusIndicator.className = 'status-indicator status-running';
+                        statusText.textContent = 'Running';
+                    }
+                } else {
+                    statusBadge.className = 'badge bg-danger ms-2';
+                    if (statusIndicator) statusIndicator.className = 'status-indicator status-stopped';
+                    statusText.textContent = 'Stopped';
+                }
+
+                // Counters
+                const elSigs = document.getElementById('total-signals');
+                const elTrds = document.getElementById('executed-trades');
+
+                // total signals can arrive under differrent shapes or be missing at first
+                const totalSignals = 
+                    Number.isFinite(+status.total_signals) ? +status.total_signals :
+                    Number.isFinite(+status.signals_generated) ? +status.signals_generated : 
+                    (Array.isArray(status.signal_history) ? status.signal_history.length : 0);
+
+                
+                const executedTrades = 
+                    Number.isFinite(+status.executed_trades) ? +status.executed_trades : 
+                    Number.isFinite(+status.daily_trades) ? +status.daily_trades : 0;
+
+                if (elSigs) elSigs.textContent = String(totalSignals);
+                if (elTrds) elTrds.textContent = String(executedTrades);
+
+                // --- symbol
+                const elSym = document.getElementById('symbol-display');
+                if (elSym) elSym.textContent = status.symbol || 'N/A';
+
+                // --- current price (be careful with 0)
+                const cp = Number(status.current_price);
+                // if (Number.isFinite(cp)) {
+                if (status.current_price !== null && status.current_price !== undefined && !Number.isNaN(cp)) {
+                    const elPrice = document.getElementById('current-price');
+                    if (elPrice) elPrice.textContent = '$' + cp.toLocaleString();
+                }
+
+                // Update risk metrics
+                if (status.risk_metrics) {
+                    const pnl = Number(status.risk_metrics.daily_pnl || 0);
+                    const pnlElement = document.getElementById('daily-pnl');
+                    if (pnlElement) {
+                        pnlElement.textContent = '$' + pnl.toFixed(2);
+                        pnlElement.className = 'metric-value ' + (pnl >= 0 ? 'text-success' : 'text-danger');
+                    }
+                    
+                    const wr = Number(status.risk_metrics.win_rate ?? 0);
+                    const elWR = document.getElementById('win-rate');
+                    if (elWR) elWR.textContent = `${wr.toFixed(1)}%`;
+                }
+                
+                // Update button states based on running status
+                const isRunning = status.is_running || false;
+                const isPaused  = status.is_paused  || false;
+                document.getElementById('start-btn').disabled  =  isRunning;
+                document.getElementById('pause-btn').disabled  = !isRunning || isPaused;
+                document.getElementById('stop-btn').disabled   = !isRunning;
+
+                // Update positions and trades
+                updatePositions();
+                updateTradeHistory();
+                updateMarketAnalysis();
+
+                
+            } catch (error) {
+                console.error('Error updating status:', error);
+            }
+        }
+        
+        function updateButtonStates(isRunning, isPaused, isConnected, hasStrategy, hasSymbol) {
+            // Start enabled only when connected, not running, and we have strategy+symbol
+            document.getElementById('start-btn').disabled = !(isConnected && !isRunning && hasStrategy && hasSymbol);
+
+            // Pause/resume/stop follow running state
+            document.getElementById('pause-btn').disabled = !isRunning || isPaused;
+            document.getElementById('resume-btn').disabled = !isRunning || !isPaused;
+            document.getElementById('stop-btn').disabled = !isRunning;
+        }
+        
+        async function startBot() {
+            const platform = document.getElementById('platform-select').value;
+            const symbol = document.getElementById('symbol-input').value;
+            const strategy = document.getElementById('strategy-select').value;
+            const manualMode = document.getElementById('manual-mode-checkbox').checked;
+
+            // Example params - later we can read these from inputs
+            const mode = manualMode ? '🔧 MANUAL' : '🎛 AUTO';
+            const strategyName = strategy || 'Auto-Switching';
+            console.log(`Starting bot in ${mode} mode with strategy: ${strategyName}`);
+            const params = {
+                opening_range_minutes: parseInt(document.getElementById('or-minutes').value || '30', 10),
+                breakout_threshold: parseFloat(document.getElementById('breakout-threshold').value || '0.1'),
+                stop_loss_percent: parseFloat(document.getElementById('sl-pct').value || '2.0'),
+                take_profit_percent: parseFloat(document.getElementById('tp-pct').value || '4.0')
+            };
+            
+            showAlert('Starting bot...', 'info');
+            
+            try {
+                const response = await fetchJsonSafe('/api/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ platform, symbol, strategy, params, manual_mode: manualMode })
+                });
+                
+                const data = response?.data ?? response;
+
+                if (data && data.success) {
+                    showAlert(`${data.message || `✅ Bot started in ${mode} mode!\nStrategy: ${strategyName}\nSymbol: ${symbol}`}`, 'success');
+                // }
+                // const result = await response.json();
+                //if (response.data.success) {
+                    // showAlert(response.data.message || 'Bot started', 'success');
+
+                } else {
+                    // Include status code if available
+                    const statusPart = response?.status ? ` (HTTP ${response.status})` : '';
+                    const msg = (data && data.message) ? data.message : 'Failed to start';
+                    showAlert(`${msg}${statusPart}`, 'danger')
+                    //showAlert((response.data.message || 'Failed to start') + (response.status ? ` (HTTP ${response.status})` : ''), 'danger');
+                    // optional: console full response for debugging
+                    console.debug('start response:', response);
+                }
+                ///
+                // if (result.success) {
+                //     showAlert(result.message, 'success');
+                // } else {
+                //     showAlert(result.message, 'danger');
+                // }
+            } catch (error) {
+                // Network / throw errors
+                showAlert('Error starting bot: ' + error.message, 'danger');
+                console.error('Start failed:', error);
+            }
+        }
+
+        document.getElementById('manual-mode-checkbox').addEventListener('change', function() {
+            const strategySelect = document.getElementById('strategy-select');
+            const manualMode = this.checked;
+
+            if (manualMode) {
+                // Manual mode ON - highlight strategy selector
+                strategySelect.style.border = '2px solid #ffa502';
+                strategySelect.style.boxShadow = '0 0 10px rgba(255, 165, 2, 0.3)';
+                
+                // Show warning if not strategy selected
+                if (!strategySelect.value) {
+                    alert('⚠️ Manual mode requires a strategy selection!\n\nPlease select a specific strategy!');
+                    this.checked = false;
+                    return;
+                }
+            } else {
+                // Auto mode ON - remove highlight
+                strategySelect.style.border = '';
+                strategySelect.style.boxShadow = '';
+            }
+        });
+        
+        async function stopBot() {
+
+            const platform = document.getElementById('platform-select').value
+            const symbol = document.getElementById('symbol-input').value;
+
+            showAlert('Stopping bot...', 'info');
+            
+            try {
+                const response = await fetchJsonSafe('/api/stop', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ platform, symbol })
+                });
+
+                // const result = await response.json();
+                
+                if (response.data.success) {
+                    showAlert(response.data.message || 'Bot stopped', 'success');
+                } else {
+                    showAlert((response.data.message || 'Failed to stop') + (response.status ? ` (HTTP ${response.status})` : ''), 'danger');
+                    console.debug('stop raw', response)
+                }
+            } catch (error) {
+                showAlert('Error stopping bot: ' + error.message, 'danger');
+            }
+        }
+        
+        async function pauseBot() {
+            const platform = document.getElementById('platform-select').value
+            const symbol = document.getElementById('symbol-input').value;
+
+            try {
+                const response = await fetchJsonSafe('/api/pause', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ platform, symbol })
+                });
+                // const result = await response.json();
+                
+                if (response.ok && response.data.success) {
+                    showAlert(response.data.message || 'Bot paused', 'warning');
+                } else {
+                    showAlert((response.data.message || 'Failed to pause') + (response.status ? ` (HTTP ${response.status})` : ''), 'danger');
+                    console.debug('start raw', response)
+                }
+            } catch (error) {
+                showAlert('Error pausing bot: ' + error.message, 'danger');
+            }
+        }
+        
+        async function resumeBot() {
+            const platform = document.getElementById('platform-select').value
+            const symbol = document.getElementById('symbol-input').value;
+
+            try {
+                const response = await fetchJsonSafe('/api/resume', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ platform, symbol })
+                });
+                // const result = await response.json();
+                
+                if (response.ok && response.data.success) {
+                    showAlert(response.data.message || 'Bot resumed', 'success');
+                } else {
+                    showAlert((response.data.message || 'Failed to resume') + (response.status ? ` (HTTP ${response.status})` : ''), 'danger');
+                }
+            } catch (error) {
+                showAlert('Error resuming bot: ' + error.message, 'danger');
+            }
+        }
+        
+        async function emergencyStop() {
+
+            if (confirm('Are you sure you want to activate emergency stop? This will immediately halt all trading activities.')) {
+                showAlert('EMERGENCY STOP ACTIVATED', 'danger');
+                const platform = document.getElementById('platform-select').value
+                const symbol = document.getElementById('symbol-input').value;
+                
+                try {
+                    const response = await fetchJsonSafe('/api/emergency_stop', { 
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ platform, symbol })
+                    });
+                    // const result = await response.json();
+                    
+                    if (response.ok && response.data.success) {
+                        showAlert('Emergency stop completed: ' + response.data.message, 'danger');
+                    } else {
+                        showAlert(response.data.message, 'danger');
+                    }
+                } catch (error) {
+                    showAlert('Error in emergency stop: ' + error.message, 'danger');
+                }
+            }
+        }
+
+        async function fetchJsonSafe(url, options = {}) {
+            const res = await fetch(url, options);
+            // {
+            //     method: 'POST',
+            //     headers: {'Content-Type': 'application/json'},
+            //     body: JSON.stringify(payload || {})
+            // };
+            const text = await res.text();
+            let data;
+            try { data = JSON.parse(text); }
+            catch { 
+                // Not JSON likely HTML error page. Wrap it so caller can still show something useful
+                data = { success: false, message: text.slice(0, 300) }; 
+            }
+             return {ok: res.ok, data, status: res.status };
+        }
+        
+        async function testConnection() {
+            const platform = document.getElementById('platform-select').value;
+            showAlert('Testing connection to ' + platform + '...', 'info');
+            
+            try {
+                const response = await fetchJsonSafe('/api/test_connection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ platform })
+                });
+                
+                // const result = await response.json();
+                if (response.ok && response.data.success) {
+                    showAlert(response.data.message || 'Connected successfully!', 'success');
+                } else {
+                    // Include status code if available
+                    showAlert((response.data.message || 'Connection failed') + (response.status ? ` (HTTP ${response.status})` : ''), 'danger');
+                    // optional: console full response for debugging
+                    console.debug('test_connection raw:', response);
+                }
+            } catch (error) {
+                showAlert('Connection test failed: ' + error.message, 'danger');
+            }
+        }
+        
+        async function updatePositions() {
+            try {
+                const response = await fetch('/api/positions');
+                const result = await response.json();
+                
+                const container = document.getElementById('positions-container');
+                
+                if (result.success && Object.keys(result.positions).length > 0) {
+                    let html = '';
+                    for (const [symbol, position] of Object.entries(result.positions)) {
+                        html += `
+                            <div class="trade-entry">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <strong>${symbol}</strong> - ${position.side.toUpperCase()}
+                                        <br><small class="text-muted">Qty: ${position.quantity}</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <div>$${position.entry_price}</div>
+                                        <small class="text-muted">${new Date(position.entry_time).toLocaleTimeString()}</small>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `
+                        <div class="text-center text-muted">
+                            <i class="fas fa-inbox fa-2x mb-2"></i>
+                            <p>No open positions</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error updating positions:', error);
+            }
+        }
+        
+        async function updateTradeHistory() {
+            try {
+                const resp = await fetch('/api/trades');
+                const result = await resp.json();
+                
+                const container = document.getElementById('trade-history');
+                if (!(result.success && Array.isArray(result.trades) && result.trades.length > 0)) {
+                    container.innerHTML = `
+                        <div class="text-center text-muted">
+                            <i class="fas fa-clock fa-2x mb-2"></i>
+                            <p>No trades yet</p>
+                        </div>`;
+                    return;
+                }
+                    
+                let html = '';
+                // show the 20 most recent items
+                result.trades.slice(-20).reverse().forEach(trade => {
+                    const r = rowFromTrade(trade);
+                    // CASE A: completed trade shape the old UI expected
+                    // if (trade.entry_price !== undefined && trade.exit_price !== undefined && trade.pnl !== undefined) {
+                    const pnlClass = (r.pnl || 0) >= 0 ? 'text-success' : 'text-danger';
+                            
+                    html += `
+                            <div class="trade-entry">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <strong>${r.sym}</strong> - ${r.side}
+                                        <br>
+                                        <small class="text-muted">
+                                            Entry: $${r.entry != null ? Number(r.entry).toFixed(2) : '-'} 
+                                            | Exit: $${r.exit != null ? Number(r.exit).toFixed(2) : '-'}
+                                        </small>
+                                    </div>
+                                    <div class="text-end">
+                                        <div class="${pnlClass}">$${Number(r.pnl || 0).toFixed(2)}</div>
+                                        <small class="text-muted">${r.time ? new Date(r.time).toLocaleDateString() : ''}${r.reason ? '. ' + r.reason : ''}</small>
+                                    </div>
+                                </div>
+                            </div>`;
+                    });
+                    
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error updating trade history:', error);
+            }
+        }
+    
+        async function updateMarketAnalysis() {
+            try {
+                const response = await fetch('/api/market_analysis');
+                if (!response.ok) return;
+                const result = await response.json();
+                
+                const container = document.getElementById('market-analysis');
+                
+                if (result.success && Object.keys(result.analysis).length > 0) {
+                    const analysis = result.analysis;
+                    let html = '<div class="row">';
+                    
+                    if (analysis.current_price) {
+                        html += `
+                            <div class="col-md-6 mb-3">
+                                <small class="text-muted">Current Price</small>
+                                <div class="fw-bold">$${analysis.current_price.toFixed(2)}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    if (analysis.opening_range) {
+                        html += `
+                            <div class="col-md-6 mb-3">
+                                <small class="text-muted">Opening Range</small>
+                                <div class="fw-bold">$${analysis.opening_range[0].toFixed(2)} - $${analysis.opening_range[1].toFixed(2)}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    if (analysis.yesterday_day_range) {
+                        html += `
+                            <div class="col-md-6 mb-3">
+                                <small class="text-muted">Yesterday Day Range</small>
+                                <div class="fw-bold">$${analysis.yesterday_day_range[0].toFixed(2)} - $${analysis.yesterday_day_range[1].toFixed(2)}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    if (analysis.range_position) {
+                        html += `
+                            <div class="col-md-6 mb-3">
+                                <small class="text-muted">Range Position</small>
+                                <div class="fw-bold text-capitalize">${analysis.range_position}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    html += '</div>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `
+                        <div class="text-center text-muted">
+                            <i class="fas fa-chart-line fa-2x mb-2"></i>
+                            <p>Start bot to see market analysis</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error updating market analysis:', error);
+            }
+        }
+        
+        function showAlert(message, type) {
+            const alertsContainer = document.getElementById('alerts-container');
+            const alertId = 'alert-' + Date.now();
+            
+            const alertHtml = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert" id="${alertId}">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            
+            alertsContainer.insertAdjacentHTML('beforeend', alertHtml);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                const alert = document.getElementById(alertId);
+                if (alert) {
+                    alert.remove();
+                }
+            }, 5000);
+        }
+
+        function rowFromTrade(t) {
+            // Normalize both shapes to a single row object
+            const hasEntryExit = t.entry_price !== undefined || t.exit_price !== undefined || t.pnl !== undefined;
+            if (hasEntryExit) {
+                return {
+                    sym: t.symbol || t.sym || "",
+                    side: (t.side ||  "").toUpperCase(),
+                    entry: t.entry_price ?? null,
+                    exit: t.exit_price ?? null,
+                    pnl: Number(t.pnl ?? 0),
+                    reason: t.exit_reason || t.reason || "",
+                    time: t.ts || t.time || null
+                };
+            }
+            // paper fill record
+            return {
+                sym: t.symbol || t.sym || "",
+                side: (t.side ||  "").toUpperCase(),
+                entry: t.price ?? null,
+                exit: null,
+                pnl: Number(t.realized_delta ?? 0),
+                reason: t.reason || "paper",
+                time: t.time || null
+            };
+        }
+
+        function fmtUsd(v) {
+            if (v === null || v === undefined || isNaN(v)) return '$0.00';
+            const n = Number(v);
+            const sign = n < 0 ? '-' : '';
+            return `${sign}$${Math.abs(n).toFixed(2)}`;
+        }
+
+        function setSigned(el, val) {
+            el.classList.remove('text-success', 'text-danger');
+            if (val > 0) el.classList.add('text-success');
+            else if (val < 0) el.classList.add('text-danger');
+        }
+
+        function toggleManualMode() {
+            const checkbox = document.getElementById('manual-mode-checkbox');
+            const toggle = document.getElementById('manual-mode-toggle');
+            const labelText = document.getElementById('mode-label-text');
+            const hint = document.getElementById('mode-hint');
+            const strategySelect = document.getElementById('strategy-select');
+        
+            checkbox.checked = !checkbox.checked;
+        
+            if (checkbox.checked) {
+                toggle.classList.add('active');
+                labelText.innerHTML = '<i class="fas fa-hand-paper"></i> Manual Override';
+                hint.textContent = '🔒 Locked to selected strategy';
+            
+                if (!strategySelect.value) {
+                    alert('⚠️ Manual Mode requires a specific strategy!');
+                    checkbox.checked = false;
+                    toggle.classList.remove('active');
+                    labelText.innerHTML = '<i class="fas fa-magic"></i> Auto-Switching';
+                    hint.textContent = 'Strategies switch based on time';
+                }
+            } else {
+                toggle.classList.remove('active');
+                labelText.innerHTML = '<i class="fas fa-magic"></i> Auto-Switching';
+                hint.textContent = 'Strategies switch based on time';
+            }
+        }
+
+
+        document.getElementById('strategy-select').addEventListener('change', function() {
+            if (!this.value && document.getElementById('manual-mode-checkbox').checked) {
+                toggleManualMode();
+            }
+        });
+
+    </script>
+    <script>
+        // ── UPDATE CHECK ────────────────────────────────────────────
+        function checkForUpdates() {
+          fetch('/api/update/status')
+            .then(r => r.json())
+            .then(d => {
+              if (d.update_available) {
+                document.getElementById('update-version').textContent = 'v' + d.version;
+                if (d.changelog) {
+                  document.getElementById('update-changelog').textContent =
+                    '— ' + d.changelog.substring(0, 80);
+                }
+                document.getElementById('update-banner').style.display = 'flex';
+              }
+            })
+            .catch(() => {});
+        }
+        
+        function applyUpdate() {
+          const banner = document.getElementById('update-banner');
+          banner.innerHTML = '<div style="color:#1f6feb; padding:10px 20px;">⏳ Downloading and applying update — please wait...</div>';
+          fetch('/api/update/apply', { method: 'POST' })
+            .then(r => r.json())
+            .then(d => {
+              if (d.success) {
+                banner.innerHTML = '<div style="color:#3fb950; padding:10px 20px;">✓ ' + d.message + '</div>';
+              } else {
+                banner.innerHTML = '<div style="color:#f85149; padding:10px 20px;">✗ Update failed: ' + d.error + ' <button onclick="dismissUpdate()" style="background:transparent;border:none;color:#8b949e;cursor:pointer;margin-left:10px;">Dismiss</button></div>';
+              }
+            });
+        }
+        
+        function dismissUpdate() {
+          document.getElementById('update-banner').style.display = 'none';
+        }
+        
+        // Check on load then every 60 seconds
+        checkForUpdates();
+        setInterval(checkForUpdates, 60000);
+        </script>
+    
+</body>
+</html>
+
