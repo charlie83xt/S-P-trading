@@ -81,7 +81,7 @@ logger = logging.getLogger(__name__)
 #   "https://api.github.com/repos/YOUR_GITHUB_USERNAME/sp-trading/releases/latest"
 # Private server example:
 #   "https://updates.your-domain.com/api/latest"
-UPDATE_CHECK_URL = "https://api.github.com/repos/YOUR_GITHUB_USERNAME/sp-trading/releases/latest"
+UPDATE_CHECK_URL = "https://api.github.com/repos/charlie83xt/S-P-trading/releases/latest"
 
 # Seconds to wait for network requests
 REQUEST_TIMEOUT = 10
@@ -526,7 +526,7 @@ if __name__ == "__main__":
     p_mf.add_argument("version",  help="Version string e.g. 1.2.0")
     p_mf.add_argument("files",    nargs="+", help="Files to include in the update")
     p_mf.add_argument("--user",   required=True, help="GitHub username")
-    p_mf.add_argument("--repo",   default="sp-trading", help="GitHub repo name")
+    p_mf.add_argument("--repo",   default="S-P-trading", help="GitHub repo name")
 
     # rollback
     p_rb = sub.add_parser("rollback", help="Roll back to a backup snapshot")
