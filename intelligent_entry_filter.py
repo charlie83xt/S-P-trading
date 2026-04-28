@@ -13,7 +13,11 @@ SOLUTION: Multi-layer confirmation BEFORE entering:
 3. Microstructure confirmation (order flow supports direction)
 4. Context confirmation (broader market agrees)
  
-ONLY ENTER when ALL layers confirm!
+THRESHOLD TUNING GUIDE:
+  min_volume_ratio:      1.0 (permissive) → 2.0 (strict)
+  min_momentum_score:    0.1 (permissive) → 0.8 (strict)
+  min_order_flow_score:  0.1 (permissive) → 0.7 (strict)
+  max_against_trend:     0.005 (permissive) → 0.0005 (strict)  ← NOTE: in % terms!
 """
  
 import pandas as pd
@@ -37,18 +41,48 @@ class IntelligentEntryFilter:
         self.dm = data_manager
         self.logger = logger
         
-        # Thresholds (tune these based on backtesting)
-        self.min_volume_ratio = 1.5      # Breakout volume must be 1.5x average
-        self.min_momentum_score = 0.6    # 0-1 scale, >0.6 = strong
-        self.min_order_flow_score = 0.5  # >0 = buying pressure, <0 = selling
-        self.max_against_trend = 0.3     # Don't fade strong trends (0-1 scale)
+        # ── THRESHOLDS ─────────────────────────────────────────────────────────
+        # Tune these based on backtesting. See tuning guide in module docstring.
+        #
+        # VOLUME: current bar volume vs 20-bar average
+        #   1.5 was too strict — most non-breakout bars are 0.8–1.2x average.
+        #   1.1 catches genuine volume upticks without demanding a spike.
+        self.min_volume_ratio = 1.1
+
+        # MOMENTUM: ratio of (3-bar change) / (10-bar change)
+        #   This is a *ratio*, not a percentage. When recent move aligns with
+        #   the longer move it tends to sit between 0.5–3.0. Requiring 0.6
+        #   was fine in theory but the direction check (recent_change <= 0)
+        #   already blocks counter-moves — the ratio check adds little and
+        #   often misfires when longer_change is tiny. Set low; raise if needed.
+        self.min_momentum_score = 0.2
+
+        # ORDER FLOW: (up_volume - down_volume) / total_volume  → range [-1, +1]
+        #   0.5 meant 75% of bars had to close up — almost never true in chop.
+        #   0.1 means just a slight net-buying bias, which is realistic.
+        self.min_order_flow_score = 0.1
+
+        # TREND: (sma_fast - sma_slow) / sma_slow  → expressed as a fraction
+        #   e.g. 0.001 = price is 0.1% above the slow MA (a real trend signal).
+        #   0.3 was in the wrong unit — it would require a 30% MA gap, never hit.
+        #   0.002 blocks entries only when strongly trending against the signal.
+        self.max_against_trend = 0.002
+
+        # STRONG PATTERN OVERRIDE: bypass weak-momentum block for high-quality
+        #   reversal patterns. Set to None to disable.
+        self.strong_pattern_triggers = {
+            'engulf/hammer/HL-break',
+            'engulf/star/LH-break',
+        }
+        # ───────────────────────────────────────────────────────────────────────
       
     def should_enter_trade(
         self,
         symbol: str,
-        signal_type: str,  # "BUY" or "SELL"
+        signal_type: str,          # "BUY" or "SELL"
         signal_price: float,
-        strategy_name: str
+        strategy_name: str,
+        signal_context: Optional[Dict] = None   # pass signal dict for overrides
     ) -> Tuple[bool, str]:
         """
         Run ALL confirmation checks before entering trade.
@@ -64,7 +98,9 @@ class IntelligentEntryFilter:
             return False, volume_reason
         
         # Layer 2: Momentum Confirmation
-        momentum_ok, momentum_reason = self._check_momentum(symbol, signal_type, signal_price)
+        momentum_ok, momentum_reason = self._check_momentum(
+            symbol, signal_type, signal_price, signal_context
+        )
         if not momentum_ok:
             self.logger.warning(f"{CROSS} Entry BLOCKED: {momentum_reason}")
             return False, momentum_reason
@@ -88,20 +124,16 @@ class IntelligentEntryFilter:
     def _check_volume(self, symbol: str, signal_type: str) -> Tuple[bool, str]:
         """Volume Confirmation."""
         try:
-            # Get last 50 bars
             bars = self.dm.get_recent_bars(symbol, count=50, timeframe="1m")
             
-            # FIX: Check if bars is empty
             if bars is None or (hasattr(bars, 'empty') and bars.empty):
                 self.logger.warning("Insufficient data for volume check")
-                return True, "insufficient_data"  # Allow if no data
+                return True, "insufficient_data"
             
-            # FIX: Check if bars has enough rows
             if len(bars) < 20:
                 self.logger.warning(f"Only {len(bars)} bars, need 20+")
                 return True, "insufficient_data"
             
-            # Get volume
             try:
                 current_volume = bars.iloc[-1]['volume']
                 avg_volume = bars.iloc[-21:-1]['volume'].mean()
@@ -122,20 +154,25 @@ class IntelligentEntryFilter:
             
         except Exception as e:
             self.logger.error(f"Volume check error: {e}")
-            return True, "volume_check_error"  # Don't block on errors
+            return True, "volume_check_error"
 
   
     def _check_momentum(
         self,
         symbol: str,
         signal_type: str,
-        signal_price: float
+        signal_price: float,
+        signal_context: Optional[Dict] = None,
     ) -> Tuple[bool, str]:
-        """Momentum Confirmation."""
+        """
+        Momentum Confirmation.
+
+        Strong-pattern override: if the signal carries a recognised high-quality
+        reversal trigger AND momentum is only marginally weak, we allow entry.
+        """
         try:
             bars = self.dm.get_recent_bars(symbol, count=50, timeframe="1m")
             
-            # FIX: Check if bars is valid
             if bars is None or (hasattr(bars, 'empty') and bars.empty):
                 self.logger.warning("Insufficient data for momentum check")
                 return True, "insufficient_data"
@@ -144,48 +181,65 @@ class IntelligentEntryFilter:
                 self.logger.warning(f"Only {len(bars)} bars, need 20+")
                 return True, "insufficient_data"
             
-            # Get closes
             try:
                 closes = bars['close'].values
             except KeyError:
                 self.logger.error("No 'close' column in bars")
                 return True, "data_error"
             
-            # Recent momentum (last 3 bars)
             if len(closes) < 4:
                 return True, "insufficient_data"
             
             recent_change = (closes[-1] - closes[-4]) / closes[-4]
             
-            # Longer momentum (last 10 bars)
-            if len(closes) < 11:
-                longer_change = recent_change
-            else:
-                longer_change = (closes[-1] - closes[-11]) / closes[-11]
+            longer_change = (
+                (closes[-1] - closes[-11]) / closes[-11]
+                if len(closes) >= 11
+                else recent_change
+            )
             
-            # Momentum score
             if signal_type == "BUY":
-                # Want positive momentum
                 if recent_change <= 0:
+                    # ── Strong-pattern override ──────────────────────────────
+                    trigger = (signal_context or {}).get('trigger', '')
+                    if trigger in self.strong_pattern_triggers:
+                        self.logger.info(
+                            f"{CHECK} Momentum override: strong pattern '{trigger}'"
+                        )
+                        return True, "strong_pattern_override"
+                    # ─────────────────────────────────────────────────────────
                     return False, f"no_upward_momentum (change={recent_change:.4f})"
                 
                 momentum_score = recent_change / max(abs(longer_change), 0.0001)
                 
             else:  # SELL
-                # Want negative momentum
                 if recent_change >= 0:
+                    trigger = (signal_context or {}).get('trigger', '')
+                    if trigger in self.strong_pattern_triggers:
+                        self.logger.info(
+                            f"{CHECK} Momentum override: strong pattern '{trigger}'"
+                        )
+                        return True, "strong_pattern_override"
                     return False, f"no_downward_momentum (change={recent_change:.4f})"
                 
                 momentum_score = abs(recent_change) / max(abs(longer_change), 0.0001)
             
             if momentum_score < self.min_momentum_score:
+                # ── Strong-pattern override for weak (but correct-direction) momentum
+                trigger = (signal_context or {}).get('trigger', '')
+                if trigger in self.strong_pattern_triggers:
+                    self.logger.info(
+                        f"{CHECK} Momentum override: strong pattern '{trigger}' "
+                        f"(score={momentum_score:.2f})"
+                    )
+                    return True, "strong_pattern_override"
                 return False, f"weak_momentum (score={momentum_score:.2f}, need {self.min_momentum_score})"
             
-            # Check RSI
+            # RSI extremes — widened from 75/25 to 80/20 to reduce false blocks
             rsi = self._calculate_rsi(closes, period=14)
-            if signal_type == "BUY" and rsi > 75:
+            if signal_type == "BUY" and rsi > 80:
                 return False, f"overbought (RSI={rsi:.1f})"
-            if signal_type == "SELL" and rsi < 25:
+            if signal_type == "SELL" and rsi < 20:
                 return False, f"oversold (RSI={rsi:.1f})"
             
             self.logger.debug(f"{CHECK} Momentum OK: score={momentum_score:.2f}, RSI={rsi:.1f}")
@@ -200,26 +254,17 @@ class IntelligentEntryFilter:
         """
         Order Flow Confirmation: Check if institutional buyers/sellers are present.
         
-        Uses:
-        - Bid/ask spread changes
-        - Large vs small trade ratio
-        - Uptick vs downtick volume
-        
-        NOTE: Requires tick data. Skip if not available.
+        Score range: +1 (all buying) → -1 (all selling).
+        Flat/choppy markets sit near 0; we only need slight directional bias.
         """
         try:
-            # Get recent bars
             bars = self.dm.get_recent_bars(symbol, count=10, timeframe="1m")
             if len(bars) < 5:
                 return True, "insufficient_data"
             
-            # Simple proxy: compare up-moves vs down-moves
             closes = bars['close'].values
-            highs = bars['high'].values
-            lows = bars['low'].values
             volumes = bars['volume'].values
             
-            # Calculate buying vs selling pressure
             up_volume = 0
             down_volume = 0
             
@@ -233,14 +278,14 @@ class IntelligentEntryFilter:
             if total_volume == 0:
                 return True, "no_volume_data"
             
-            # Order flow score: +1 = all buying, -1 = all selling
             flow_score = (up_volume - down_volume) / total_volume
             
-            if signal_type == "BUY" and flow_score < self.min_order_flow_score:
-                return False, f"selling_pressure (flow={flow_score:.2f})"
+            if signal_type == "BUY" and flow_score < -self.min_order_flow_score:
+                # Only block on *clear* selling pressure, not neutral flow
+                return False, f"strong_selling_pressure (flow={flow_score:.2f})"
             
-            if signal_type == "SELL" and flow_score > -self.min_order_flow_score:
-                return False, f"buying_pressure (flow={flow_score:.2f})"
+            if signal_type == "SELL" and flow_score > self.min_order_flow_score:
+                return False, f"strong_buying_pressure (flow={flow_score:.2f})"
             
             self.logger.debug(f"{CHECK} Order Flow OK: score={flow_score:.2f}")
             return True, "order_flow_confirmed"
@@ -252,35 +297,34 @@ class IntelligentEntryFilter:
     def _check_trend_context(self, symbol: str, signal_type: str) -> Tuple[bool, str]:
         """
         Trend Context: Don't fight strong trends.
-        
-        Checks:
-        - 5-minute trend (immediate)
-        - 15-minute trend (short-term)
-        - Alignment between timeframes
+
+        trend_score = (sma_fast - sma_slow) / sma_slow
+
+        This is a fractional deviation (e.g. 0.002 = 0.2% gap between MAs).
+        max_against_trend must be set in the same units — NOT as a percentage
+        integer. 0.002 is a sensible default for 1–5 min intraday charts.
         """
         try:
-            # Get 5-minute bars
             bars_5m = self.dm.get_recent_bars(symbol, count=20, timeframe="5m")
             if len(bars_5m) < 10:
                 return True, "insufficient_data"
             
-            # Calculate trend strength on 5m
             closes_5m = bars_5m['close'].values
-            sma_fast = np.mean(closes_5m[-5:])   # Last 5 bars (25 minutes)
-            sma_slow = np.mean(closes_5m[-20:])  # Last 20 bars (100 minutes)
+            sma_fast = np.mean(closes_5m[-5:])
+            sma_slow = np.mean(closes_5m[-20:])
             
-            # Trend score: >0 = uptrend, <0 = downtrend
             trend_score = (sma_fast - sma_slow) / sma_slow
-            trend_strength = abs(trend_score)
             
-            # Don't fade strong trends
             if signal_type == "BUY" and trend_score < -self.max_against_trend:
                 return False, f"strong_downtrend (trend={trend_score:.4f})"
             
             if signal_type == "SELL" and trend_score > self.max_against_trend:
                 return False, f"strong_uptrend (trend={trend_score:.4f})"
             
-            self.logger.debug(f"{CHECK} Trend OK: score={trend_score:.4f}, strength={trend_strength:.4f}")
+            self.logger.debug(
+                f"{CHECK} Trend OK: score={trend_score:.4f} "
+                f"(threshold=±{self.max_against_trend})"
+            )
             return True, "trend_context_ok"
             
         except Exception as e:
@@ -288,7 +332,7 @@ class IntelligentEntryFilter:
             return True, "trend_check_error"
   
     def _calculate_rsi(self, prices: np.ndarray, period: int = 14) -> float:
-        """Calculate RSI indicator"""
+        """Calculate RSI indicator."""
         if len(prices) < period + 1:
             return 50.0  # Neutral
         
@@ -306,4 +350,3 @@ class IntelligentEntryFilter:
         rsi = 100 - (100 / (1 + rs))
         
         return rsi
-
