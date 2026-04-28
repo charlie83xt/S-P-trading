@@ -29,6 +29,7 @@ ss
 SS*
 data/*
 !data/.gitkeep
+dist_assets/
 
 data/db/*.db
 data/backups/*.db

@@ -5,9 +5,22 @@ Supports multiple trading platforms: Binance, Tradovate, and NinjaTrader.
 
 import os
 from dotenv import load_dotenv
+from pathlib import Path
+
+# Load .env from APPDATA location first (packaged app / user machine)
+# Falls back to project root .env (development)
+_appdata = os.getenv("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+_user_env = Path(_appdata) / "S-P-Trading" / ".env"
+_dev_env  = Path(__file__).parent / ".env"
 
 # Load environment variables from .env file
-load_dotenv()
+if _user_env.exists():
+    load_dotenv(_user_env)
+elif _dev_env.exists():
+    load_dotenv(_dev_env)
+
+
+# load_dotenv()
 
 class Config:
     """Configuration class for the trading bot."""
@@ -40,7 +53,7 @@ class Config:
     ORB_RETEST_SMA_TIMEFRAME = os.getenv("ORB_RETEST_SMA_TF", "5m")
         
     # Trading platform selection
-    TRADING_PLATFORM = os.getenv('TRADING_PLATFORM', 'binance').lower()
+    TRADING_PLATFORM = os.getenv('TRADING_PLATFORM', 'tradovate_ui').lower()
     
     # Supported platforms
     SUPPORTED_PLATFORMS = ['binance', 'tradovate', 'ninjatrader', 'tradovate_ui']
@@ -63,6 +76,9 @@ class Config:
     # Bot control settings
     COOLDOWN_PERIOD = int(os.getenv('COOLDOWN_PERIOD', '300'))  # 5 minutes
     MAX_DAILY_TRADES = int(os.getenv('MAX_DAILY_TRADES', '10'))
+
+    SUPABASE_URL="https://ndqtzugtnnqyhnqjxeta.supabase.co"
+    SUPABASE_KEY="sb_publishable__aPkSACT6LNsLmoLSopOFQ_VPQ3iJ0U"
     
     # Binance configuration
     BINANCE_API_KEY = os.getenv('BINANCE_API_KEY', '')
