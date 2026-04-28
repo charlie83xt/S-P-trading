@@ -30,6 +30,9 @@ SS*
 data/*
 !data/.gitkeep
 dist_assets/
+build/
+dist/
+installer_output/
 
 data/db/*.db
 data/backups/*.db
