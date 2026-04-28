@@ -51,8 +51,8 @@ InternalCompressLevel=ultra64
 WizardStyle=modern
 ; Uncomment these when you have the image assets:
 SetupIconFile=assets\icon.ico
-WizardImageFile=assets\installer_banner.bmp
-WizardSmallImageFile=assets\installer_icon.bmp
+; WizardImageFile=assets\installer_banner.bmp
+; WizardSmallImageFile=assets\installer_icon.bmp
 
 ; License & info pages shown in the wizard
 LicenseFile=dist_assets\LICENSE.txt
