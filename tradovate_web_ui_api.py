@@ -355,16 +355,23 @@ class TradovateWebUIAPI(TradingAPIInterface):
             # By...
             # tab_sel = self._expand("positions.tab") # likely a list
             # # try each candidate selector until one works
-            clicked = self._click_any_first_visible("positions.tab", timeout_ms=8000)
-            if clicked:
-                self.logger.info("get_positions: clicked positions.tab")
-            # for s in (tab_sel if isinstance(tab_sel, list) else [tab_sel]):
-            #     if self._click_first_visible_sync(s, timeout_ms=8000):
-            #         clicked = True
-            #         self.logger.info("get_positions: clicked positions.tab via selector=%s", s)
-            #         active = self._wait_any(self._expand("positions.tab_active"), timeout_ms=2000)
-            #         self.logger.info("get_positions: tab_active after click=%s", bool(active))
-            #         break
+            # Check if tab became active from the _switch_to() call above
+            tab_now_active = False
+            try:
+                tab_now_active = bool(self._first_visible_selector(
+                    self._expand("positions.tab_active")
+                ))
+            except Exception:
+                pass
+
+            if tab_now_active:
+                self.logger.info("get_positions: tab already active after _switch_to")
+                clicked = True
+            else:
+                clicked = self._click_any_first_visible("positions.tab", timeout_ms=8000)
+                if clicked:
+                    self.logger.info("get_positions: clicked positions.tab")
+            
             if not clicked:
                 self.logger.warning("get_positions: could not click Positions tab (no visible+enabled match)")
 
@@ -3193,18 +3200,30 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
 
             # --- Force Positions tab ---
+            # First check if already active — don't click if it is
             clicked = False
             try:
-                clicked = bool(self._click_any_first_visible("positions.tab", timeout_ms=min(timeout_ms, 8000)))
+                already_active = bool(self._first_visible_selector(
+                    self._expand("positions.tab_active")
+                ))
             except Exception:
-                clicked = False
+                already_active = False
 
+            if already_active:
+                self.logger.info("ensure_trading_panels_ready: positions.tab already active")
+                clicked = True
+            else:
+                try:
+                    clicked = bool(self._click_any_first_visible(
+                        "positions.tab", timeout_ms=min(timeout_ms, 8000)
+                    ))
+                except Exception:
+                    clicked = False
 
             if not clicked:
                 self.logger.warning("ensure_trading_panels_ready: could not click positions.tab")
             else:
-                self.logger.info("ensure_trading_panels_ready: clicked positions.tab")
-
+                self.logger.info("ensure_trading_panels_ready: positions.tab ready")
 
             try:
                 self.cleanup_backdrops(timeout_ms=1500)

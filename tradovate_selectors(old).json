@@ -1,0 +1,252 @@
+{
+   "login.username": ["#name-input", "input#name-input", "input[id='name-input']"],
+   "login.password": ["#password-input", "input#password-input", "input[id='password-input']"],
+   "login.submit": ["button:has-text('Login')"],
+ 
+   "app.logged_in_marker.any": [
+     ".market-buttons",
+     "text=Buy Mkt",
+     ".pane.balance-view"
+   ],
+ 
+   "symbol.open_search": [
+     "[data-testid='symbol-search-box']",
+     "[data-testid='typeahead-wrapper']",
+     ".contract-horizontal-info .info-column.info-column-symbol",
+     ".contract-horizontal-info .contract-symbol",
+     "#content .info-column.info-column-symbol",
+     "#content > div > div.app-modules > div > div.gm-scroll-view > div > div > div > div.lm_item.lm_stack > div.lm_items > div:nth-child(1) > div > div > div.module.module-dom > div.header > div.contract-horizontal-info > div.info-column.info-column-symbol"
+   ],
+   "symbol.search_input": [
+     "[data-testid='typeahead-wrapper'] input",
+     "[data-testid='symbol-search-box'] input",
+     "input[placeholder='Search']",
+     "input[aria-label='Search']",
+     "#content .search-box .search-box--input"
+   ],
+   "symbol.first_result": [
+     ".instrument-list .instrument-item >> nth=0",
+     ".search-results .instrument-item >> nth=0"
+   ],
+ 
+   "order.qty_input": [
+     ".contract-horizontal-info .info-column-qty input",
+     "#content .info-column.info-column-qty input",
+     "#content > div > div.app-modules > div > div.gm-scroll-view > div > div > div > div.lm_item.lm_stack > div.lm_items > div:nth-child(1) > div > div > div.module.module-dom > div.header > div.contract-horizontal-info > div.info-column.info-column-qty > div > div > input"
+   ],
+   "order.qty_dropdown": [
+     ".contract-horizontal-info .info-column-qty .caret",
+     "#content .info-column-qty .caret",
+     "#content > div > div.app-modules > div > div.gm-scroll-view > div > div > div > div.lm_item.lm_stack > div.lm_items > div:nth-child(1) > div > div > div.module.module-dom > div.header > div.contract-horizontal-info > div.info-column.info-column-qty > div > div > div > div"
+   ],
+ 
+   "order.buy_market": [
+     "text=Buy Mkt",
+     ".market-buttons .btn.btn-success",
+     "#content .market-buttons-wrapper .btn.btn-success",
+     "#content > div > div.app-modules > div > div.gm-scroll-view > div > div > div > div.lm_item.lm_stack > div.lm_items > div:nth-child(1) > div > div > div.module.module-dom > div.header > div.market-buttons-wrapper > div > div > div > div.btn.btn-success"
+   ],
+   "order.sell_market": [
+     "text=Sell Mkt",
+     ".market-buttons .btn.btn-danger",
+     "#content .market-buttons-wrapper .btn.btn-danger",
+     "#content > div > div.app-modules > div > div.gm-scroll-view > div > div > div > div.lm_item.lm_stack > div.lm_items > div:nth-child(1) > div > div > div.module.module-dom > div.header > div.market-buttons-wrapper > div > div > div > div.btn.btn-danger"
+   ],
+
+    "confirm.cancel": [
+      ".modal-dialog button:has-text('Cancel')"
+    ],
+  
+    "order_ticket.tab": [
+      "span.lm_title >> text=Order Ticket",
+      "#content .lm_tabs .lm_tab .lm_title:has-text('Order Ticket')"
+    ],
+    "order_ticket.search_input": [
+      "#content .order-ticket .search-box .search-box--input",
+      "#content > div > div.app-modules > div > div.gm-scroll-view > div > div > div > div.lm_item.lm_column > div:nth-child(3) > div:nth-child(3) > div.lm_items > div:nth-child(6) > div > div > div.module.fill-parent-scrollbar.gm-scrollbar-container > div.gm-scroll-view > div > div > form > div > div.modal-group > div.search-box .search-box--input"
+    ],
+    "order_ticket.side_group": [
+      ".order-ticket .radio-group.btn-group",
+      "#content .trading-ticket-entry .radio-group.btn-group"
+    ],
+    "order_ticket.qty_input": [
+      ".order-ticket .qty input.form-control",
+      "#content > div > div.app-modules > div > div.gm-scroll-view > div > div > div > div.lm_item.lm_column > div:nth-child(3) > div:nth-child(3) > div.lm_items > div:nth-child(6) > div > div > div.module.fill-parent-scrollbar.gm-scrollbar-container > div.gm-scroll-view > div > div > form > div > div.modal-group > div.flex-row.vcenter.qty.vspace-of-4 > div > input"
+    ],
+    "order_ticket.type_dropdown": [
+      ".order-type .form-control:has-text('LIMIT')",
+      ".group.order-type .form-control"
+    ],
+    "order_ticket.price_input": [
+      ".group.order-type input.form-control",
+      "#content > div > div.app-modules > div > div.gm-scroll-view > div > div > div > div.lm_item.lm_column > div:nth-child(3) > div:nth-child(3) > div.lm_items > div:nth-child(6) > div > div > div.module.fill-parent-scrollbar.gm-scrollbar-container > div.gm-scroll-view > div > div > form > div > div.group.order-type > div > div:nth-child(1) > div > input"
+    ],
+    "order_ticket.time_in_force_day": ["label.btn.active-text:has-text('DAY')"],
+    "order_ticket.time_in_force_gtc": ["label.btn.active-text:has-text('GTC')"],
+    "order_ticket.time_in_force_gtd": ["label.btn.active-text:has-text('GTD')"],
+    "order_ticket.release_on_toggle": ["label.btn.active-text:has-text('On')", "label.btn.active-text:has-text('Off')"],
+    "order_ticket.gtd_at_button": [".btn.btn-default:has-text('at:')"],
+    "order_ticket.gtd_time": [".rc-time-picker-input"],
+    "order_ticket.gtd_date": ["input[placeholder='MM/DD/YYYY']"],
+    "order_ticket.send": [
+      "button.btn.btn-primary:has-text('Send')",
+      "#content .trading-ticket-entry .btn-group > button.btn.btn-primary"
+    ],
+    "order_ticket.reset": ["button.btn.btn-default:has-text('Reset')"],
+
+    "ticket.container": [
+      ".order-ticket",
+      "[data-test-id='order-ticket']",
+      ".trading-ticket-entry"
+    ],
+    "ticket.symbol_input": [
+      ".order-ticket input[placeholder='Symbol']",
+      ".order-ticket input[aria-label='Symbol']"
+    ],
+    "ticket.qty_input": [
+      ".order-ticket input[placeholder='Qty']",
+      ".order-ticket input[aria-label='Quantity']",
+      ".order-ticket .qty input.form-control"
+    ],
+    "ticket.market_buy": [
+      ".order-ticket .market-buttons >> text=Buy Mkt",
+      ".order-ticket button:has-text('Buy Mkt')"
+    ],
+    "ticket.market_sell": [
+      ".order-ticket .market-buttons >> text=Sell Mkt",
+      ".order-ticket button:has-text('Sell Mkt')"
+    ],
+    
+    "ticket.type_dropdown": [".order-ticket .order-type .form-control"],
+    "ticket.type_market": [".order-ticket .order-type .dropdown-menu >> text=Market"],
+
+    "confirm.modal": [".modal-dialog", ".modal-dialog .modal-content"],
+    "confirm.submit_buy": [
+      ".modal-dialog button.btn.btn-success",
+      ".modal-dialog button:has-text('Send Order')",
+      ".modal-dialog button.btn.btn-primary:has-text('Send')",
+      ".modal-dialog button:has-text('Send')",
+      ".modal-dialog :is(button,div.btn,[role=button]):has-text('Buy')"
+    ],
+
+    "confirm.submit_sell": [
+      ".modal-dialog button.btn.btn-danger",
+      ".modal-dialog button:has-text('Send Order')",
+      ".modal-dialog button.btn.btn-primary:has-text('Send')",
+      ".modal-dialog button:has-text('Send')",
+      ".modal-dialog :is(button,div.btn,[role=button]):has-text('Sell')"
+    ],
+    
+    "confirm.ok": [".modal-dialog button:has-text('OK')", "button:has-text('Ok')"],
+
+   "oco_atm.toggle_oco": [
+     ".radio-group.btn-group label.btn.active-text:has-text('OCO')",
+     "#content .trading-ticket-dependant-entry .radio-group .btn.active-text:has-text('OCO')"
+   ],
+   "oco_atm.toggle_atm": [
+     ".radio-group.btn-group label.btn.active-text:has-text('ATMs')"
+   ],
+   "oco_atm.name_dropdown": [
+     ".select-input.atm-dropdown .form-control.placeholder",
+     "#content .select-input.atm-dropdown > div > span.form-control"
+   ],
+   "oco_atm.type_dropdown": [
+     ".select-input.atm-dropdown .form-control:has-text('TP + SL')",
+     "#content .select-input.atm-dropdown > div > span.form-control"
+   ],
+   "oco_atm.show_in": [
+     ".select-input .form-control:has-text('Ticks')"
+   ],
+   "oco_atm.tp_ticks": [
+     "input.form-control[value]",
+     "#content .trading-ticket-dependant-entry input.form-control"
+   ],
+   "oco_atm.tp_price": [
+     ".trading-ticket-dependant-entry input[format='2'].form-control"
+   ],
+   "oco_atm.sl_ticks": [
+     ".trading-ticket-dependant-entry div:nth-child(5) input.form-control"
+   ],
+   "oco_atm.sl_price": [
+     ".trading-ticket-dependant-entry div:nth-child(6) input.form-control"
+   ],
+   "oco_atm.sl_type_dropdown": [
+     ".trading-ticket-dependant-entry .form-control:has-text('Stop')"
+   ],
+ 
+   "positions.tab": [
+     "#content .lm_tabs .lm_tab:has(.lm_title:has-text('Positions'))",
+     ".lm_tabs .lm_tab:has(.lm_title:has-text('Positions'))",
+     ".lm_tab:has(.lm_title:has-text('Positions'))",
+     ".lm_tabdropdown_list .lm_title:has-text('Positions')",
+     ".lm_tabdropdown_list .lm_item:has-text('Positions')"
+   ],
+   "positions.table": [
+     "[data-testid='positions-table']",
+     "#content .lm_item_container:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",
+     "#content .lm_content:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",
+     "#content .lm_stack:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",
+     ".public_fixedDataTable_main",
+     "[data-test-id='positions-table']",
+     ".module.module-dom .positions-table",
+     ".module .module-dom .positions-table",
+     ".module.positions.data-table .public_fixedDataTable_main",
+     ".module.positions.data-table .fixedDataTableLayout_main",
+     ".module.positions.data-table",
+     ".positions-table",
+     "#content .positions-table"
+   ],
+   "positions.tab_active": [
+    "#content .lm_tabs .lm_tab.lm_active:has(.lm_title:has-text('Positions'))",
+    ".lm_tab.lm_active:has(.lm_title:has-text('Positions'))"
+   ],
+   "orders.tab": [
+    "#content .lm_tabs .lm_tab:has(.lm_title:has-text('Orders'))",
+    ".lm_tabs .lm_tab:has(.lm_title:has-text('Orders'))",
+    ".lm_tab:has(.lm_title:has-text('Orders'))",
+    ".lm_tabdropdown_list .lm_title:has-text('Orders')",
+    ".lm_tabdropdown_list .lm_item:has-text('Orders')"
+   ],
+   "orders.table": [
+     "#content .lm_stack:has(.lm_title:has-text('Orders')) .public_fixedDataTable_main",
+     "#content .lm_item_container:has(.lm_title:has-text('Orders')) .public_fixedDataTable_main",
+     "#content .lm_content:has(.lm_title:has-text('Orders')) .public_fixedDataTable_main",
+     "[data-test-id='orders-table']",
+     ".orders-table",
+     "#content .orders-table",
+     ".module.module-dom .orders-table",
+     ".module .module-dom .orders-table",
+     ".module.orders.data-table .public_fixedDataTable_main",
+     ".module.orders.data-table .fixedDataTableLayout_main",
+     ".module.orders.data-table",
+     ".fixedDataTableLayout_rowsContainer"
+   ],
+   "orders.tab_active": [
+    "#content .lm_tabs .lm_tab.lm_active:has(.lm_title:has-text('Orders'))",
+    ".lm_tabs .lm_tab.lm_active:has(.lm_title:has-text('Orders'))",
+    ".lm_tab.lm_active:has(.lm_title:has-text('Orders'))"
+   ],
+ 
+   "account.balance_pane": [
+     ".pane.balance-view",
+     "#content > div > div.app-controls > div.account-info-inline > div.pane.balance-view.dropdown"
+   ],
+   "account.balance_dropdown_open": [
+     ".pane.balance-view.dropdown.open",
+     "#content > div > div.app-controls > div.account-info-inline > div.pane.balance-view.dropdown.open"
+   ],
+   "account.panic_button": [
+     ".balance-view .risk-settings .panic-button",
+     "#content > div > div.app-controls > div.account-info-inline > div.pane.balance-view.dropdown.open > div.dropdown-menu > li > div > div.risk-settings .panic-button"
+   ],
+ 
+   "price.last": [
+     ".module.chart .last-price-info .number",
+     ".chart-wrapper .last-price-info .number"
+   ],
+   "tabs.dropdown_button": [
+    "#content .lm_header .lm_tabdropdown",
+    ".lm_header .lm_tabdropdown",
+    ".lm_tabdropdown"
+   ]
+ }
