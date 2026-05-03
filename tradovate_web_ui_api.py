@@ -931,7 +931,8 @@ class TradovateWebUIAPI(TradingAPIInterface):
         path = base_path / "tradovate_selectors.json"
         
         with open(path, "r") as f:
-            data = json.load(f)
+            # data = json.load(f)
+            self._sel = json.load(f)
 
 
     def S(self, key):
