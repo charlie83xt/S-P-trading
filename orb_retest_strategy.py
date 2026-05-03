@@ -27,7 +27,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, time as dtime
 from typing import Any, Dict, Optional, List, Tuple
-from debug_config import PRINT_STRATEGY_STATE, should_log_throttled, CHART, UP_R, DO_R, CROSS, CHECK, ROCKET, MAGNI, WARNING, TARGET
+from debug_config import PRINT_STRATEGY_STATE, should_log_throttled, CHART, UP_R, DO_R, CROSS, CHECK, ROCKET, MAGNI, WARNING, TARGET, SANDTIME
 
 try:
     from zoneinfo import ZoneInfo  # Python 3.9+

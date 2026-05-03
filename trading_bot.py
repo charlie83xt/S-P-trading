@@ -127,9 +127,22 @@ class TradingBot:
         #startup grace
         self._startup_ts = time.time()
 
-
+    @property
     def symbol(self):
         return self.symbol_manager.symbol
+
+    @symbol.setter
+    def symbol(self, value: str):
+        self.symbol_manager.symbol = value
+        # Reset strategy for new symbol
+        if hasattr(self, 'strategy') and hasattr(self.strategy, 'reset_strategy'):
+            self.strategy.reset_strategy()
+        # Clear risk manager positions
+        if hasattr(self, 'risk_manager'):
+            self.risk_manager.positions.clear()
+        if hasattr(self, 'logger'):
+            self.logger.info(f"Trading symbol changed to: {value}")
+
 
     # Method to change symbol:
     def change_symbol(self, new_symbol: str):

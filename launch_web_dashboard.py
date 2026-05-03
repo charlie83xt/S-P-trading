@@ -216,7 +216,8 @@ def main():
     production_print(f"{WRENCH} Starting Flask web server...")
     
     # Schedule browser opening after 3 seconds
-    Timer(3.0, open_browser).start()
+    if os.environ.get('LAUNCHED_BY_LAUNCHER') != '1':
+        Timer(3.0, open_browser).start()
     
     # Import and run the Flask app
     try:
