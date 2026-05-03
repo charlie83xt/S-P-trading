@@ -10,12 +10,16 @@
    ],
  
    "symbol.open_search": [
+     "[data-testid='symbol-search-box']",
+     "[data-testid='typeahead-wrapper']",
      ".contract-horizontal-info .info-column.info-column-symbol",
      ".contract-horizontal-info .contract-symbol",
      "#content .info-column.info-column-symbol",
      "#content > div > div.app-modules > div > div.gm-scroll-view > div > div > div > div.lm_item.lm_stack > div.lm_items > div:nth-child(1) > div > div > div.module.module-dom > div.header > div.contract-horizontal-info > div.info-column.info-column-symbol"
    ],
    "symbol.search_input": [
+     "[data-testid='typeahead-wrapper'] input",
+     "[data-testid='symbol-search-box'] input",
      "input[placeholder='Search']",
      "input[aria-label='Search']",
      "#content .search-box .search-box--input"
@@ -178,6 +182,7 @@
      ".lm_tabdropdown_list .lm_item:has-text('Positions')"
    ],
    "positions.table": [
+     "[data-testid='positions-table']",
      "#content .lm_item_container:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",
      "#content .lm_content:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",
      "#content .lm_stack:has(.lm_title:has-text('Positions')) .public_fixedDataTable_main",

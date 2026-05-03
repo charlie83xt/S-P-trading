@@ -259,6 +259,7 @@ def start_dashboard(logger, config: dict) -> bool:
                     os.environ['CDP_PORT']     = '9222'
                     os.environ['CDP_URL']      = 'http://localhost:9222'
                     os.environ['PORT']         = str(dashboard_port)
+                    os.environ['LAUNCHED_BY_LAUNCHER'] = '1'
                     logger.info("Environment set: PW_MODE=cdp, CDP_PORT=9222")
                     import web_app
                     web_app.app.run(
