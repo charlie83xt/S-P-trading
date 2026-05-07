@@ -25,6 +25,7 @@ import numpy as np
 from datetime import datetime, time, timezone
 from typing import Optional, Dict, Tuple
 from debug_config import CHECK, CROSS
+from market_regime_detector import MarketRegimeDetector
  
 class IntelligentEntryFilter:
     """
@@ -41,6 +42,8 @@ class IntelligentEntryFilter:
         self.dm = data_manager
         self.logger = logger
         
+        # Regime Detector
+        self.regime_detector = MarketRegimeDetector(data_manager, logger)
         # ── THRESHOLDS ─────────────────────────────────────────────────────────
         # Tune these based on backtesting. See tuning guide in module docstring.
         #
@@ -79,47 +82,106 @@ class IntelligentEntryFilter:
     def should_enter_trade(
         self,
         symbol: str,
-        signal_type: str,          # "BUY" or "SELL"
+        signal_type: str,
         signal_price: float,
         strategy_name: str,
-        signal_context: Optional[Dict] = None   # pass signal dict for overrides
+        signal_context: Optional[Dict] = None
     ) -> Tuple[bool, str]:
         """
-        Run ALL confirmation checks before entering trade.
-        
-        Returns:
-            (allow_entry: bool, reason: str)
+        Run ALL confirmation checks with REGIME-ADAPTIVE thresholds.
         """
         
-        # Layer 1: Volume Confirmation
-        volume_ok, volume_reason = self._check_volume(symbol, signal_type)
-        if not volume_ok:
-            self.logger.warning(f"{CROSS} Entry BLOCKED: {volume_reason}")
-            return False, volume_reason
-        
-        # Layer 2: Momentum Confirmation
-        momentum_ok, momentum_reason = self._check_momentum(
-            symbol, signal_type, signal_price, signal_context
+        # ⭐ NEW: Detect market regime FIRST
+        regime_info = self.regime_detector.detect_regime(
+            symbol, 
+            signal_type, 
+            signal_context
         )
-        if not momentum_ok:
-            self.logger.warning(f"{CROSS} Entry BLOCKED: {momentum_reason}")
-            return False, momentum_reason
         
-        # Layer 3: Order Flow Confirmation (if we have tick data)
-        flow_ok, flow_reason = self._check_order_flow(symbol, signal_type)
-        if not flow_ok:
-            self.logger.warning(f"{CROSS} Entry BLOCKED: {flow_reason}")
-            return False, flow_reason
+        # Log regime detection
+        self.logger.info(
+            f"📊 REGIME: {regime_info['regime']} "
+            f"(confidence={regime_info['confidence']:.2f}) - "
+            f"{regime_info['explanation']}"
+        )
         
-        # Layer 4: Trend Context
-        trend_ok, trend_reason = self._check_trend_context(symbol, signal_type)
-        if not trend_ok:
-            self.logger.warning(f"{CROSS} Entry BLOCKED: {trend_reason}")
-            return False, trend_reason
+        # ⭐ ADAPT THRESHOLDS based on regime
+        original_thresholds = self._save_current_thresholds()
+        self._apply_regime_thresholds(regime_info['recommended_thresholds'])
         
-        # ALL CHECKS PASSED!
-        self.logger.info(f"{CHECK} Entry APPROVED: All filters passed")
-        return True, "all_filters_passed"
+        try:
+            # Run existing filter checks (now with adapted thresholds!)
+            
+            # Layer 1: Volume
+            volume_ok, volume_reason = self._check_volume(symbol, signal_type)
+            if not volume_ok:
+                self.logger.warning(f"{CROSS} Entry BLOCKED: {volume_reason}")
+                return False, volume_reason
+            
+            # Layer 2: Momentum
+            momentum_ok, momentum_reason = self._check_momentum(
+                symbol, signal_type, signal_price, signal_context
+            )
+            if not momentum_ok:
+                self.logger.warning(f"{CROSS} Entry BLOCKED: {momentum_reason}")
+                return False, momentum_reason
+            
+            # Layer 3: Order Flow
+            flow_ok, flow_reason = self._check_order_flow(symbol, signal_type)
+            if not flow_ok:
+                self.logger.warning(f"{CROSS} Entry BLOCKED: {flow_reason}")
+                return False, flow_reason
+            
+            # Layer 4: Trend
+            trend_ok, trend_reason = self._check_trend_context(symbol, signal_type)
+            if not trend_ok:
+                self.logger.warning(f"{CROSS} Entry BLOCKED: {trend_reason}")
+                return False, trend_reason
+            
+            # ALL CHECKS PASSED!
+            self.logger.info(
+                f"{CHECK} Entry APPROVED: All filters passed "
+                f"(regime={regime_info['regime']})"
+            )
+            return True, f"approved_in_{regime_info['regime'].lower()}_regime"
+        
+        finally:
+            # ⭐ Restore original thresholds for next signal
+            self._restore_thresholds(original_thresholds)
+
+
+    def _save_current_thresholds(self) -> Dict:
+        """Save current thresholds before modifying."""
+        return {
+            'min_volume_ratio': self.min_volume_ratio,
+            'min_momentum_score': self.min_momentum_score,
+            'min_order_flow_score': self.min_order_flow_score,
+            'max_against_trend': self.max_against_trend
+        }
+
+
+    def _apply_regime_thresholds(self, regime_thresholds: Dict):
+        """Apply regime-specific thresholds."""
+        self.min_volume_ratio = regime_thresholds.get('min_volume_ratio', self.min_volume_ratio)
+        self.min_momentum_score = regime_thresholds.get('min_momentum_score', self.min_momentum_score)
+        self.min_order_flow_score = regime_thresholds.get('min_order_flow_score', self.min_order_flow_score)
+        self.max_against_trend = regime_thresholds.get('max_against_trend', self.max_against_trend)
+        
+        self.logger.debug(
+            f"Applied regime thresholds: "
+            f"momentum={self.min_momentum_score:.2f}, "
+            f"volume={self.min_volume_ratio:.2f}, "
+            f"flow={self.min_order_flow_score:.2f}"
+        )
+
+
+    def _restore_thresholds(self, saved_thresholds: Dict):
+        """Restore original thresholds."""
+        self.min_volume_ratio = saved_thresholds['min_volume_ratio']
+        self.min_momentum_score = saved_thresholds['min_momentum_score']
+        self.min_order_flow_score = saved_thresholds['min_order_flow_score']
+        self.max_against_trend = saved_thresholds['max_against_trend']
+
   
     def _check_volume(self, symbol: str, signal_type: str) -> Tuple[bool, str]:
         """Volume Confirmation."""

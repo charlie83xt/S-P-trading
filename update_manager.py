@@ -1,10 +1,8 @@
 """
 AUTO-UPDATE SYSTEM for S-P Trading App.
 
-
 Downloads and applies file-level updates (strategies, configs, selectors,
 templates) without requiring a full .exe rebuild or reinstall.
-
 
 Architecture:
     GitHub Releases (or private server)
@@ -21,19 +19,16 @@ Architecture:
          ↓
     App restart (if needed)
 
-
 What CAN be updated without repackaging:
     ✅  Python strategy files  (_internal/*.py in the dist folder)
     ✅  Config / selector JSON files
     ✅  Flask templates (templates/*.html)
     ❌  The .exe itself  (requires full Inno Setup installer)
 
-
 Usage from launcher.py:
     from update_manager import check_and_apply_updates
     check_and_apply_updates(app_dir=Path.cwd(), logger=logger)
 """
-
 
 import sys
 import os
@@ -44,7 +39,7 @@ import logging
 import threading
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 
 try:
@@ -60,7 +55,6 @@ try:
         return PkgVersion(latest) > PkgVersion(current)
 except ImportError:
     def _newer(latest: str, current: str) -> bool:
-        """Fallback version comparison (works for semver X.Y.Z)."""
         def _parts(v):
             return tuple(int(x) for x in v.lstrip("v").split("."))
         try:
@@ -74,27 +68,63 @@ from version import APP_VERSION
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# CONFIGURATION  — change these before distribution
+# CONFIGURATION
 # ============================================================================
 
-# GitHub public repo example:
-#   "https://api.github.com/repos/YOUR_GITHUB_USERNAME/sp-trading/releases/latest"
-# Private server example:
-#   "https://updates.your-domain.com/api/latest"
 UPDATE_CHECK_URL = "https://api.github.com/repos/charlie83xt/S-P-trading/releases/latest"
+REQUEST_TIMEOUT  = 10
+MAX_BACKUPS      = 5
 
-# Seconds to wait for network requests
-REQUEST_TIMEOUT = 10
+
+# ============================================================================
+# PATH HELPERS  ← THE CORE FIX
+# ============================================================================
+
+def _get_internal_dir(app_dir: Path) -> Path:
+    """
+    Return the directory where .py and .json files actually live.
+
+    Packaged app layout:
+        S-P Trading/              ← app_dir
+        S-P Trading/_internal/    ← where Python files live  ← CORRECT TARGET
+        S-P Trading/templates/    ← where HTML templates live
+
+    Development layout:
+        project_root/             ← app_dir (no _internal subfolder)
+    """
+    internal = app_dir / "_internal"
+    if internal.is_dir():
+        return internal
+    return app_dir  # dev mode: files are in project root directly
 
 
-# How many backup snapshots to keep before pruning old ones
-MAX_BACKUPS = 5
+def _resolve_dst(app_dir: Path, filename: str) -> Path:
+    """
+    Map a filename from the update manifest to its correct destination path.
+
+    Rules (in order):
+      templates/*  → app_dir/templates/filename  (Flask HTML files)
+      *.py         → _internal/basename           (Python modules)
+      *.json       → _internal/basename           (JSON config/selectors)
+      anything else → app_dir/filename            (unknown, best guess)
+    """
+    p = Path(filename)
+
+    # Templates: preserve the templates/ subfolder under app_dir
+    if p.parts and p.parts[0] == "templates":
+        return app_dir / p
+
+    # Python and JSON: go into _internal on packaged apps
+    if p.suffix in (".py", ".json"):
+        return _get_internal_dir(app_dir) / p.name
+
+    # Fallback
+    return app_dir / p
 
 
 # ============================================================================
 # UPDATE MANAGER
 # ============================================================================
-
 
 class UpdateManager:
     """
@@ -115,15 +145,8 @@ class UpdateManager:
     def check_for_updates(self) -> Optional[Dict]:
         """
         Query the update server for the latest release.
-        Returns an update-info dict if a newer version is available, or
-        None if we are up to date / the check fails.
-
-        Update-info dict:
-            version          str   "1.2.0"
-            release_date     str   "2026-04-23"
-            changelog        str   release notes
-            files            list  [{filename, sha256, description}, ...]
-            download_base_url str
+        Returns an update-info dict if a newer version is available,
+        or None if up to date / check fails.
         """
         if not _REQUESTS_AVAILABLE:
             logger.warning("requests library not installed — skipping update check")
@@ -140,23 +163,18 @@ class UpdateManager:
                 logger.warning(f"Update server returned HTTP {resp.status_code}")
                 return None
 
-
             data           = resp.json()
             latest_version = data.get("tag_name", "").lstrip("v")
-
 
             if not latest_version:
                 logger.warning("Could not parse version from update server response")
                 return None
 
-
             if not _newer(latest_version, APP_VERSION):
                 logger.info(f"App is up to date (v{APP_VERSION})")
                 return None
 
-
             logger.info(f"Update available: v{latest_version}")
-
 
             # Find update_manifest.json in the release assets
             manifest_url = None
@@ -176,10 +194,10 @@ class UpdateManager:
 
             manifest = manifest_resp.json()
             return {
-                "version":          latest_version,
-                "release_date":     data.get("published_at", "")[:10],
-                "changelog":        data.get("body", ""),
-                "files":            manifest.get("files", []),
+                "version":           latest_version,
+                "release_date":      data.get("published_at", "")[:10],
+                "changelog":         data.get("body", ""),
+                "files":             manifest.get("files", []),
                 "download_base_url": manifest.get("download_base_url", ""),
             }
 
@@ -194,13 +212,10 @@ class UpdateManager:
     def download_update_files(self, update_info: Dict) -> bool:
         """
         Download changed files to the .updates/ staging directory.
-
-
         Each file is hash-verified after download.
-        Returns True if all files downloaded and verified successfully.
         """
-        base_url      = update_info.get("download_base_url", "")
-        files_to_get  = update_info.get("files", [])
+        base_url     = update_info.get("download_base_url", "")
+        files_to_get = update_info.get("files", [])
 
         if not files_to_get:
             logger.warning("Update manifest contains no files")
@@ -227,7 +242,10 @@ class UpdateManager:
                 if expected_hash:
                     actual = self._sha256(dest)
                     if actual != expected_hash:
-                        logger.error(f"    Hash mismatch — expected {expected_hash[:12]}… got {actual[:12]}…")
+                        logger.error(
+                            f"    Hash mismatch — expected {expected_hash[:12]}… "
+                            f"got {actual[:12]}…"
+                        )
                         return False
 
                 logger.info(f"    ✓ verified")
@@ -240,91 +258,86 @@ class UpdateManager:
         return True
 
     # ------------------------------------------------------------------
-    # 3. BACKUP
+    # 3. BACKUP  — reads from correct _internal location
     # ------------------------------------------------------------------
 
     def backup_current_files(self, files_to_update: List[Dict]) -> Optional[str]:
         """
         Snapshot the current versions of files about to be updated.
-
-
-        Returns the backup directory name (used for rollback) or None on failure.
+        Reads from the correct location (_internal for .py/.json files).
         """
         timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_path = self.backup_dir / f"backup_{timestamp}"
         backup_path.mkdir(parents=True, exist_ok=True)
 
-
         logger.info(f"Creating backup snapshot: {backup_path.name}")
-
 
         for file_info in files_to_update:
             filename = file_info["filename"]
-            src      = self.app_dir / filename
+            src      = _resolve_dst(self.app_dir, filename)  # same logic as apply
+
             if src.exists():
                 dst = backup_path / filename
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
-                logger.debug(f"  Backed up {filename}")
-
+                logger.debug(f"  Backed up {filename} ← {src}")
+            else:
+                logger.debug(f"  Skipped backup for {filename} (not found at {src})")
 
         self._prune_old_backups()
         return backup_path.name
 
     # ------------------------------------------------------------------
-    # 4. APPLY
+    # 4. APPLY  — writes to correct _internal location
     # ------------------------------------------------------------------
 
     def apply_updates(self, files_to_update: List[Dict]) -> bool:
         """
-        Copy staged files from .updates/ into the app directory.
+        Copy staged files from .updates/ into the correct app directories.
+
+        Key routing (packaged app):
+          *.py / *.json  →  S-P Trading/_internal/filename
+          templates/*    →  S-P Trading/templates/filename
         """
         logger.info("Applying updates...")
-
+        logger.info(f"  app_dir   = {self.app_dir}")
+        logger.info(f"  _internal = {_get_internal_dir(self.app_dir)}")
 
         for file_info in files_to_update:
             filename = file_info["filename"]
             src      = self.update_dir / filename
-            dst      = self.app_dir / filename
-
 
             if not src.exists():
-                logger.error(f"Staged file missing: {filename}")
+                logger.error(f"Staged file missing: {filename} (looked in {src})")
                 return False
 
-
+            dst = _resolve_dst(self.app_dir, filename)
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
-            logger.info(f"  ✓ {filename}")
-
+            logger.info(f"  ✓ {filename} → {dst}")
 
         logger.info("Updates applied successfully.")
         return True
-
 
     # ------------------------------------------------------------------
     # 5. ROLLBACK
     # ------------------------------------------------------------------
 
     def rollback(self, backup_dir_name: str) -> bool:
-        """
-        Restore files from a named backup snapshot.
-        """
+        """Restore files from a named backup snapshot."""
         backup_path = self.backup_dir / backup_dir_name
         if not backup_path.exists():
             logger.error(f"Backup not found: {backup_path}")
             return False
 
-
         logger.info(f"Rolling back from: {backup_dir_name}")
         for src in backup_path.rglob("*"):
             if src.is_file():
                 rel = src.relative_to(backup_path)
-                dst = self.app_dir / rel
+                dst = _resolve_dst(self.app_dir, str(rel))
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
-                logger.info(f"  Restored {rel}")
-
+                logger.info(f"  Restored {rel} → {dst}")
 
         logger.info("Rollback complete.")
         return True
@@ -337,40 +350,32 @@ class UpdateManager:
         """
         Orchestrate the full check → download → backup → apply cycle.
 
-        If auto_apply is False, prompts the user for confirmation first.
-        Returns True if the update was applied successfully.
+        If auto_apply is False:
+          Writes pending_update.json for the dashboard banner — NO input() call.
+
+        Returns True if update was applied, False otherwise.
         """
-        version  = update_info["version"]
-        files    = update_info["files"]
+        version   = update_info["version"]
+        files     = update_info["files"]
         changelog = update_info.get("changelog", "").strip()
 
-
-        # print(f"\n{'='*60}")
-        # print(f"  UPDATE AVAILABLE: v{version}")
-        # print(f"{'='*60}")
-        # if changelog:
-        #     # Show first 500 chars of release notes
-        #     notes = changelog[:500] + ("…" if len(changelog) > 500 else "")
-        #     print(f"\nWhat's new:\n{notes}\n")
-        # print(f"Files to update: {len(files)}")
-        # for f in files:
-        #     print(f"  • {f['filename']}")
-
         if not auto_apply:
-        # Write pending update to a file for the dashboard to pick up
-        # The dashboard will show a banner and call /api/update/apply
-            pending_file = self.app_dir / ".updates" / "pending_update.json"
+            # Write pending_update.json — dashboard banner picks this up
+            pending_file = self.update_dir / "pending_update.json"
             pending_file.parent.mkdir(parents=True, exist_ok=True)
             pending_file.write_text(json.dumps({
-                "version":   version,
-                "changelog": changelog,
-                "files":     files,
+                "version":           version,
+                "changelog":         changelog,
+                "files":             files,
                 "download_base_url": update_info.get("download_base_url", ""),
             }, indent=2))
-            logger.info(f"Update v{version} available — dashboard notified")
-            return False   # Not applied yet — waiting for user confirmation
+            logger.info(
+                f"Update v{version} available — "
+                f"pending_update.json written for dashboard banner"
+            )
+            return False  # Waiting for user confirmation via dashboard
 
-        # auto_apply=True path — download and apply immediately
+        # ── auto_apply=True: full download → backup → apply ──
         if not self.download_update_files(update_info):
             logger.error("Download failed — update aborted")
             return False
@@ -386,10 +391,12 @@ class UpdateManager:
             return False
 
         logger.info(f"Successfully updated to v{version}")
+
         # Clean up pending file
-        pending_file = self.app_dir / ".updates" / "pending_update.json"
+        pending_file = self.update_dir / "pending_update.json"
         if pending_file.exists():
             pending_file.unlink()
+
         return True
 
     # ------------------------------------------------------------------
@@ -415,31 +422,27 @@ class UpdateManager:
 
 
 # ============================================================================
-# MANIFEST GENERATOR  (run on your dev machine before each release)
+# MANIFEST GENERATOR  (run on your dev Mac before each release)
 # ============================================================================
 
 def create_update_manifest(
     version: str,
     files: List[str],
     github_username: str,
-    repo_name: str = "sp-trading",
+    repo_name: str = "S-P-trading",
 ) -> None:
     """
     Generate update_manifest.json to upload alongside a GitHub release.
-
-
-    Args:
-        version:         Release version string e.g. "1.2.0"
-        files:           List of relative file paths to include in the update
-        github_username: Your GitHub username
-        repo_name:       Your GitHub repository name
     """
-    base_url = f"https://github.com/{github_username}/{repo_name}/releases/download/v{version}"
+    base_url = (
+        f"https://github.com/{github_username}/{repo_name}"
+        f"/releases/download/v{version}"
+    )
     manifest = {
-        "version":          version,
-        "release_date":     datetime.now().strftime("%Y-%m-%d"),
+        "version":           version,
+        "release_date":      datetime.now().strftime("%Y-%m-%d"),
         "download_base_url": base_url,
-        "files": [],
+        "files":             [],
     }
 
     for filename in files:
@@ -455,15 +458,17 @@ def create_update_manifest(
         })
         print(f"  ✓ {filename}  ({h[:12]}…)")
 
-
     out = Path("update_manifest.json")
     out.write_text(json.dumps(manifest, indent=2))
     print(f"\nManifest written to {out.resolve()}")
-    print(f"Upload this file (and all listed .py / .json / .html files) to the v{version} GitHub release.")
+    print(
+        f"Upload update_manifest.json AND all listed files "
+        f"to the v{version} GitHub release assets."
+    )
 
 
 # ============================================================================
-# LAUNCHER INTEGRATION  (call this from launcher.py at startup)
+# LAUNCHER INTEGRATION
 # ============================================================================
 
 def check_and_apply_updates(
@@ -472,36 +477,26 @@ def check_and_apply_updates(
     background: bool = True,
 ) -> None:
     """
-    Entry point called from launcher.py.
-
-
-    Runs the update check in a background thread by default so it never
-    blocks or slows down the app startup.  Set background=False in tests.
-
-
-    Args:
-        app_dir:      Root directory of the running app (Path.cwd() or sys._MEIPASS parent)
-        auto_update:  If True, apply silently without prompting the user
-        background:   If True, run in a daemon thread (default)
+    Entry point called from launcher.py on startup.
+    Runs in a background thread — never blocks startup.
     """
     def _run():
         try:
             updater     = UpdateManager(app_dir)
             update_info = updater.check_for_updates()
 
-
             if update_info:
                 applied = updater.perform_update(update_info, auto_apply=auto_update)
                 if applied:
-                    print("\n🔄 Update applied — please restart the app to use the new version.\n")
+                    logger.info(
+                        f"Update applied to v{update_info['version']} "
+                        f"— restart the app to use the new version"
+                    )
             else:
                 logger.debug("No updates available")
 
-
         except Exception as e:
             logger.error(f"Update check/apply error: {e}")
-            # Never crash the app because of a failed update
-
 
     if background:
         t = threading.Thread(target=_run, daemon=True, name="update-checker")
@@ -511,7 +506,7 @@ def check_and_apply_updates(
 
 
 # ============================================================================
-# CLI  (python update_manager.py --check / --manifest / --rollback)
+# CLI
 # ============================================================================
 
 if __name__ == "__main__":
@@ -522,35 +517,30 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="S-P Trading Update Manager")
     sub    = parser.add_subparsers(dest="cmd")
 
-    # check
     p_check = sub.add_parser("check", help="Check for and optionally apply updates")
-    p_check.add_argument("--auto",  action="store_true", help="Apply without prompting")
+    p_check.add_argument("--auto", action="store_true", help="Apply without prompting")
 
-    # manifest  (developer use)
     p_mf = sub.add_parser("manifest", help="Generate update_manifest.json for a release")
-    p_mf.add_argument("version",  help="Version string e.g. 1.2.0")
-    p_mf.add_argument("files",    nargs="+", help="Files to include in the update")
-    p_mf.add_argument("--user",   required=True, help="GitHub username")
-    p_mf.add_argument("--repo",   default="S-P-trading", help="GitHub repo name")
+    p_mf.add_argument("version", help="Version string e.g. 1.2.0")
+    p_mf.add_argument("files",   nargs="+", help="Files to include in the update")
+    p_mf.add_argument("--user",  required=True, help="GitHub username")
+    p_mf.add_argument("--repo",  default="S-P-trading", help="GitHub repo name")
 
-    # rollback
     p_rb = sub.add_parser("rollback", help="Roll back to a backup snapshot")
-    p_rb.add_argument("backup_name", help="Backup directory name e.g. backup_20260423_120000")
-
+    p_rb.add_argument("backup_name", help="e.g. backup_20260423_120000")
 
     args = parser.parse_args()
 
     if args.cmd == "check":
         check_and_apply_updates(Path.cwd(), auto_update=args.auto, background=False)
-
     elif args.cmd == "manifest":
         print(f"\nGenerating manifest for v{args.version}:")
         create_update_manifest(args.version, args.files, args.user, args.repo)
-
     elif args.cmd == "rollback":
         um = UpdateManager(Path.cwd())
         ok = um.rollback(args.backup_name)
         sys.exit(0 if ok else 1)
-
     else:
         parser.print_help()
+
+
