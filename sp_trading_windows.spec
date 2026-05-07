@@ -1,6 +1,13 @@
 # sp_trading_windows.spec
 # Production build configuration for S-P Trading App
-# 
+#
+# KEY PRINCIPLE for update channel:
+#   Files in `datas` ONLY (not hiddenimports) = loaded from .py file at runtime
+#   → these CAN be updated via the GitHub release update channel
+#
+#   Files in `hiddenimports` = compiled into the .exe bytecode archive
+#   → these CANNOT be updated via the channel (needs full rebuild)
+#
 # Usage:
 #   pyinstaller sp_trading_windows.spec
 #
@@ -13,6 +20,7 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 from PyInstaller.building.datastruct import Tree
 import glob
+import shutil
 
 block_cipher = None
 
@@ -20,61 +28,64 @@ block_cipher = None
 # VERIFY CRITICAL FILES EXIST BEFORE BUILD
 # ============================================================================
 
-print("\n" + "="*70)
+print("\n" + "=" * 70)
 print("S-P TRADING - PYINSTALLER BUILD")
-print("="*70)
+print("=" * 70)
 
-# Verify we're in the right directory
 if not os.path.isfile('launcher.py'):
-    print("❌ ERROR: launcher.py not found!")
+    print("ERROR: launcher.py not found!")
     print(f"   Current directory: {os.getcwd()}")
-    print("   Make sure you're running from project root")
     sys.exit(1)
 
-# Check templates folder exists
 if not os.path.isdir('templates'):
-    print("❌ ERROR: templates/ folder not found!")
-    print("   Make sure templates/ exists in the same directory as this .spec file")
-    print(f"   Current directory: {os.getcwd()}")
+    print("ERROR: templates/ folder not found!")
     sys.exit(1)
 
-# Check dashboard.html exists
 if not os.path.isfile('templates/dashboard.html'):
-    print("❌ ERROR: templates/dashboard.html not found!")
-    print("   This is the main UI file and must exist")
+    print("ERROR: templates/dashboard.html not found!")
     sys.exit(1)
 
-print("✓ Found templates/dashboard.html")
-
-# List all templates being bundled
-print("\n✓ Templates to bundle:")
+print("OK Found templates/dashboard.html")
+print("\nTemplates to bundle:")
 for file in os.listdir('templates'):
     print(f"  - {file}")
 print()
 
 # ============================================================================
-# COLLECT ALL PYTHON FILES AS DATA
+# PYTHON MODULES
+#
+# SPLIT INTO TWO GROUPS:
+#
+# GROUP A — UPDATABLE via the update channel
+#   Listed in `datas` only. Python loads these from the .py file in _internal
+#   at runtime. The update channel overwrites the .py file → change takes effect
+#   on next app restart.
+#
+# GROUP B — COMPILED into the .exe (launcher infrastructure)
+#   Listed in `hiddenimports` only. Cannot be updated via channel.
+#   Requires a full rebuild to change.
 # ============================================================================
 
-
-# List all your .py files that need to be accessible at runtime
-python_modules = [
+# ── GROUP A: Updatable modules (datas only, NOT in hiddenimports) ────────────
+updatable_modules = [
+    # Core trading logic
     'trading_bot.py',
     'web_app.py',
     'config.py',
-    'app_config.py',
-    'version.py',
-    'authorization.py',
-    'debug_config.py',
     'data_manager.py',
-    'api_factory.py',
-    'api_interface.py',
+    'risk_manager.py',
+    'symbol_manager.py',
+    'trade_analytics.py',
+
+    # Trading platform integration
+    'tradovate_web_ui_api.py',
     'tradovate_api.py',
     'binance_api.py',
     'ninjatrader_api.py',
-    'tradovate_web_ui_api.py',
-    'risk_manager.py',
-    'symbol_manager.py',
+    'api_factory.py',
+    'api_interface.py',
+
+    # Strategies — most likely to be tuned/updated
     'strategy_factory.py',
     'strategy_manager.py',
     'opening_range_strategy.py',
@@ -82,83 +93,69 @@ python_modules = [
     'previous_day_high_low_strategy.py',
     'mean_reversion_strategy.py',
     'mean_reversion_strategy_light.py',
+
+    # Filters and detectors — tuned over time
     'intelligent_entry_filter.py',
-    'trade_analytics.py',
+    'market_regime_detector.py',
+    'minute_bar_builder.py',
+
+    # Analytics and helpers — may change
     'heartbeat_local.py',
     'query_analytics.py',
-    'chrome_helper.py',
-    'debug_config.py',
-    # -- New Phase 2/3 modules --
+
+    # Distribution/update infrastructure
     'first_run.py',
-    'update_manager.py'
+    'update_manager.py',
+    'authorization.py',
 ]
 
-# Verify each module exists
-print("\nChecking Python modules:")
+# ── GROUP B: Compiled into .exe (DO NOT add to datas) ────────────────────────
+# These are listed in hiddenimports below.
+# launcher.py, launch_web_dashboard.py, app_config.py,
+# version.py, debug_config.py, chrome_helper.py
+
+# ── Files intentionally excluded from the build ──────────────────────────────
+# test_*.py              — test harnesses, not needed at runtime
+# BUILD_AND_DEPLOY.py    — developer utility
+# backup_database.py     — developer utility
+# export_trades.py       — developer utility
+# verify_mean_reversion.py — developer utility
+# main.py                — superseded by launcher.py
+# web_ui.py              — duplicate of web_app.py, unused
+# config_additions.py    — documentation copy, unused
+# late_test_paper_engine.py — test harness
+# minimal_test_strategy.py  — test harness
+
+# ── Verify each updatable module exists ──────────────────────────────────────
+print("Checking updatable Python modules:")
 missing_modules = []
-for module in python_modules:
+for module in updatable_modules:
     if os.path.isfile(module):
-        print(f"  ✓ {module}")
+        print(f"  OK {module}")
     else:
-        print(f"  ✗ {module} - NOT FOUND (will skip)")
+        print(f"  MISSING {module} - NOT FOUND (will skip)")
         missing_modules.append(module)
 
 if missing_modules:
-    print(f"\n⚠️  Warning: {len(missing_modules)} modules not found")
+    print(f"\nWARNING: {len(missing_modules)} modules not found")
     print("   Build will continue but these won't be available at runtime")
-
 
 # ============================================================================
 # HIDDEN IMPORTS
+# Only third-party libraries and launcher infrastructure here.
+# Application .py files are loaded from disk via datas — NOT compiled in.
 # ============================================================================
 
-# Hidden imports - modules that PyInstaller might miss
 hiddenimports = [
-    # Core application
-    'trading_bot',
-    'web_app',
+    # ── Launcher infrastructure (compiled in — never updated via channel) ──
     'launcher',
     'launch_web_dashboard',
-    'config',
     'app_config',
     'version',
-    'authorization',
-    'first_run',
-    'update_manager',
-    
-    # Data & API
-    'data_manager',
-    'api_factory',
-    'api_interface',
-    'tradovate_api',
-    'binance_api',
-    'ninjatrader_api',
-    'tradovate_web_ui_api',
-    'risk_manager',
-    'symbol_manager',
-    
-    # Strategies
-    'strategy_factory',
-    'strategy_manager',
-    'opening_range_strategy',
-    'orb_retest_strategy',
-    'previous_day_high_low_strategy',
-    'mean_reversion_strategy',
-    'mean_reversion_strategy_light',
-    
-    # Filters
-    'intelligent_entry_filter',
-    
-    # Analytics
-    'trade_analytics',
-    'heartbeat_local',
-    'query_analytics',
-    
-    # Helpers
-    'chrome_helper',
     'debug_config',
-    
-    # Flask and web dependencies
+    'chrome_helper',
+
+    # ── Flask and web ──
     'flask',
     'flask.json',
     'flask.templating',
@@ -166,12 +163,12 @@ hiddenimports = [
     'werkzeug.routing',
     'werkzeug.serving',
     'werkzeug.middleware',
-    'werkzeug.middleware.proxy.fix',
+    'werkzeug.middleware.proxy_fix',
     'jinja2',
     'jinja2.ext',
     'click',
-    
-    # Data processing
+
+    # ── Data processing ──
     'pandas',
     'pandas.core',
     'pandas.core.arrays',
@@ -179,21 +176,21 @@ hiddenimports = [
     'numpy.core',
     'numpy.lib',
     'sqlite3',
-    
-    # HTTP and async
+
+    # ── HTTP and async ──
     'requests',
     'urllib3',
     'aiohttp',
     'asyncio',
-    
-    # Playwright
+
+    # ── Playwright ──
     'playwright',
     'playwright.sync_api',
     'playwright._impl',
     'playwright._impl._browser',
     'playwright._impl._page',
-    
-    # Environment and config
+
+    # ── Standard library (ensure available) ──
     'dotenv',
     'json',
     'pathlib',
@@ -212,8 +209,10 @@ hiddenimports = [
     'hmac',
     'base64',
     'uuid',
-    
-    # Supabase (optional but include if installed)
+    'shutil',
+    'tempfile',
+
+    # ── Supabase and dependencies ──
     'supabase',
     'httpx',
     'packaging',
@@ -222,129 +221,117 @@ hiddenimports = [
     'postgrest',
     'realtime',
     'storage3',
-    
-    # Avoid warnings
+
+    # ── Misc ──
     'pkg_resources.py2_warn',
     'pkg_resources.markers',
 ]
 
 # ============================================================================
-# DATA FILES - Explicit paths with verification
+# DATA FILES
 # ============================================================================
 
 datas = []
 
-# Add all Python modules as data files (so launcher can find them)
-for module in python_modules:
+# ── Add all updatable .py modules as data files ───────────────────────────────
+print("\nAdding updatable modules to datas:")
+for module in updatable_modules:
     if os.path.isfile(module) and module not in missing_modules:
         datas.append((module, '.'))
-        print(f"  → {module} will be bundled")
+        print(f"  → {module}")
 
-# Templates (CRITICAL for Flask)
+# ── Templates (CRITICAL for Flask) ───────────────────────────────────────────
 if os.path.isdir('templates'):
-    # Add entire templates folder
-    import glob
     template_files = glob.glob('templates/**/*', recursive=True)
     for template_file in template_files:
         if os.path.isfile(template_file):
-            # Preserve folder structure
             dest_folder = os.path.dirname(template_file)
             datas.append((template_file, dest_folder))
             print(f"  → {template_file}")
 
-# Static files (if exists)
+# ── Static files ──────────────────────────────────────────────────────────────
 if os.path.isdir('static'):
-    import glob
     static_files = glob.glob('static/**/*', recursive=True)
     for static_file in static_files:
         if os.path.isfile(static_file):
             dest_folder = os.path.dirname(static_file)
             datas.append((static_file, dest_folder))
 
-# Verify icon exists before building
-icon_path = 'assets/icon.ico'
-if os.path.isfile(icon_path):
-    print(f"✓ Icon found: {icon_path} ({os.path.getsize(icon_path)} bytes)")
-else:
-    print(f"✗ Icon NOT found at: {icon_path}")
-    icon_path = None
-
-
-# Config and docs
+# ── Config and doc files ──────────────────────────────────────────────────────
 config_files = [
     '.env.example',
     'README.md',
-    'version.py',
-    'debug_config.py',
+    'version.py',      # also in datas so update channel can reach it
+    'debug_config.py', # also in datas for completeness
+    'app_config.py',   # also in datas for completeness
+    'chrome_helper.py',
 ]
-
 for config_file in config_files:
     if os.path.isfile(config_file):
         datas.append((config_file, '.'))
         print(f"  → {config_file}")
 
-print()
-
-# JSON files (IMPORTANT for Tradovate)
-json_files = glob.glob('*.json')
+# ── JSON files ────────────────────────────────────────────────────────────────
 print("\nJSON files to bundle:")
+json_files = glob.glob('*.json')
 for json_file in json_files:
-    if json_file not in ['package.json', 'package-lock.json']:
+    if json_file not in ['package.json', 'package-lock.json', 'update_manifest.json']:
         datas.append((json_file, '.'))
         print(f"  → {json_file}")
 
+# ── Icon ──────────────────────────────────────────────────────────────────────
+icon_path = 'assets/icon.ico'
+if os.path.isfile(icon_path):
+    print(f"\nOK Icon found: {icon_path} ({os.path.getsize(icon_path)} bytes)")
+else:
+    print(f"\nWARNING Icon NOT found at: {icon_path}")
+    icon_path = None
 
 # ============================================================================
-# PLAYWRIGHT BUNDLING - Using correct TOC format
+# PLAYWRIGHT BUNDLING
 # ============================================================================
+
 print("\n=== PLAYWRIGHT FILES ===")
-
-
 try:
     import playwright
-    from pathlib import Path
-    
     pw_path = Path(playwright.__file__).parent
     driver_path = pw_path / 'driver' / 'package'
-    
+
     if driver_path.exists():
         print(f"Found Playwright at: {pw_path}")
-        
-        # Critical files to bundle
+
         critical_files = [
             ('lib/cli/programWithTestStub.js', 'playwright/driver/package/lib/cli'),
-            ('lib/cli/program.js', 'playwright/driver/package/lib/cli'),
-            ('lib/cli/driver.js', 'playwright/driver/package/lib/cli'),
-            ('cli.js', 'playwright/driver/package'),
-            ('package.json', 'playwright/driver/package'),
+            ('lib/cli/program.js',             'playwright/driver/package/lib/cli'),
+            ('lib/cli/driver.js',              'playwright/driver/package/lib/cli'),
+            ('cli.js',                         'playwright/driver/package'),
+            ('package.json',                   'playwright/driver/package'),
         ]
-        
+
         for src_rel, dest_dir in critical_files:
             src_file = driver_path / src_rel.replace('/', os.sep)
             if src_file.exists():
-                # Use absolute path for source, relative for dest
                 datas.append((str(src_file), dest_dir))
-                print(f"  ✓ {src_rel}")
+                print(f"  OK {src_rel}")
             else:
-                print(f"  ✗ {src_rel} - NOT FOUND")
-        
-        # Add node.exe
+                print(f"  MISSING {src_rel}")
+
         node_exe = pw_path / 'driver' / 'node.exe'
         if node_exe.exists():
             datas.append((str(node_exe), 'playwright/driver'))
-            print(f"  ✓ node.exe")
-        
-        print(f"✓ Added {len([x for x in datas if 'playwright' in x[1]])} Playwright files")
+            print(f"  OK node.exe")
+
+        pw_count = len([x for x in datas if 'playwright' in x[1]])
+        print(f"OK Added {pw_count} Playwright files")
     else:
-        print(f"⚠️ Playwright driver not found at {driver_path}")
-        
+        print(f"WARNING Playwright driver not found at {driver_path}")
+
 except Exception as e:
-    print(f"❌ Playwright bundling error: {e}")
+    print(f"ERROR Playwright bundling error: {e}")
     import traceback
     traceback.print_exc()
 
 print()
-
 
 # ============================================================================
 # ANALYSIS
@@ -352,15 +339,15 @@ print()
 
 a = Analysis(
     ['launcher.py'],
-    pathex=[os.getcwd()], # Explicitly set path to current directory
+    pathex=[os.getcwd()],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[ 
-        # Exclude large unused packages
+    excludes=[
+        # Large unused packages
         'matplotlib',
         'scipy',
         'PIL',
@@ -368,13 +355,26 @@ a = Analysis(
         'pytest',
         'IPython',
         'notebook',
-        'tests',
-        'test',
-        '_test',
-        # Exclude invalid modules
-        'export_trades',  # Invalid module from launcher.py
-        'web_ui',         # Invalid module from launcher.py
 
+        # Test/dev files — excluded from production build
+        'test_tradovate_api',
+        'test_tradovate_ui',
+        'test_supabase',
+        'test_supabase_daily_bars',
+        'test_prev_day_strategy',
+        'late_test_paper_engine',
+        'minimal_test_strategy',
+        'verify_mean_reversion',
+        'BUILD_AND_DEPLOY',
+        'backup_database',
+        'export_trades',
+        'main',
+        'web_ui',
+        'config_additions',
+
+        # Legacy
+        'export_trades',
+        'web_ui',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -383,13 +383,20 @@ a = Analysis(
 )
 
 # ============================================================================
-# FILTER OUT TEST/DEBUG FILES
+# FILTER OUT TEST/DEBUG FILES that snuck through
 # ============================================================================
 
-# Remove any test files that snuck in
 a.datas = [x for x in a.datas if not any([
-    'test' in x[0].lower() and 'pytest' not in x[0].lower(),
-    '_test' in x[0].lower(),
+    'test_' in x[0].lower(),
+    '_test.' in x[0].lower(),
+    'late_test' in x[0].lower(),
+    'minimal_test' in x[0].lower(),
+    'verify_mean' in x[0].lower(),
+    'backup_database' in x[0].lower(),
+    'export_trades' in x[0].lower(),
+    'BUILD_AND_DEPLOY' in x[0],
+    'web_ui.py' in x[0],
+    'config_additions' in x[0].lower(),
 ])]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
@@ -408,7 +415,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,  # Show console for now (change to False to hide)
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -433,49 +440,48 @@ coll = COLLECT(
 )
 
 # ============================================================================
-# POST-BUILD VERIFICATION
+# POST-BUILD SUMMARY
 # ============================================================================
 
-print("\n" + "="*70)
+print("\n" + "=" * 70)
 print("BUILD CONFIGURATION COMPLETE")
-print("="*70)
+print("=" * 70)
 print("\nExpected output:")
 print("  dist/S-P Trading/S-P Trading.exe")
 print("  dist/S-P Trading/_internal/")
-print("  dist/S-P Trading/templates/dashboard.html")
-print("  dist/S-P Trading/trading_bot.py")
-print("  dist/S-P Trading/web_app.py")
-print("  dist/S-P Trading/[all other .py files]")
+print("  dist/S-P Trading/_internal/web_app.py       ← updatable via channel")
+print("  dist/S-P Trading/_internal/trading_bot.py   ← updatable via channel")
+print("  dist/S-P Trading/_internal/tradovate_web_ui_api.py ← updatable")
+print("  dist/S-P Trading/templates/dashboard.html   ← updatable via channel")
 print("\nTo test:")
 print('  cd "dist\\S-P Trading"')
-print('  & ".\\S-P Trading.exe" --setup')
-print("="*70 + "\n")
+print('  & ".\\S-P Trading.exe"')
+print("=" * 70 + "\n")
 
 # ============================================================================
-# POST-BUILD - Copy missing Playwright file
+# POST-BUILD — Copy missing Playwright file
 # ============================================================================
-
-
-import shutil
 
 print("\n=== POST-BUILD: Copying missing Playwright file ===")
-
 try:
     import playwright
     pw_path = Path(playwright.__file__).parent
-    src_file = pw_path / 'driver' / 'package' / 'lib' / 'cli' / 'programWithTestStub.js'
-    
-    dest_file = Path('dist') / 'S-P Trading' / '_internal' / 'playwright' / 'driver' / 'package' / 'lib' / 'cli' / 'programWithTestStub.js'
-    
+    src_file = (
+        pw_path / 'driver' / 'package' / 'lib' / 'cli' / 'programWithTestStub.js'
+    )
+    dest_file = (
+        Path('dist') / 'S-P Trading' / '_internal' / 'playwright'
+        / 'driver' / 'package' / 'lib' / 'cli' / 'programWithTestStub.js'
+    )
+
     if src_file.exists():
         dest_file.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_file, dest_file)
-        print(f"✓ Copied programWithTestStub.js ({dest_file.stat().st_size} bytes)")
+        print(f"OK Copied programWithTestStub.js ({dest_file.stat().st_size} bytes)")
     else:
-        print(f"✗ Source not found: {src_file}")
-        
+        print(f"MISSING Source not found: {src_file}")
+
 except Exception as e:
-    print(f"❌ Post-build failed: {e}")
+    print(f"ERROR Post-build failed: {e}")
 
-print("="*70)
-
+print("=" * 70)
