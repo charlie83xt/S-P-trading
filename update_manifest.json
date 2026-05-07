@@ -1,11 +1,11 @@
 {
-  "version": "0.1.8",
+  "version": "0.1.10",
   "release_date": "2026-05-07",
-  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.8",
+  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.10",
   "files": [
     {
-      "filename": "templates/dashboard.html",
-      "sha256": "a1065f0efbbe48afc8b34ce5f59963a736302e5b098ae5d2f587b78b679583d4",
+      "filename": "web_app.py",
+      "sha256": "bfb99ede4d6bf494f60de52c179ccde3aac2d91e3a1d38034f9d521ba2b03e55",
       "description": ""
     }
   ]
