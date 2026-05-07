@@ -1,81 +1,26 @@
 {
-  "version": "0.1.3",
-  "release_date": "2026-04-28",
-  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.3",
+  "version": "0.1.6",
+  "release_date": "2026-05-07",
+  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.6",
   "files": [
     {
-      "filename": "trading_bot.py",
-      "sha256": "32233b1303d85cf9d4457c347d231d0f542e7723306db9d830300753b5ee363c",
-      "description": ""
-    },
-    {
       "filename": "web_app.py",
-      "sha256": "8846ee14abffa1c857974af2720c93b0c71b7b30f3cbf445aa94ba7787aab343",
-      "description": ""
-    },
-    {
-      "filename": "config.py",
-      "sha256": "cfc421f285f0df97b621710913620849150092ea581f4a45629cdc098d864a64",
+      "sha256": "6200db611b3cda7b67649a8f50e01c2e6d14ea6299401354af429ed65157e27c",
       "description": ""
     },
     {
       "filename": "update_manager.py",
-      "sha256": "5f65ba1cb67bbc18a974226a02e3c91b32f139bc4ed28404fe9f58c36675df35",
-      "description": ""
-    },
-    {
-      "filename": "trade_analytics.py",
-      "sha256": "3e70bb34d38055962385ec90d8408cc0b4d44db7b1fb4c2a38591da363a31d55",
+      "sha256": "af0d3a0de44b2ab078b8f6edc51ad09773da9bcf8940e313a8cedde6a402ebe5",
       "description": ""
     },
     {
       "filename": "intelligent_entry_filter.py",
-      "sha256": "ee559113ad7879aca327d1492188d5f7f406d4a0871d8dc2e2b76a8fcb6bc920",
-      "description": ""
-    },
-    {
-      "filename": "first_run.py",
-      "sha256": "8c91dfcfa7d1107e81904ad29ce88fbc37f58eea9d02383c13b4792d8508febc",
-      "description": ""
-    },
-    {
-      "filename": "opening_range_strategy.py",
-      "sha256": "42c62f76214f299a0c860d995b819bd4753ad35f1631d426a8235f651587d19e",
-      "description": ""
-    },
-    {
-      "filename": "orb_retest_strategy.py",
-      "sha256": "088ac792d55b87cb561cdc9c7af62d513efbeee3bd7d08cff26f132c59c8f04b",
-      "description": ""
-    },
-    {
-      "filename": "mean_reversion_strategy.py",
-      "sha256": "bea83f8cfa02ffc14bbf1953eb1cf1017bac2c6ddfa7e3c3c2e5d6a072d8ca7e",
-      "description": ""
-    },
-    {
-      "filename": "previous_day_high_low_strategy.py",
-      "sha256": "618e4f867a7b3cf3065ec44bf5d8d2524d4a2c78f6c349a04c0231e6cb10884c",
-      "description": ""
-    },
-    {
-      "filename": "strategy_manager.py",
-      "sha256": "00390438ab0f8962693fe39ecd04a9ba6f6c814a9d2e9eceeabb60e7bb726b28",
-      "description": ""
-    },
-    {
-      "filename": "strategy_factory.py",
-      "sha256": "96c808722549abba0e191b7e4a1211f33987c0241acbed3f84dc389b5af0c4bd",
-      "description": ""
-    },
-    {
-      "filename": "risk_manager.py",
-      "sha256": "5e2d03afb3a98b0494abcc2ffc075834556b13799846e44b7b2a8a73475ea778",
+      "sha256": "38545bc8ac7b478763a5a320b3c139d2178ae1ef356b26d460cdb036dfddf611",
       "description": ""
     },
     {
       "filename": "templates/dashboard.html",
-      "sha256": "b5f3492339802e54dcb0510e3410a3259afa418736da6ff9740f8e05fd9e886f",
+      "sha256": "7a3e077a73016ea6fe9a1026732f73efb17955458882dfb6e777501ed7fd5e38",
       "description": ""
     }
   ]
