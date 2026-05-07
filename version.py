@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 # Current app version
-APP_VERSION = "0.1.11"
+APP_VERSION = "0.1.12"
 APP_NAME = "S-P Trading"
 
 # Version file location (inside app config directory)
