@@ -1451,7 +1451,11 @@ def apply_update():
                 "success": True,
                 "message": f"Updated to v{update_info['version']} — please restart the app"
             })
-            return jsonify({"success": False, "error": "Update failed — check logs"})
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Update failed — check app logs for details"
+            })
 
     except Exception as e:
         logger.error(f"Update apply error: {e}")
