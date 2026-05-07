@@ -26,7 +26,7 @@ This controls:
 # ============================================================================
 
 
-DEBUG = True  # Set to False before building for distribution
+DEBUG = False  # Set to False before building for distribution
 
 
 # ============================================================================

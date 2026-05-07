@@ -1,26 +1,11 @@
 {
-  "version": "0.1.7",
-  "release_date": "2026-05-07",
-  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.7",
+  "version": "0.1.12",
+  "release_date": "2026-05-08",
+  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.12",
   "files": [
     {
-      "filename": "web_app.py",
-      "sha256": "6200db611b3cda7b67649a8f50e01c2e6d14ea6299401354af429ed65157e27c",
-      "description": ""
-    },
-    {
-      "filename": "update_manager.py",
-      "sha256": "af0d3a0de44b2ab078b8f6edc51ad09773da9bcf8940e313a8cedde6a402ebe5",
-      "description": ""
-    },
-    {
-      "filename": "intelligent_entry_filter.py",
-      "sha256": "38545bc8ac7b478763a5a320b3c139d2178ae1ef356b26d460cdb036dfddf611",
-      "description": ""
-    },
-    {
       "filename": "templates/dashboard.html",
-      "sha256": "7a3e077a73016ea6fe9a1026732f73efb17955458882dfb6e777501ed7fd5e38",
+      "sha256": "354d84a394ee596dece01688d02c5e7bd240ff503718fe5e55802856f8899b96",
       "description": ""
     }
   ]
