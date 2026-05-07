@@ -155,6 +155,14 @@ hiddenimports = [
     'debug_config',
     'chrome_helper',
 
+    # ── Critical imports used by launcher.py at startup ──
+    # These are also in datas so the update channel can still overwrite them.
+    # Having them in hiddenimports too ensures they load even if sys.path
+    # isn't fully set up yet at the moment launcher.py first imports them.
+    'authorization',
+    'first_run',
+    'update_manager',
+
     # ── Flask and web ──
     'flask',
     'flask.json',
@@ -345,7 +353,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['runtime_hook.py'],  # ensures _internal is on sys.path
     excludes=[
         # Large unused packages
         'matplotlib',
