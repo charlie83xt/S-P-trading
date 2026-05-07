@@ -1,21 +1,26 @@
 {
-  "version": "0.1.5",
-  "release_date": "2026-05-03",
-  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.5",
+  "version": "0.1.7",
+  "release_date": "2026-05-07",
+  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.7",
   "files": [
     {
-      "filename": "tradovate_web_ui_api.py",
-      "sha256": "a5f7c0cbc01903bfec70b827f0d187e3d34ba3620c6e039902e63db5b642aacd",
+      "filename": "web_app.py",
+      "sha256": "6200db611b3cda7b67649a8f50e01c2e6d14ea6299401354af429ed65157e27c",
       "description": ""
     },
     {
-      "filename": "trading_bot.py",
-      "sha256": "7b11da7abbb38a3f8f92da36505cb36dab7c1e90da51b38980ecb0b38f22a1f6",
+      "filename": "update_manager.py",
+      "sha256": "af0d3a0de44b2ab078b8f6edc51ad09773da9bcf8940e313a8cedde6a402ebe5",
       "description": ""
     },
     {
-      "filename": "tradovate_selectors.json",
-      "sha256": "62aa29ee9648200f2056e8f8241062b51f7ca15a252c92a52535c0250d4d0067",
+      "filename": "intelligent_entry_filter.py",
+      "sha256": "38545bc8ac7b478763a5a320b3c139d2178ae1ef356b26d460cdb036dfddf611",
+      "description": ""
+    },
+    {
+      "filename": "templates/dashboard.html",
+      "sha256": "7a3e077a73016ea6fe9a1026732f73efb17955458882dfb6e777501ed7fd5e38",
       "description": ""
     }
   ]
