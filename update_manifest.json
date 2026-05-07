@@ -1,7 +1,7 @@
 {
-  "version": "0.1.11",
-  "release_date": "2026-05-07",
-  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.11",
+  "version": "0.1.12",
+  "release_date": "2026-05-08",
+  "download_base_url": "https://github.com/charlie83xt/S-P-trading/releases/download/v0.1.12",
   "files": [
     {
       "filename": "templates/dashboard.html",
