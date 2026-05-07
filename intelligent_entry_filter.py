@@ -227,10 +227,10 @@ class IntelligentEntryFilter:
         signal_context: Optional[Dict] = None,
     ) -> Tuple[bool, str]:
         """
-        Momentum Confirmation.
-
-        Strong-pattern override: if the signal carries a recognised high-quality
-        reversal trigger AND momentum is only marginally weak, we allow entry.
+        Momentum Confirmation - FIXED VERSION.
+        
+        ✅ Strong-pattern override now works PROPERLY
+        ✅ Doesn't block on tiny opposite-direction moves
         """
         try:
             bars = self.dm.get_recent_bars(symbol, count=50, timeframe="1m")
@@ -260,55 +260,83 @@ class IntelligentEntryFilter:
                 else recent_change
             )
             
+            # ✅ FIX: Check for strong pattern FIRST
+            trigger = (signal_context or {}).get('trigger', '')
+            has_strong_pattern = trigger in self.strong_pattern_triggers
+            
             if signal_type == "BUY":
-                if recent_change <= 0:
-                    # ── Strong-pattern override ──────────────────────────────
-                    trigger = (signal_context or {}).get('trigger', '')
-                    if trigger in self.strong_pattern_triggers:
+                # ✅ FIX: Allow SMALL negative moves for strong patterns
+                if recent_change < -0.001:  # Only block if moving DOWN significantly
+                    if has_strong_pattern:
                         self.logger.info(
-                            f"{CHECK} Momentum override: strong pattern '{trigger}'"
+                            f"{CHECK} Momentum override: strong pattern '{trigger}' "
+                            f"(small opposite move {recent_change:.4f} ignored)"
                         )
                         return True, "strong_pattern_override"
-                    # ─────────────────────────────────────────────────────────
+                    
                     return False, f"no_upward_momentum (change={recent_change:.4f})"
                 
-                momentum_score = recent_change / max(abs(longer_change), 0.0001)
-                
+                # Calculate momentum score
+                if abs(longer_change) < 0.0001:
+                    momentum_score = 0.0
+                else:
+                    momentum_score = recent_change / abs(longer_change)
+                    
             else:  # SELL
-                if recent_change >= 0:
-                    trigger = (signal_context or {}).get('trigger', '')
-                    if trigger in self.strong_pattern_triggers:
+                # ✅ FIX: Allow SMALL positive moves for strong patterns
+                if recent_change > 0.001:  # Only block if moving UP significantly
+                    if has_strong_pattern:
                         self.logger.info(
-                            f"{CHECK} Momentum override: strong pattern '{trigger}'"
+                            f"{CHECK} Momentum override: strong pattern '{trigger}' "
+                            f"(small opposite move {recent_change:.4f} ignored)"
                         )
                         return True, "strong_pattern_override"
+                    
                     return False, f"no_downward_momentum (change={recent_change:.4f})"
                 
-                momentum_score = abs(recent_change) / max(abs(longer_change), 0.0001)
+                # Calculate momentum score
+                if abs(longer_change) < 0.0001:
+                    momentum_score = 0.0
+                else:
+                    momentum_score = abs(recent_change) / abs(longer_change)
             
+            # Check momentum score threshold
             if momentum_score < self.min_momentum_score:
-                # ── Strong-pattern override for weak (but correct-direction) momentum
-                trigger = (signal_context or {}).get('trigger', '')
-                if trigger in self.strong_pattern_triggers:
+                # ✅ Strong-pattern override for weak momentum
+                if has_strong_pattern:
                     self.logger.info(
                         f"{CHECK} Momentum override: strong pattern '{trigger}' "
-                        f"(score={momentum_score:.2f})"
+                        f"(score={momentum_score:.2f}, threshold={self.min_momentum_score})"
                     )
                     return True, "strong_pattern_override"
+                
                 return False, f"weak_momentum (score={momentum_score:.2f}, need {self.min_momentum_score})"
             
-            # RSI extremes — widened from 75/25 to 80/20 to reduce false blocks
+            # RSI extremes - widened ranges
             rsi = self._calculate_rsi(closes, period=14)
+            
+            # ✅ FIX: Don't block on RSI for strong patterns either!
             if signal_type == "BUY" and rsi > 80:
+                if has_strong_pattern:
+                    self.logger.info(
+                        f"{CHECK} RSI override: strong pattern '{trigger}' (RSI={rsi:.1f})"
+                    )
+                    return True, "strong_pattern_override"
                 return False, f"overbought (RSI={rsi:.1f})"
+            
             if signal_type == "SELL" and rsi < 20:
+                if has_strong_pattern:
+                    self.logger.info(
+                        f"{CHECK} RSI override: strong pattern '{trigger}' (RSI={rsi:.1f})"
+                    )
+                    return True, "strong_pattern_override"
                 return False, f"oversold (RSI={rsi:.1f})"
             
             self.logger.debug(f"{CHECK} Momentum OK: score={momentum_score:.2f}, RSI={rsi:.1f}")
             return True, "momentum_confirmed"
             
         except Exception as e:
-            self.logger.error(f"Momentum check error: {e}")
+            self.logger.error(f"Momentum check error: {e}", exc_info=True)
             return True, "momentum_check_error"
 
   
