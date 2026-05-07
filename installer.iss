@@ -7,7 +7,7 @@
 ; ============================================================
 
 #define MyAppName      "S-P Trading"
-#define MyAppVersion   "0.1.10"
+#define MyAppVersion   "0.1.11"
 #define MyAppPublisher "The G-House"
 #define MyAppURL       "https://dont-go-in.com"
 #define MyAppExeName   "S-P Trading.exe"
