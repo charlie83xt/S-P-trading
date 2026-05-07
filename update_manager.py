@@ -226,7 +226,8 @@ class UpdateManager:
         for file_info in files_to_get:
             filename      = file_info["filename"]
             expected_hash = file_info.get("sha256")
-            url           = f"{base_url}/{filename}"
+            url_filename  = Path(filename).name
+            url           = f"{base_url}/{url_filename}"
 
             logger.info(f"  → {filename}")
             try:
