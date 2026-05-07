@@ -83,6 +83,8 @@ python_modules = [
     'mean_reversion_strategy.py',
     'mean_reversion_strategy_light.py',
     'intelligent_entry_filter.py',
+    'market_regime_detector.py',
+    'minute_bar_builder.py',
     'trade_analytics.py',
     'heartbeat_local.py',
     'query_analytics.py',
