@@ -388,10 +388,15 @@ a = Analysis(
 # FILTER OUT TEST/DEBUG FILES
 # ============================================================================
 
-# Remove any test files that snuck in
+# With this — only exclude files that START with test_ or end with _test.py:
 a.datas = [x for x in a.datas if not any([
-    'test' in x[0].lower() and 'pytest' not in x[0].lower(),
-    '_test' in x[0].lower(),
+    os.path.basename(x[0]).lower().startswith('test_'),
+    os.path.basename(x[0]).lower().endswith('_test.py'),
+    os.path.basename(x[0]).lower() in [
+        'late_test_paper_engine.py',
+        'minimal_test_strategy.py',
+        'verify_mean_reversion.py',
+    ],
 ])]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
