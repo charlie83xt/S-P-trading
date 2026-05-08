@@ -110,9 +110,15 @@ def _resolve_dst(app_dir: Path, filename: str) -> Path:
     """
     p = Path(filename)
 
-    # Templates: preserve the templates/ subfolder under app_dir
+    # Templates with folder prefix e.g. "templates/dashboard.html"
+    # Must go to _internal/templates/ — that is where Flask serves from
     if p.parts and p.parts[0] == "templates":
-        return app_dir / p
+        return _get_internal_dir(app_dir) / p
+
+    # Flat HTML files e.g. "dashboard.html" uploaded without folder to GitHub
+    # Route to _internal/templates/ so Flask can serve them
+    if p.suffix == ".html":
+        return _get_internal_dir(app_dir) / "templates" / p.name
 
     # Python and JSON: go into _internal on packaged apps
     if p.suffix in (".py", ".json"):
@@ -543,5 +549,3 @@ if __name__ == "__main__":
         sys.exit(0 if ok else 1)
     else:
         parser.print_help()
-
-
