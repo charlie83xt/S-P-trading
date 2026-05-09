@@ -48,8 +48,6 @@ class RiskManager:
 
         self.instant_close = "hold"
         self.dry_run_mode = "hold"
-        # if config is not None:
-        #     self.instant_close = bool(getattr(config, "INSTANT_CLOSE_TRADES", False))
         
         self.logger = logging.getLogger(__name__)
         
@@ -70,13 +68,17 @@ class RiskManager:
         self.losses = 0
         self.vol = {}
 
-        # Trailing stop settings
+        # Trailing stop settings — tightened for sniper exits
         self.use_trailing_stops = True
-        self.trail_activation_points = 3.0 # Start trailing after 3 points profit
-        self.trail_distance_points = 2.0 # Trail 2 points behind
+        self.trail_activation_points = 2.0  # activate after 2 pts profit (was 3.0)
+        self.trail_distance_points = 1.5    # trail 1.5 pts behind (was 2.0)
 
         # Track highest/lowest price per position
-        self.position_extremes = {}
+        self.position_extremes: dict = {}
+
+        # Sniper exit state per symbol
+        self.position_entry_times: dict  = {}   # sym -> datetime (UTC) when position opened
+        self.position_breakeven_set: dict = {}  # sym -> bool, True once breakeven stop armed
     
     def _check_new_day(self):
         """Check if it's a new trading day and reset daily counters."""
@@ -121,7 +123,6 @@ class RiskManager:
         
         # Check for existing position in same symbol
         symbol = signal['symbol']
-        # if symbol in self.current_positions:
         qty_now = self.get_position_qty(symbol)
         if qty_now != 0:
             side = (signal.get("type") or signal.get("side") or "").upper()
@@ -139,11 +140,10 @@ class RiskManager:
 
     def update_volatility(self, symbol: str, price:float, alpha: float = 0.05) -> float:
         """
-        EMMA of absolute price changes in *points* (ATR-ish from ticks/loop prices).
+        EWMA of absolute price changes in *points* (ATR-ish from ticks/loop prices).
         Returns current volatility estimate in points
         """
 
-        # sym = self._norm_sym(symbol)
         sym = (symbol or "").upper()
         px = float(price)
 
@@ -168,9 +168,7 @@ class RiskManager:
         Returns: (stop_points, take_points)
         """
 
-        # Get current volatility (already calculated by update_volatility)
         vol = self.update_volatility(symbol, current_price, alpha=0.05) 
-        # Configuration (these could come from config.py later) 
         stop_loss_base_points = getattr(self.config, "STOP_LOSS_BASE_POINTS", 4.0) 
         take_profit_base_points = getattr(self.config, "TAKE_PROFIT_BASE_POINTS", 6.0)
         volatility_stop_multiplier = getattr(self.config, "VOLATILITY_STOP_MULTIPLIER", 2.5)
@@ -179,7 +177,7 @@ class RiskManager:
         min_stop_loss_point = getattr(self.config, "MIN_STOP_LOSS_POINTS", 2.0)
         max_take_profit_points = getattr(self.config, "MAX_TAKE_PROFIT_POINTS", 20.0)
         min_take_profit_points  = getattr(self.config, "MIN_TAKE_PROFIT_POINTS", 4.0)
-        # # Calculate adaptive stops with bounds
+
         stop_pts = max( 
             min_stop_loss_point, 
             min( 
@@ -205,28 +203,17 @@ class RiskManager:
     def _calculate_position_size(self, account_balance: float, current_price: float, signal: Dict) -> float:
         """
         Calculate appropriate position size based on risk parameters.
-        
-        Args:
-            account_balance: Current account balance
-            current_price: Current market price
-            signal: Trading signal
-            
-        Returns:
-            Suggested position size
         """
-        # Calculate maximum position value based on account balance
         max_position_value = account_balance * self.max_position_size
         
-        # Calculate position size based on stop loss
         if 'range_high' in signal and 'range_low' in signal:
             if signal['type'] == 'BUY':
-                stop_loss_price = signal['range_low'] * 0.999  # 0.1% buffer
+                stop_loss_price = signal['range_low'] * 0.999
                 risk_per_unit = current_price - stop_loss_price
-            else:  # SELL
-                stop_loss_price = signal['range_high'] * 1.001  # 0.1% buffer
+            else:
+                stop_loss_price = signal['range_high'] * 1.001
                 risk_per_unit = stop_loss_price - current_price
             
-            # Calculate position size based on maximum risk
             max_risk_amount = account_balance * (self.stop_loss_pct / 100)
             
             if risk_per_unit > 0:
@@ -234,15 +221,12 @@ class RiskManager:
             else:
                 risk_based_quantity = 0
         else:
-            # Fallback calculation
             risk_based_quantity = max_position_value / current_price
         
-        # Use the smaller of the two calculations
         balance_based_quantity = max_position_value / current_price
         suggested_quantity = min(risk_based_quantity, balance_based_quantity)
         
-        # Ensure minimum viable quantity
-        min_quantity = 0.001  # Minimum trade size
+        min_quantity = 0.001
         
         return max(suggested_quantity, min_quantity) if suggested_quantity > 0 else 0
     
@@ -255,53 +239,18 @@ class RiskManager:
         return time_since_loss.total_seconds() < self.cooldown_period
     
     def record_trade_entry(self, symbol: str, side: str, quantity: float, price: float, order_id: str = None):
-        """
-        Record a trade entry.
-        
-        Args:
-            symbol: Trading symbol
-            side: 'buy' or 'sell'
-            quantity: Trade quantity
-            price: Entry price
-            order_id: Order ID from exchange
-        """
-        
-        # self.logger.info(f"Trade entry recorded: {side.upper()} {quantity} {symbol} at {price}")
         self.logger.warning("record_trade_entry() legacy call ignored; use paper_fill()")
     
     def record_trade_exit(self, symbol: str, exit_price: float, exit_reason: str = "manual"):
-        """
-        Record a trade exit and calculate P&L.
-        
-        Args:
-            symbol: Trading symbol
-            exit_price: Exit price
-            exit_reason: Reason for exit ('stop_loss', 'take_profit', 'manual')
-        """
-        
-        # self.logger.info(f"Trade exit recorded: {symbol} at {exit_price}, P&L: {pnl:.2f}, Reason: {exit_reason}")
         self.logger.warning("record_trade_exit() legacy call ignored; use paper_fill()")
     
     def check_stop_loss_take_profit(self, symbol: str, current_price: float) -> Optional[str]:
-        """
-        Check if stop loss or take profit should be triggered.
-        
-        Args:
-            symbol: Trading symbol
-            current_price: Current market price
-            
-        Returns:
-            'stop_loss', 'take_profit', or None
-        """
-
         stop_pts = getattr(self.config, "STOP_LOSS_POINTS", None)
         take_pts = getattr(self.config, "TAKE_PROFIT_POINTS", None)
 
-        # if our config defines points, prefer them
         if stop_pts is not None and take_pts is not None:
             return self.check_exit_points(symbol, current_price, stop_pts, take_pts)
 
-        # otherwise: do nothing (or fallback to % logic if insisting)
         return None 
 
         if symbol not in self.current_positions:
@@ -311,23 +260,17 @@ class RiskManager:
     def get_risk_metrics(self) -> Dict:
         """
         Get current risk metrics and statistics.
-        
-        Returns:
-            Dictionary with risk metrics
         """
         self._check_new_day()
         
-        # Calculate win rate from trade history
         closed_trades = [t for t in self.trade_history if t['status'] == 'closed']
         winning_trades = [t for t in closed_trades if t.get('pnl', 0) > 0]
         
         win_rate = len(winning_trades) / len(closed_trades) * 100 if closed_trades else 0
         
-        # Calculate average P&L
         total_pnl = sum(t.get('pnl', 0) for t in closed_trades)
         avg_pnl = total_pnl / len(closed_trades) if closed_trades else 0
         
-        # Calculate maximum drawdown
         running_pnl = 0
         peak = 0
         max_drawdown = 0
@@ -345,7 +288,7 @@ class RiskManager:
             'max_daily_trades': self.max_daily_trades,
             'daily_pnl': self.daily_pnl,
             'max_daily_loss_pct': self.max_daily_loss,
-            'current_positions': sum(1 for p in self.positions.values() if int(p.get("qty") or 0) != 0), # len(self.current_positions),
+            'current_positions': sum(1 for p in self.positions.values() if int(p.get("qty") or 0) != 0),
             'total_trades': len(closed_trades),
             'win_rate': win_rate,
             'avg_pnl': avg_pnl,
@@ -355,19 +298,14 @@ class RiskManager:
         }
     
     def emergency_stop(self) -> Dict:
-        """
-        Emergency stop all trading activities.
-        
-        Returns:
-            Dictionary with emergency stop status
-        """
-        self.daily_trades = self.max_daily_trades  # Prevent new trades
-        self.last_loss_time = datetime.now()  # Trigger cooldown
+        """Emergency stop all trading activities."""
+        self.daily_trades = self.max_daily_trades
+        self.last_loss_time = datetime.now()
         
         emergency_status = {
             'emergency_stop_activated': True,
             'timestamp': datetime.now().isoformat(),
-            'open_positions': sum(1 for p in self.positions.values() if int(p.get("qty") or 0) != 0), # len(self.current_positions),
+            'open_positions': sum(1 for p in self.positions.values() if int(p.get("qty") or 0) != 0),
             'daily_pnl': self.daily_pnl
         }
         
@@ -384,17 +322,9 @@ class RiskManager:
         self.logger.warning("Daily limits manually reset")
     
     def get_position_info(self, symbol: str) -> Optional[Dict]:
-        """
-        Get information about a specific position.
-        
-        Args:
-            symbol: Trading symbol
-            
-        Returns:
-            Position information or None if no position exists
-        """
+        """Get information about a specific position."""
         sym = (symbol or "").upper() 
-        pos = self.positions.get(sym) or self.positions.get(symbol) # From paper_fill
+        pos = self.positions.get(sym) or self.positions.get(symbol)
         if not pos:
             return None
 
@@ -410,7 +340,6 @@ class RiskManager:
             "entry_price": float(pos.get("avg_price") or 0.0),
             "status": "open",
         }
-        # return self.current_positions.get(symbol)
 
     ### --- extra-helper methods --- ####
     def _norm_sym(self, symbol: str) -> str:
@@ -418,78 +347,129 @@ class RiskManager:
 
     
     def update_trailing_stop(self, symbol: str, current_price: float):
-        """Update trailing stop for position"""
-       
-        if symbol not in self.positions:
+        """Update trailing stop and breakeven protection for an open position."""
+
+        sym = self._norm_sym(symbol)
+        pos = self.positions.get(sym)
+        if not pos:
             return None
-       
-        pos = self.positions[symbol]
-        qty = pos['qty']
-        entry = pos['avg_price']
-       
-        # Initialize extreme tracking
-        if symbol not in self.position_extremes:
-            self.position_extremes[symbol] = entry
-       
-        # Update extreme (highest for longs, lowest for shorts)
-        if qty > 0:  # LONG
-            if current_price > self.position_extremes[symbol]:
-                self.position_extremes[symbol] = current_price
-               
-            # Check if we're in profit enough to activate trailing
+
+        qty   = int(pos["qty"])
+        entry = float(pos["avg_price"])
+
+        if qty == 0:
+            return None
+
+        # Read sniper config (safe defaults keep behaviour unchanged if env missing)
+        be_trigger = float(getattr(self.config, "BREAKEVEN_TRIGGER_POINTS", 2.0))
+        be_buffer  = float(getattr(self.config, "BREAKEVEN_BUFFER_POINTS",  0.25))
+
+        # Bootstrap extremes in case position was opened before this code ran
+        if sym not in self.position_extremes:
+            self.position_extremes[sym] = entry
+        if sym not in self.position_breakeven_set:
+            self.position_breakeven_set[sym] = False
+
+        if qty > 0:  # ──────── LONG ────────
+            # Update best (highest) price seen
+            if current_price > self.position_extremes[sym]:
+                self.position_extremes[sym] = current_price
+
+            best_profit = self.position_extremes[sym] - entry
+
+            # Step 1 – arm breakeven once we've touched the trigger in profit
+            if best_profit >= be_trigger and not self.position_breakeven_set[sym]:
+                self.position_breakeven_set[sym] = True
+                self.logger.info(
+                    "BREAKEVEN armed %s: entry=%.2f trigger=%.2f best_profit=%.2f",
+                    sym, entry, be_trigger, best_profit
+                )
+
+            # Step 2 – enforce breakeven stop (never let a winner fully reverse)
+            if self.position_breakeven_set[sym]:
+                be_stop = entry + be_buffer
+                if current_price <= be_stop:
+                    locked = current_price - entry
+                    return f"breakeven_stop (locked={locked:.2f}pts)"
+
+            # Step 3 – full trailing stop once deeper in profit
             profit_points = current_price - entry
-           
             if profit_points >= self.trail_activation_points:
-                # Calculate trailing stop
-                trail_stop = self.position_extremes[symbol] - self.trail_distance_points
-               
-                # Exit if price drops below trailing stop
+                trail_stop = self.position_extremes[sym] - self.trail_distance_points
                 if current_price <= trail_stop:
-                    return f"trailing_stop (locked_in_profit: {trail_stop - entry:.2f} pts)"
-                   
-        else:  # SHORT
-            if current_price < self.position_extremes[symbol]:
-                self.position_extremes[symbol] = current_price
-               
-            # Check if we're in profit enough to activate trailing
+                    locked = trail_stop - entry
+                    return f"trailing_stop (locked_in_profit: {locked:.2f} pts)"
+
+        else:  # ──────── SHORT ────────
+            # Update best (lowest) price seen
+            if current_price < self.position_extremes[sym]:
+                self.position_extremes[sym] = current_price
+
+            best_profit = entry - self.position_extremes[sym]
+
+            # Step 1 – arm breakeven
+            if best_profit >= be_trigger and not self.position_breakeven_set[sym]:
+                self.position_breakeven_set[sym] = True
+                self.logger.info(
+                    "BREAKEVEN armed %s: entry=%.2f trigger=%.2f best_profit=%.2f",
+                    sym, entry, be_trigger, best_profit
+                )
+
+            # Step 2 – enforce breakeven stop
+            if self.position_breakeven_set[sym]:
+                be_stop = entry - be_buffer
+                if current_price >= be_stop:
+                    locked = entry - current_price
+                    return f"breakeven_stop (locked={locked:.2f}pts)"
+
+            # Step 3 – full trailing stop
             profit_points = entry - current_price
-           
             if profit_points >= self.trail_activation_points:
-                # Calculate trailing stop
-                trail_stop = self.position_extremes[symbol] + self.trail_distance_points
-               
-                # Exit if price rises above trailing stop
+                trail_stop = self.position_extremes[sym] + self.trail_distance_points
                 if current_price >= trail_stop:
-                    return f"trailing_stop (locked_in_profit: {entry - trail_stop:.2f} pts)"
-       
+                    locked = entry - trail_stop
+                    return f"trailing_stop (locked_in_profit: {locked:.2f} pts)"
+
         return None
 
     def check_exit_points(self, symbol: str, current_price: float, stop_points: float, take_points: float) -> str | None:
 
-        # First check trailing stop
+        # 1) Trailing stop / breakeven protection (highest priority)
         if self.use_trailing_stops:
             trail_reason = self.update_trailing_stop(symbol, current_price)
             if trail_reason:
                 return trail_reason
-                
+
         sym = self._norm_sym(symbol)
-        # sym = (symbol or "").upper() 
-        pos = self.positions.get(sym) or self.positions.get(sym) # From paper_fill
+        pos = self.positions.get(sym)
         if not pos:
             return None
 
         qty = int(pos.get("qty") or 0)
         avg = float(pos.get("avg_price") or 0.0)
-        px = float(current_price)
+        px  = float(current_price)
 
-        # long
+        # 2) Time-based exit — flat if trade has drifted beyond the max window
+        max_minutes = int(getattr(self.config, "MAX_TRADE_DURATION_MINUTES", 20))
+        entry_time  = self.position_entry_times.get(sym)
+        if entry_time is not None:
+            elapsed_min = (datetime.now(timezone.utc) - entry_time).total_seconds() / 60.0
+            if elapsed_min >= max_minutes:
+                direction = "long" if qty > 0 else "short"
+                pnl_pts   = (px - avg) if qty > 0 else (avg - px)
+                self.logger.info(
+                    "TIME EXIT %s: elapsed=%.1fmin pnl_pts=%.2f side=%s",
+                    sym, elapsed_min, pnl_pts, direction
+                )
+                return f"time_exit ({elapsed_min:.0f}min)"
+
+        # 3) Hard stop-loss / take-profit
         if qty > 0:
             if px <= avg - float(stop_points):
                 return "stop_loss_points"
             if px >= avg + float(take_points):
                 return "take_profit_points"
 
-        # short
         if qty < 0:
             if px >= avg + float(stop_points):
                 return "stop_loss_points"
@@ -510,7 +490,6 @@ class RiskManager:
             self._last_reset_date = d
             self.realized_pnl = 0.0
             self.daily_pnl = 0.0
-            # keep positions open across days (common in futures), or clear if you prefer
         self._rotate_daily_if_needed()
 
     def paper_fill(
@@ -527,11 +506,10 @@ class RiskManager:
         strategy_name: str | None = None
     ) -> dict:
         """
-        Simulate and immediate market fill and update positions & realized PnL.
+        Simulate an immediate market fill and update positions & realized PnL.
         Returns a trade record we can append to history
         """
 
-        # When we want to the "always closed" behaviour
         mode = getattr(self, "instant_close", "hold")
         self.logger.info("paper_fill(): mode=%s", mode)
 
@@ -541,11 +519,8 @@ class RiskManager:
         sym = self._norm_sym(symbol)
         side = (side or "").upper()
         qty = int(qty)
-        # pos = self.positions.setdefault(symbol, {"qty": 0, "avg_price": 0.0, "unrealized": 0.0})
         px = float(price)
         cm = float(self.contract_multipliers.get(sym, 1.0))
-        # side = side.upper()
-        # ts = ts or datetime.utcnow().isoformat(timespec="seconds")
 
         pos = self.positions.setdefault(sym, {"qty": 0, "avg_price": 0.0, "last_px": px, "unrealized": 0.0})
         meta = {"fill_id": fill_id, "signal_id": signal_id, "attempt_id": attempt_id, "strategy_name": strategy_name}
@@ -553,10 +528,8 @@ class RiskManager:
         cur_qty = int(pos["qty"])
         avg = float(pos["avg_price"])
 
-        # Track if position is fully closed
         position_fully_closed = False
 
-        # helper to recompute avg on adds: (old notional + new notional)/(old qty + new qty)
         def _new_avg(old_qty, old_avg, add_qty, add_px):
             notional = old_qty * old_avg + add_qty * add_px
             tot  = old_qty + add_qty
@@ -574,12 +547,17 @@ class RiskManager:
                 pos["qty"] = new_qty
                 pos["avg_price"] = new_avg
 
-                # make an OPEN record so web_app can show it
+                # arm sniper state on brand-new position
+                if cur_qty == 0:
+                    self.position_entry_times[sym] = datetime.now(timezone.utc)
+                    self.position_breakeven_set[sym] = False
+                    self.position_extremes[sym] = px
+
                 open_record = {
                     **meta,
                     "symbol": symbol,
                     "side": "BUY",
-                    "qty":qty,
+                    "qty": qty,
                     "entry_price": px,
                     "exit_price": None,
                     "pnl": 0.0,
@@ -591,33 +569,26 @@ class RiskManager:
             else:
                 # reducing a short
                 reduce_qty = min(qty, -cur_qty)
-                # realize P&L for the reduced shares: short P&L = (avg - exit)*reduce_qty*cm
                 realized_this_trade += (avg - px) * reduce_qty * cm
-                cur_qty += reduce_qty  # closer to zero
+                cur_qty += reduce_qty
                 qty -= reduce_qty
 
-
                 if cur_qty == 0:
-                    # fully closed short
                     pos["qty"] = 0
                     pos["avg_price"] = 0.0
                     position_fully_closed = True
                 else:
-                    # still short after partial reduce
                     pos["qty"] = cur_qty
                     pos["avg_price"] = avg
 
-
-                # if we still have qty left after reducing, that turns into a new long add
                 if qty > 0:
                     pos["avg_price"] = px
                     pos["qty"] = qty
-                    # create an open record for that leftover
                     open_record = {
                         **meta,
                         "symbol": symbol,
                         "side": "BUY",
-                        "qty":qty,
+                        "qty": qty,
                         "entry_price": px,
                         "exit_price": None,
                         "pnl": 0.0,
@@ -626,36 +597,38 @@ class RiskManager:
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }
 
-
-                # record a realized trade for the reduced portion
                 if reduce_qty > 0:
                     trade_record = {
                         **meta,
                         "symbol": symbol,
-                        "side": "BUY",  # buy to cover short
+                        "side": "BUY",
                         "qty": reduce_qty,
                         "entry_price": avg,
                         "exit_price": px,
                         "pnl": float((avg - px) * reduce_qty * cm),
-                        "exit_reason": exit_reason, #"dry_run_close",
+                        "exit_reason": exit_reason,
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }
-
 
         elif side == "SELL":
             if cur_qty <= 0:
                 # adding/increasing short
-                new_qty = cur_qty - qty  # more negative
-                # avg for short: compute avg on absolute sizes
+                new_qty = cur_qty - qty
                 new_avg = _new_avg(abs(cur_qty), avg, qty, px) if new_qty != 0 else 0.0
                 pos["qty"] = new_qty
                 pos["avg_price"] = new_avg
+
+                # arm sniper state on brand-new position
+                if cur_qty == 0:
+                    self.position_entry_times[sym] = datetime.now(timezone.utc)
+                    self.position_breakeven_set[sym] = False
+                    self.position_extremes[sym] = px
 
                 open_record = {
                     **meta,
                     "symbol": symbol,
                     "side": "SELL",
-                    "qty":qty,
+                    "qty": qty,
                     "entry_price": px,
                     "exit_price": None,
                     "pnl": 0.0,
@@ -667,11 +640,9 @@ class RiskManager:
             else:
                 # reducing a long
                 reduce_qty = min(qty, cur_qty)
-                # realize P&L for reduced shares: long P&L = (exit - avg)*reduce_qty*cm
                 realized_this_trade += (px - avg) * reduce_qty * cm
                 cur_qty -= reduce_qty
                 qty -= reduce_qty
-
 
                 if cur_qty == 0:
                     pos["qty"] = 0
@@ -683,7 +654,6 @@ class RiskManager:
 
                 meta = {"fill_id": fill_id, "signal_id": signal_id, "attempt_id": attempt_id}
 
-                # if we still have qty left after reducing, that turns into a new short add
                 if qty > 0:
                     pos["avg_price"] = px
                     pos["qty"] = -qty
@@ -691,7 +661,7 @@ class RiskManager:
                         **meta,
                         "symbol": symbol,
                         "side": "SELL",
-                        "qty":qty,
+                        "qty": qty,
                         "entry_price": px,
                         "exit_price": None,
                         "pnl": 0.0,
@@ -700,17 +670,16 @@ class RiskManager:
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }
 
-
                 if reduce_qty > 0:
                     trade_record = {
                         **meta,
                         "symbol": symbol,
-                        "side": "SELL",  # sell to close long
+                        "side": "SELL",
                         "qty": reduce_qty,
                         "entry_price": avg,
                         "exit_price": px,
                         "pnl": float((px - avg) * reduce_qty * cm),
-                        "exit_reason": exit_reason, # "dry_run_close",
+                        "exit_reason": exit_reason,
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }
 
@@ -723,27 +692,27 @@ class RiskManager:
                 self.logger.info(f'{CHECK} Logged trade to analytics: {trade_record.get("signal_id")}')
         except Exception:
             self.logger.error(f"{CROSS} Failed to trade to analytics", exc_info=True) 
-            # pass # Don't break trading if logging fails
 
         # update last price & unrealized
         pos["last_px"] = px
         self.mark_to_market(sym, last_price=px)
 
-        # Remove closed positions from dict
+        # Remove closed positions from dict and clear sniper state
         if position_fully_closed and sym in self.positions:
             del self.positions[sym]
+            self.position_entry_times.pop(sym, None)
+            self.position_breakeven_set.pop(sym, None)
+            self.position_extremes.pop(sym, None)
 
         # realize P&L & append trade if we closed/reduced
         if trade_record is not None:
             self.realized_pnl = float(self.realized_pnl + realized_this_trade)
             self.trade_history.append(trade_record)
 
-            # if also opened a new leg in same call, append that too
             if open_record is not None:
                 self.trade_history.append(open_record)
                 return {"closed": trade_record, "opened": open_record}
             return {"closed": trade_record}
-            # return open_record
 
         # otherwise this was a pure OPEN / ADD -> still append so UI sees it
         if open_record is not None:
@@ -751,21 +720,12 @@ class RiskManager:
             return {"opened": open_record}
         
         self.logger.info("paper_fill(): mode=%r id=%s price=%s", getattr(self, "instant_close", None), id(self), price)
-        # fallback
-        # return trade_record
         return None
 
 
     def _paper_fill_instant_close(self, symbol: str, side: str, qty: int, price: float, dry_run: bool = True, strategy_name: str | None = None) -> dict:
         """
-        Option B: simulate an immediate market fill and immediately close it at the
-        same (or provided) price. This guarantees:
-        - trade_history gets a *closed* trade
-        - daily_pnl gets updated
-        - win-rate can be computed
-        - /api/trades has something to show
-        We still keep self.positions[...] in case the UI wants to show “current positions”,
-        but we zero it right after closing.
+        Simulate an immediate market fill and immediately close it at the same price.
         """
         sym = self._norm_sym(symbol)
         side = (side or "").upper()
@@ -773,8 +733,6 @@ class RiskManager:
         px = float(price)
         cm = float(self.contract_multipliers.get(sym, 1.0))
 
-
-        # 1) “open” record (for completeness — some UIs like to know the original side)
         opened_at = datetime.now(timezone.utc).isoformat()
 
         open_record = {
@@ -788,20 +746,15 @@ class RiskManager:
             "strategy_name": strategy_name,
         }
 
-
-        # 2) immediately “close” it at the same price (Option B)
-        # if later you want to test P&L changes, just call this with a slightly
-        # different price than the signal price.
         if side == "BUY":
-            pnl = (px - px) * qty * cm  # 0 right now
+            pnl = (px - px) * qty * cm
         else:
-            pnl = (px - px) * qty * cm  # 0 right now
-
+            pnl = (px - px) * qty * cm
 
         closed_at = datetime.now(timezone.utc).isoformat()
         close_record = {
             "symbol": symbol,
-            "side": side,               # keep original side for history
+            "side": side,
             "qty": qty,
             "entry_price": px,
             "exit_price": px,
@@ -812,19 +765,9 @@ class RiskManager:
             "strategy_name": strategy_name,
         }
 
-
-        # 3) update daily / realized P&L
-        # web_app.py already does:
-        #   _status["risk_metrics"]["daily_pnl"] = rm.daily_pnl ...
-        # so we must keep this number current
         self.daily_pnl = float(getattr(self, "daily_pnl", 0.0) + pnl)
-        # keep a running total too (web_app looks at realized_total)
         self.realized_pnl = float(getattr(self, "realized_pnl", 0.0) + pnl)
 
-
-        # 4) keep positions shape the UI expects, but flat
-        # web_app /api/positions is reading rm.positions[sym] -> {qty, avg_price, unrealized}
-        # so we write it, then zero it
         self.positions.setdefault(sym, {})
         self.positions[sym] = {
             "qty": 0,
@@ -834,14 +777,8 @@ class RiskManager:
             "opened_at": opened_at,
         }
 
-
-        # 5) append to trade_history so /api/trades sees it
-        # IMPORTANT: your flask logs show it dumps the tail of trade_history,
-        # so we actually need the *closed* record in there.
         self.trade_history.append(close_record)
 
-
-        # (optional) cap history
         if len(self.trade_history) > 1000:
             self.trade_history = self.trade_history[-1000:]
 
@@ -850,7 +787,6 @@ class RiskManager:
 
     def mark_to_market(self, symbol: str, last_price: float | None = None):
         """Update unrealised PnL for one symbol, and refresh daily_pnl."""
-        # roll daily counters first
         if hasattr(self, "reset_if_new_day"):
             self.reset_if_new_day()
 
@@ -865,7 +801,6 @@ class RiskManager:
         cm = float(self.contract_multipliers.get(sym, 1.0))
         qty = int(pos["qty"])
 
-        # unrealized (long: (px - avg)*qty*cm; short: (avg - px)*|qty|*cm)
         if qty > 0:
             pos["unrealized"] = (px - pos["avg_price"]) * qty * cm
         elif qty < 0:
@@ -873,9 +808,6 @@ class RiskManager:
         else:
             pos["unrealized"] = 0.0
 
-        # mult = self._mult(symbol)
-        # pos["unrealized"] = (last_price - pos["avg_price"]) * pos["qty"] * mult
-        # daily pnl = realized + sum of unrealized accross symbols
         unreal = 0.0
         for _sym, _p in self.positions.items():
             unreal += float(_p.get("unrealized") or 0.0)
@@ -929,11 +861,9 @@ class RiskManager:
             self.load_history(path)
         except Exception as e:
             self.logger.debug(f"Expected error in [RiskManager.load_history_silent]: {e}")
-            # pass
 
 
     def _rotate_daily_if_needed(self):
-        # optional: rotate to history YYYYMMDD.json when day changes
         if not getattr(self, "history_path", None):
             return
         today = datetime.utcnow().strftime("%Y%m%d")
@@ -945,9 +875,6 @@ class RiskManager:
 
     def get_position_qty(self, symbol: str) -> int:
         sym = self._norm_sym(symbol)
-        # sym = (symbol or "").upper()
-
-        # keys in self.positions are whatever you used when recording (looks like ES)
         pos = self.positions.get(sym) or self.positions.get(sym)
         if not pos:
             return 0
@@ -962,10 +889,7 @@ class RiskManager:
         pos = self.positions.get(sym) or self.positions.get(symbol)
         if not pos:
             return None
-        # fallback
         if int(pos.get("qty") or 0) == 0:
             return None
-
         return pos
 
-        

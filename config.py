@@ -126,25 +126,36 @@ class Config:
     DRY_RUN_UI = "true" # CLICK the UI (browser driver)
     DRY_RUN_ACCOUNTING = False # still write to RM.trade_history
     INSTANT_CLOSE_TRADES = "hold" # keep positions, don't force close
-    # fallback siimulation account balance
+    # fallback simulation account balance
     SIM_BALANCE = 50000
     # Exit points. 1 point = $50 per contract (classic ES)
     # 1 tick = 0.25 points = $12.50
     STOP_LOSS_POINTS = float(os.getenv("STOP_LOSS_POINTS", "4.0"))
     TAKE_PROFIT_POINTS = float(os.getenv("TAKE_PROFIT_POINTS", "6.0"))
-    # Base configuration (our comfort zone)
-    STOP_LOSS_BASE_POINTS = float(os.getenv("STOP_LOSS_BASE_POINTS", "6.0"))         # Minimum stop
-    TAKE_PROFIT_BASE_POINTS = float(os.getenv("TAKE_PROFIT_BASE_POINTS", "10.0"))       # Minimum target
+    # Base configuration — sniper-tuned: smaller base = tighter exits on quiet days
+    STOP_LOSS_BASE_POINTS = float(os.getenv("STOP_LOSS_BASE_POINTS", "4.0"))
+    TAKE_PROFIT_BASE_POINTS = float(os.getenv("TAKE_PROFIT_BASE_POINTS", "6.0"))
 
     # Adaptive multipliers
     VOLATILITY_STOP_MULTIPLIER = 2.5    # Stop = 2.5x recent volatility
     VOLATILITY_TAKE_MULTIPLIER = 4.0    # Target = 4.0x recent volatility
 
     # Safety bounds (prevent crazy outliers)
-    MAX_STOP_LOSS_POINTS = float(os.getenv("MAX_STOP_LOSS_POINTS", "15.0"))         # Never wider than 12 points
-    MIN_STOP_LOSS_POINTS = float(os.getenv("MIN_STOP_LOSS_POINTS", "4.0"))          # Never tighter than 2 points
-    MAX_TAKE_PROFIT_POINTS = float(os.getenv("MAX_TAKE_PROFIT_POINTS", "25.0"))       # Cap profit target
-    MIN_TAKE_PROFIT_POINTS = float(os.getenv("MIN_TAKE_PROFIT_POINTS", "8.0"))        # Minimum profit target
+    MAX_STOP_LOSS_POINTS = float(os.getenv("MAX_STOP_LOSS_POINTS", "12.0"))
+    MIN_STOP_LOSS_POINTS = float(os.getenv("MIN_STOP_LOSS_POINTS", "3.0"))
+    MAX_TAKE_PROFIT_POINTS = float(os.getenv("MAX_TAKE_PROFIT_POINTS", "20.0"))
+    MIN_TAKE_PROFIT_POINTS = float(os.getenv("MIN_TAKE_PROFIT_POINTS", "4.0"))
+
+    # -------------------------------------------------------------------
+    # SNIPER EXIT SYSTEM
+    # After BREAKEVEN_TRIGGER_POINTS profit, SL moves to entry + buffer
+    # so a winner can never turn into a meaningful loser.
+    # MAX_TRADE_DURATION_MINUTES forces a flat exit if price hasn't
+    # committed in either direction within the time window.
+    # -------------------------------------------------------------------
+    BREAKEVEN_TRIGGER_POINTS = float(os.getenv("BREAKEVEN_TRIGGER_POINTS", "2.0"))
+    BREAKEVEN_BUFFER_POINTS  = float(os.getenv("BREAKEVEN_BUFFER_POINTS",  "0.25"))
+    MAX_TRADE_DURATION_MINUTES = int(os.getenv("MAX_TRADE_DURATION_MINUTES", "20"))
 
     # -------------------------------------------------------------------
     # VOLUME TRACKING (NEW)
@@ -219,4 +230,3 @@ class Config:
 
 # Create a global config instance
 config = Config()
-
