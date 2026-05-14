@@ -42,7 +42,7 @@ class IntelligentEntryFilter:
     def __init__(self, data_manager, logger):
         self.dm = data_manager
         self.logger = logger
-        cfg = getattr(dm, 'config', None) or Config()
+        cfg = getattr(self.dm, 'config', None) or Config()
         
         # Regime Detector
         self.regime_detector = MarketRegimeDetector(data_manager, logger)
