@@ -579,8 +579,10 @@ class TradingBot:
                     symbol=sym,
                     signal_type=side,
                     signal_price=price,
-                    strategy_name=strategy_name
+                    strategy_name=strategy_name,
+                    signal_context=signal.get("context")
                 )
+
 
                 if not allow_entry:
                     self.logger.warning(f"{BLOCKED} ENTRY BLOCKED: {block_reason}")
@@ -978,6 +980,11 @@ class TradingBot:
                 # self.logger.info("LIVE %s %s x%s @ %s", side, sym, qty, px)
                 # Only after UI worked, record live fill
                 # self._record_fill(sym, side, qty, px, dry_run=(acct_mode != "false"))
+                # After paper_fill records the open position:
+                stop_from_signal = (signal.get("context") or {}).get("stop_est_points")
+                if stop_from_signal and sym in rm.positions:
+                    rm.positions[sym]["stop_est_points"] = float(stop_from_signal)
+
                 fill = self._record_fill(sym, side, qty, px_exec, dry_run=False, signal_id=signal_id, attempt_id=attempt_id, exit_reason=signal.get("reason"), strategy_name=signal.get("strategy_name"))
 
                 try:

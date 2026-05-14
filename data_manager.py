@@ -1111,3 +1111,27 @@ class DataManager:
         
         return None
 
+    def get_prev_day_levels_local(self, symbol: str) -> dict | None:
+        """
+        Derive yesterday's high/low from local 1m bars already in memory.
+        Returns {"high": float, "low": float, "date": str} or None.
+        """
+        try:
+            # Get last 600 1m bars (covers 10h, enough for yesterday's session)
+            bars = self.live.get_last_n(symbol, n=600)
+            if bars is None or len(bars) < 2:
+                return None
+            # Find today's session start (9:30 ET)
+            today_et = datetime.now(ET_TZ).replace(
+                hour=9, minute=30, second=0, microsecond=0
+            )
+            today_ts = today_et.timestamp()
+            # Bars before today's open = yesterday's session
+            prev_bars = [b for b in bars if b.timestamp < today_ts]
+            if len(prev_bars) < 10:
+                return None
+            prev_high = max(b.high for b in prev_bars)
+            prev_low  = min(b.low  for b in prev_bars)
+            return {"high": prev_high, "low": prev_low}
+        except Exception:
+            return None

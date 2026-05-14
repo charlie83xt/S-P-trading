@@ -178,6 +178,7 @@ class RiskManager:
         max_take_profit_points = getattr(self.config, "MAX_TAKE_PROFIT_POINTS", 20.0)
         min_take_profit_points  = getattr(self.config, "MIN_TAKE_PROFIT_POINTS", 4.0)
 
+        
         stop_pts = max( 
             min_stop_loss_point, 
             min( 
@@ -185,6 +186,14 @@ class RiskManager:
                 max(stop_loss_base_points, vol * volatility_stop_multiplier) 
             ) 
         )
+
+        # After computing stop_pts from volatility:
+        # If the signal provided a structure-based stop, use it as the floor
+        pos = self.positions.get(self._norm_sym(symbol), {})
+        signal_stop = pos.get("stop_est_points")
+        if signal_stop and signal_stop > 0:
+            stop_pts = max(stop_pts, float(signal_stop))
+
 
         take_pts = max( 
             min_take_profit_points, 

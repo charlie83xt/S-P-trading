@@ -202,6 +202,19 @@ class PreviousDayHighLowStrategy:
         small_lower = candle.lower_shadow <= self.max_other_shadow * candle.body
         
         return long_upper and small_lower
+
+    def _is_bearish_rejection(self, candle) -> bool:
+        """Bearish close with upper wick larger than body — simpler rejection."""
+        body = abs(candle.close - candle.open)
+        upper_wick = candle.high - max(candle.close, candle.open)
+        return candle.close < candle.open and upper_wick > body and body > 0
+
+    def _is_bullish_rejection(self, candle) -> bool:
+        """Bullish close with lower wick larger than body."""
+        body = abs(candle.close - candle.open)
+        lower_wick = min(candle.close, candle.open) - candle.low
+        return candle.close > candle.open and lower_wick > body and body > 0
+
     
     def _is_hanging_man(self, candle: Candle) -> bool:
         """
@@ -369,7 +382,7 @@ class PreviousDayHighLowStrategy:
         if self._touches_prev_high(current_candle) and not self.high_touched:
             self.high_touched = True
             
-            if self._is_shooting_star(current_candle):
+            if self._is_shooting_star(current_candle) or self._is_bearish_rejection(current_candle):
                 self.trades_today += 1
                 
                 self.logger.info(
@@ -397,7 +410,7 @@ class PreviousDayHighLowStrategy:
         if self._touches_prev_low(current_candle) and not self.low_touched:
             self.low_touched = True
             
-            if self._is_hanging_man(current_candle):
+            if self._is_hanging_man(current_candle) or self._is_bullish_rejection(current_candle):
                 self.trades_today += 1
                 
                 self.logger.info(
