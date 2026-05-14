@@ -139,42 +139,52 @@ class PreviousDayHighLowStrategy:
     
     def _calculate_prev_day_levels(self, symbol: str) -> bool:
         """
-        Calculate previous day's high/low from Supabase daily bars.
-        Returns True if successful, False otherwise.
+        Calculate previous day's high/low.
+        Tries Supabase first; falls back to local 1m bars in memory.
         """
+        # ── Try Supabase first (existing logic) ──────────────────────────────
         try:
-            # Get daily bars from Supabase (last 5 days)
             daily_bars = self.dm.get_daily_bars(symbol, days=5)
             
-            if len(daily_bars) < 2:
-                self.logger.warning(
-                    f"PrevDayHL: Insufficient daily bars from Supabase ({len(daily_bars)}). "
-                    f"Need at least 2 days (yesterday + today partial)."
+            if len(daily_bars) >= 2:
+                yesterday_bar = daily_bars[-2]
+                self.prev_day_high = yesterday_bar.high
+                self.prev_day_low  = yesterday_bar.low
+                self.prev_day_date = self._today_str()
+                self.logger.info(
+                    f"PrevDayHL: {CHECK} Levels from Supabase - "
+                    f"Date={yesterday_bar.timestamp}, "
+                    f"High={self.prev_day_high:.2f}, "
+                    f"Low={self.prev_day_low:.2f}, "
+                    f"Range={self.prev_day_high - self.prev_day_low:.2f} pts"
                 )
-                return False
-            
-            # Get yesterday's bar (second to last)
-            # Last bar is today (partial/incomplete), second-to-last is yesterday (complete)
-            yesterday_bar = daily_bars[-2]
-            
-            self.prev_day_high = yesterday_bar.high
-            self.prev_day_low = yesterday_bar.low
-            self.prev_day_date = self._today_str()
-            
-            self.logger.info(
-                f"PrevDayHL: {CHECK} Levels from Supabase - "
-                f"Date={yesterday_bar.timestamp}, "
-                f"High={self.prev_day_high:.2f}, "
-                f"Low={self.prev_day_low:.2f}, "
-                f"Range={self.prev_day_high - self.prev_day_low:.2f} pts"
+                return True
+
+            self.logger.warning(
+                f"PrevDayHL: Insufficient Supabase bars ({len(daily_bars)}), "
+                f"trying local fallback"
             )
-            return True
-            
         except Exception as e:
-            self.logger.error(f"PrevDayHL: Error calculating levels from Supabase: {e}")
-            import traceback
-            self.logger.error(traceback.format_exc())
-            return False
+            self.logger.error(f"PrevDayHL: Supabase error: {e}, trying local fallback")
+
+        # ── Local fallback: derive from 1m bars already in memory ────────────
+        try:
+            levels = self.dm.get_prev_day_levels_local(symbol)
+            if levels:
+                self.prev_day_high = levels["high"]
+                self.prev_day_low  = levels["low"]
+                self.prev_day_date = self._today_str()
+                self.logger.info(
+                    f"PrevDayHL: {CHECK} Levels from local bars - "
+                    f"High={self.prev_day_high:.2f}, "
+                    f"Low={self.prev_day_low:.2f}"
+                )
+                return True
+        except Exception as e:
+            self.logger.error(f"PrevDayHL: Local fallback error: {e}")
+
+        self.logger.warning("PrevDayHL: Could not calculate levels from any source")
+        return False
     
     # -------------------------------------------------------------------------
     # Pattern Detection
@@ -334,6 +344,25 @@ class PreviousDayHighLowStrategy:
             return None
         
         current_price = float(current_price)
+
+        # Reset touch flags when price has moved definitively away from level
+        # Uses same tolerance formula as _touches_prev_high/_touches_prev_low
+        if self.prev_day_high and self.high_touched:
+            reset_distance = self.prev_day_high * self.tolerance_pct * 3
+            if current_price < self.prev_day_high - reset_distance:
+                self.high_touched = False
+                self.logger.info(
+                    f"PrevDayHL: high_touched RESET — price {current_price:.2f} "
+                    f"far below {self.prev_day_high:.2f}"
+                )
+        if self.prev_day_low and self.low_touched:
+            reset_distance = self.prev_day_low * self.tolerance_pct * 3
+            if current_price > self.prev_day_low + reset_distance:
+                self.low_touched = False
+                self.logger.info(
+                    f"PrevDayHL: low_touched RESET — price {current_price:.2f} "
+                    f"far above {self.prev_day_low:.2f}"
+                )
 
         distance_to_high = abs(current_price - self.prev_day_high)
         distance_to_low = abs(current_price - self.prev_day_low)
