@@ -70,7 +70,7 @@ class TradingBot:
         # self.data_manager = DataManager(self.config, platform)
         self.data_manager = DataManager(config = self.config)
          # Initialise analytics
-        self.analytics = TradeAnalytics(db_path='market_data.db') # <= Wired for analytics
+        self.analytics = TradeAnalytics(config = self.config, db_path='data/db/market_data.db') # <= Wired for analytics
 
         self.strategy_manager = StrategyManager(
             self.data_manager,
