@@ -982,8 +982,8 @@ class TradingBot:
                 # self._record_fill(sym, side, qty, px, dry_run=(acct_mode != "false"))
                 # After paper_fill records the open position:
                 stop_from_signal = (signal.get("context") or {}).get("stop_est_points")
-                if stop_from_signal and sym in rm.positions:
-                    rm.positions[sym]["stop_est_points"] = float(stop_from_signal)
+                if stop_from_signal and sym in self.risk_manager.positions:
+                    self.risk_manager.positions[sym]["stop_est_points"] = float(stop_from_signal)
 
                 fill = self._record_fill(sym, side, qty, px_exec, dry_run=False, signal_id=signal_id, attempt_id=attempt_id, exit_reason=signal.get("reason"), strategy_name=signal.get("strategy_name"))
 

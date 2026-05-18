@@ -10,6 +10,7 @@ import os
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 import logging
+from config import Config
 
 
 class TradeAnalytics:
@@ -18,11 +19,12 @@ class TradeAnalytics:
     for ML model training and strategy optimization.
     """
     
-    def __init__(self, db_path='data/db/market_data.db', use_supabase=True):
+    def __init__(self, config: Config, db_path='data/db/market_data.db', use_supabase=True):
         """Use same DB as data_manager for efficiency"""
         self.db_path = db_path
         self.logger = logging.getLogger(__name__)
         self._init_analytics_tables()
+        self.config = config
 
         # -- Supabase (optional -- never clashes the app) --------------------------
         self.supabase = None
@@ -41,8 +43,8 @@ class TradeAnalytics:
             from supabase import create_client
             from config import Config
 
-            url = Config.SUPABASE_URL,
-            key = Config.SUPABASE_KEY
+            url = self.config.SUPABASE_URL,
+            key = self.config.SUPABASE_KEY
 
             if not url or not key:
                self.logger.info("Supabase credentials not configured — local DB only")

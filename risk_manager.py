@@ -661,7 +661,7 @@ class RiskManager:
                     pos["qty"] = cur_qty
                     pos["avg_price"] = avg
 
-                meta = {"fill_id": fill_id, "signal_id": signal_id, "attempt_id": attempt_id}
+                # meta = {"fill_id": fill_id, "signal_id": signal_id, "attempt_id": attempt_id}
 
                 if qty > 0:
                     pos["avg_price"] = px
