@@ -43,7 +43,7 @@ class TradeAnalytics:
             from supabase import create_client
             from config import Config
 
-            url = self.config.SUPABASE_URL,
+            url = self.config.SUPABASE_URL
             key = self.config.SUPABASE_KEY
 
             if not url or not key:
