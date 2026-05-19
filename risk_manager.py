@@ -8,7 +8,7 @@ import logging
 import os, json
 import threading
 from config import Config
-from debug_config import CHECK
+from debug_config import CHECK, CROSS
 
 class RiskManager:
     """
@@ -616,6 +616,7 @@ class RiskManager:
                         "exit_price": px,
                         "pnl": float((avg - px) * reduce_qty * cm),
                         "exit_reason": exit_reason,
+                        "status": "closed",
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }
 
@@ -689,13 +690,14 @@ class RiskManager:
                         "exit_price": px,
                         "pnl": float((px - avg) * reduce_qty * cm),
                         "exit_reason": exit_reason,
+                        "status": "closed",
                         "ts": datetime.now(timezone.utc).isoformat(),
                     }
 
         # Log to analytics
         try:
             from trade_analytics import TradeAnalytics
-            analytics = TradeAnalytics()
+            analytics = TradeAnalytics(config=self.config)
             if trade_record:
                 analytics.log_trade(trade_record)
                 self.logger.info(f'{CHECK} Logged trade to analytics: {trade_record.get("signal_id")}')
