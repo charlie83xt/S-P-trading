@@ -52,7 +52,7 @@ class TradeAnalytics:
 
             self.supabase = create_client(url, key)
             # Remote Supabase (Permanent, accessible)
-            self.supabase_enabled = use_supabase
+            self.supabase_enabled = True # use_supabase
             self.logger.info("Supabase analytics connected")
             
         except ImportError:

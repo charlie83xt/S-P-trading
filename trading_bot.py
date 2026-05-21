@@ -1446,7 +1446,14 @@ class TradingBot:
         self.logger.info("EXIT: reason=%s qty=%s -> sending %s", reason, qty, close_side)
         # self.logger.info("EXIT-ATR: vol=%.2f stop_pts=%.2f take_pts=%.2f", vol, stop_pts, take_pts)
 
-        exit_signal = {"type": close_side, "symbol": symbol, "reason": reason, "is_exit": True, "_signal_id": _new_id("exit")}
+        exit_signal = {
+            "type": close_side, 
+            "symbol": symbol, 
+            "reason": reason, 
+            "is_exit": True, 
+            "_signal_id": _new_id("exit"),
+            "strategy_name": type(self.strategy).__name__ if self.strategy else "Unknown"  
+            }
         self._execute_trade(exit_signal, abs(qty), current_price)
 
 

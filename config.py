@@ -154,7 +154,7 @@ class Config:
     # committed in either direction within the time window.
     # -------------------------------------------------------------------
     BREAKEVEN_TRIGGER_POINTS = float(os.getenv("BREAKEVEN_TRIGGER_POINTS", "2.0"))
-    BREAKEVEN_BUFFER_POINTS  = float(os.getenv("BREAKEVEN_BUFFER_POINTS",  "0.25"))
+    BREAKEVEN_BUFFER_POINTS  = float(os.getenv("BREAKEVEN_BUFFER_POINTS",  "0.5"))
     MAX_TRADE_DURATION_MINUTES = int(os.getenv("MAX_TRADE_DURATION_MINUTES", "20"))
 
     # -------------------------------------------------------------------
