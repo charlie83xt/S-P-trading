@@ -764,8 +764,18 @@ class TradingBot:
                 pos = None
                 pos_sym = pos_qty = None
 
-                # 1) Load symbol & set size
-                api.ensure_symbol_loaded(sym)
+                already_active = False
+                try:
+                    if hasattr(api, "get_active_contract_symbol"):
+                        active = api.get_active_contract_symbol()
+                        if active and sym.upper() in active.upper():
+                            already_active = True
+                except Exception:
+                    pass
+
+                if not already_active:
+                    # 1) Load symbol & set size
+                    api.ensure_symbol_loaded(sym)
 
                 try:
                     if hasattr(api, "get_active_contract_symbol"):
