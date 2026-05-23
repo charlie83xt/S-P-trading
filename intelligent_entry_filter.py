@@ -109,6 +109,14 @@ class IntelligentEntryFilter:
             f"(confidence={regime_info['confidence']:.2f}) - "
             f"{regime_info['explanation']}"
         )
+
+        # RANGING regime: patterns are unreliable - no override permitted
+        if regime_info["regime"] == 'RANGING':
+            self.logger.warning(
+                f"{CROSS} Entry BLOCKED: RANGING regime - ORB patterns unreliable in chop "
+                f"(confidence={regime_info['confidence']:.2f})"
+            )
+            return False, "ranging_regime_block"
         
         # ⭐ ADAPT THRESHOLDS based on regime
         original_thresholds = self._save_current_thresholds()

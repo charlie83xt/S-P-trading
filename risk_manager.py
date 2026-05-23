@@ -192,7 +192,8 @@ class RiskManager:
         pos = self.positions.get(self._norm_sym(symbol), {})
         signal_stop = pos.get("stop_est_points")
         if signal_stop and signal_stop > 0:
-            stop_pts = max(stop_pts, float(signal_stop))
+            # stop_pts = max(stop_pts, float(signal_stop))
+            stop_pts = float(signal_stop)
 
 
         take_pts = max( 

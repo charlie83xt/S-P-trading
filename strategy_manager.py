@@ -128,9 +128,10 @@ class StrategyManager:
         # Convert to Eastern Time
         current_et = datetime.fromtimestamp(ts, tz=ET_TZ)
         hour = current_et.hour
+        minute = current_et.minute
        
         # Time-based strategy selection
-        strategy_name = self._select_by_time(hour)
+        strategy_name = self._select_by_time(hour, minute)
        
         # Check if strategy is paused due to poor performance
         if strategy_name in self.paused_strategies:
@@ -154,7 +155,7 @@ class StrategyManager:
        
         return self.current_strategy
    
-    def _select_by_time(self, hour_et: int) -> str:
+    def _select_by_time(self, hour_et: int, minute_et: int) -> str:
         """
         Select strategy based on Eastern Time hour.
        
@@ -164,7 +165,7 @@ class StrategyManager:
         - 4:00 PM - 8:00 AM: OFF (overnight - you're sleeping)
         - 8:00 AM - 9:45 AM: OpeningRange (pre-market - simpler strategy)
         """
-        if 9 <= hour_et < 12: # 9:45 - 12:00 PM
+        if (hour_et == 9 and minute_et >= 45) or (10 <= hour_et < 12): # 9:45 - 12:00 PM
             return "ORBRetest"
         elif 12 <= hour_et < 16: 
             # A/B Test: Temporary alternating between new and old strategy 12:00 PM - 4:00 PM
