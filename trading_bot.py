@@ -70,7 +70,7 @@ class TradingBot:
         # self.data_manager = DataManager(self.config, platform)
         self.data_manager = DataManager(config = self.config)
          # Initialise analytics
-        self.analytics = TradeAnalytics(db_path='market_data.db') # <= Wired for analytics
+        self.analytics = TradeAnalytics(config = self.config, db_path='data/db/market_data.db') # <= Wired for analytics
 
         self.strategy_manager = StrategyManager(
             self.data_manager,
@@ -579,8 +579,10 @@ class TradingBot:
                     symbol=sym,
                     signal_type=side,
                     signal_price=price,
-                    strategy_name=strategy_name
+                    strategy_name=strategy_name,
+                    signal_context=signal.get("context")
                 )
+
 
                 if not allow_entry:
                     self.logger.warning(f"{BLOCKED} ENTRY BLOCKED: {block_reason}")
@@ -762,8 +764,18 @@ class TradingBot:
                 pos = None
                 pos_sym = pos_qty = None
 
-                # 1) Load symbol & set size
-                api.ensure_symbol_loaded(sym)
+                already_active = False
+                try:
+                    if hasattr(api, "get_active_contract_symbol"):
+                        active = api.get_active_contract_symbol()
+                        if active and sym.upper() in active.upper():
+                            already_active = True
+                except Exception:
+                    pass
+
+                if not already_active:
+                    # 1) Load symbol & set size
+                    api.ensure_symbol_loaded(sym)
 
                 try:
                     if hasattr(api, "get_active_contract_symbol"):
@@ -978,6 +990,11 @@ class TradingBot:
                 # self.logger.info("LIVE %s %s x%s @ %s", side, sym, qty, px)
                 # Only after UI worked, record live fill
                 # self._record_fill(sym, side, qty, px, dry_run=(acct_mode != "false"))
+                # After paper_fill records the open position:
+                stop_from_signal = (signal.get("context") or {}).get("stop_est_points")
+                if stop_from_signal and sym in self.risk_manager.positions:
+                    self.risk_manager.positions[sym]["stop_est_points"] = float(stop_from_signal)
+
                 fill = self._record_fill(sym, side, qty, px_exec, dry_run=False, signal_id=signal_id, attempt_id=attempt_id, exit_reason=signal.get("reason"), strategy_name=signal.get("strategy_name"))
 
                 try:
@@ -1439,7 +1456,14 @@ class TradingBot:
         self.logger.info("EXIT: reason=%s qty=%s -> sending %s", reason, qty, close_side)
         # self.logger.info("EXIT-ATR: vol=%.2f stop_pts=%.2f take_pts=%.2f", vol, stop_pts, take_pts)
 
-        exit_signal = {"type": close_side, "symbol": symbol, "reason": reason, "is_exit": True, "_signal_id": _new_id("exit")}
+        exit_signal = {
+            "type": close_side, 
+            "symbol": symbol, 
+            "reason": reason, 
+            "is_exit": True, 
+            "_signal_id": _new_id("exit"),
+            "strategy_name": type(self.strategy).__name__ if self.strategy else "Unknown"  
+            }
         self._execute_trade(exit_signal, abs(qty), current_price)
 
 
