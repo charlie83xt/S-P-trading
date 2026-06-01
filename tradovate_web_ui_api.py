@@ -1405,17 +1405,28 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
     
     def _ensure_symbol_loaded(self, symbol: str):
-        self._click_any("symbol.open_search")
+        # Fast-path: if chart already shows this symbol, skip the search entirely
         try:
-            self._fill_first("symbol.search_input", symbol)
-            self._wait_any("symbol.first_result")
-            self._click_any("symbol.first_result")
+            chart = self._page.locator(".contract-horizontal-info .info-column.info-column-symbol")
+            cnt = self._run(chart.count(), timeout=0.5) or 0
+            if cnt > 0:
+                txt = self._run(chart.first.inner_text(), timeout=0.5) or ""
+                if symbol.upper() in txt.upper():
+                    self.logger.info("_ensure_symbol_loaded: %s already active, skipping search", symbol)
+                    return True
+        except Exception:
+            pass
+
+        self._click_any("symbol.open_search", timeout_ms=1_500)
+        try:
+            self._fill_first("symbol.search_input", symbol, timeout_ms=2_000)
+            self._wait_any("symbol.first_result", timeout_ms=3_000)
+            self._click_any("symbol.first_result", timeout_ms=2_000)
         except Exception as e:
             self.logger.debug(f"Expected error in [TradovateWebUIAPI._ensure_symbol_loaded]: {e}")
             # pass
         
-        self._wait_any("order.buy_market", timeout=self.timeout_ms)
-        # self._page_locator(".market-buttons").first().wait_for(timeout=self.timeout_ms) # REPLACING
+        self._wait_any("order.buy_market", timeout_ms=5_000)
         return True
 
     def ensure_symbol_loaded(self, symbol: str) -> bool:
@@ -2380,7 +2391,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         # 1) try normal fill with click-to-focus
         for sel in selectors:
             try:
-                self._click_any(sel, timeout_ms=self.timeout_ms)
+                self._click_any(sel, timeout_ms=5_000)
                 # select-all & type in case .fill() is ignored
                 try:
                     # use type path first (often more reliable for custom inputs)
@@ -2438,7 +2449,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
         # 4) Last resort: click qty area, type into active element
         try:
-            self._click_any(".info-column-qty", timeout_ms=self.timeout_ms)
+            self._click_any(".info-column-qty", timeout_ms=5_000)
             # type into active element
             try:
                 self._run(self._page.keyboard.press("Meta+A"))
@@ -2508,7 +2519,11 @@ class TradovateWebUIAPI(TradingAPIInterface):
         if timeout is not None:
             # callers sometimes pass seconds here; accept it/float
             try:
-                return int(float(timeout) * 1000)
+                v = float(timeout)
+                # if value > 300, it was passed in ms already (no sane per-call timeout is >5 minutes in seconds)
+                if v > 300:
+                    return int(v)
+                return int(v * 1000)
             except Exception as e:
                 self.logger.debug(f"Expected error in [TradovateWebUIAPI._norm_timeout_ms]: {e}")
                 # pass

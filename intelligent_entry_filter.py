@@ -26,6 +26,7 @@ from datetime import datetime, time, timezone
 from typing import Optional, Dict, Tuple
 from debug_config import CHECK, CROSS
 from market_regime_detector import MarketRegimeDetector
+from config import Config
  
 class IntelligentEntryFilter:
     """
@@ -41,6 +42,7 @@ class IntelligentEntryFilter:
     def __init__(self, data_manager, logger):
         self.dm = data_manager
         self.logger = logger
+        cfg = getattr(self.dm, 'config', None) or Config()
         
         # Regime Detector
         self.regime_detector = MarketRegimeDetector(data_manager, logger)
@@ -50,7 +52,8 @@ class IntelligentEntryFilter:
         # VOLUME: current bar volume vs 20-bar average
         #   1.5 was too strict — most non-breakout bars are 0.8–1.2x average.
         #   1.1 catches genuine volume upticks without demanding a spike.
-        self.min_volume_ratio = 1.1
+        # self.min_volume_ratio = 1.1
+        self.min_volume_ratio    = float(getattr(cfg, "ENTRY_MIN_VOLUME_RATIO", 1.10))
 
         # MOMENTUM: ratio of (3-bar change) / (10-bar change)
         #   This is a *ratio*, not a percentage. When recent move aligns with
@@ -58,12 +61,14 @@ class IntelligentEntryFilter:
         #   was fine in theory but the direction check (recent_change <= 0)
         #   already blocks counter-moves — the ratio check adds little and
         #   often misfires when longer_change is tiny. Set low; raise if needed.
-        self.min_momentum_score = 0.2
+        # self.min_momentum_score = 0.2
+        self.min_momentum_score  = float(getattr(cfg, "ENTRY_MIN_MOMENTUM",    0.20))
 
         # ORDER FLOW: (up_volume - down_volume) / total_volume  → range [-1, +1]
         #   0.5 meant 75% of bars had to close up — almost never true in chop.
         #   0.1 means just a slight net-buying bias, which is realistic.
-        self.min_order_flow_score = 0.1
+        # self.min_order_flow_score = 0.1
+        self.min_order_flow_score= float(getattr(cfg, "ENTRY_MIN_ORDER_FLOW",   0.10))
 
         # TREND: (sma_fast - sma_slow) / sma_slow  → expressed as a fraction
         #   e.g. 0.001 = price is 0.1% above the slow MA (a real trend signal).
@@ -104,6 +109,14 @@ class IntelligentEntryFilter:
             f"(confidence={regime_info['confidence']:.2f}) - "
             f"{regime_info['explanation']}"
         )
+
+        # RANGING regime: patterns are unreliable - no override permitted
+        if regime_info["regime"] == 'RANGING':
+            self.logger.warning(
+                f"{CROSS} Entry BLOCKED: RANGING regime - ORB patterns unreliable in chop "
+                f"(confidence={regime_info['confidence']:.2f})"
+            )
+            return False, "ranging_regime_block"
         
         # ⭐ ADAPT THRESHOLDS based on regime
         original_thresholds = self._save_current_thresholds()
