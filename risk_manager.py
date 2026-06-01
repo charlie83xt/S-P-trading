@@ -70,8 +70,8 @@ class RiskManager:
 
         # Trailing stop settings — tightened for sniper exits
         self.use_trailing_stops = True
-        self.trail_activation_points = 2.0  # activate after 2 pts profit (was 3.0)
-        self.trail_distance_points = 1.5    # trail 1.5 pts behind (was 2.0)
+        self.trail_activation_points = 4.0  # activate after 4 pts profit (was 2.0)
+        self.trail_distance_points = 2.5    # trail 2.5 pts behind (was 1.5)
 
         # Track highest/lowest price per position
         self.position_extremes: dict = {}
@@ -191,9 +191,9 @@ class RiskManager:
         # If the signal provided a structure-based stop, use it as the floor
         pos = self.positions.get(self._norm_sym(symbol), {})
         signal_stop = pos.get("stop_est_points")
-        if signal_stop and signal_stop > 0:
-            # stop_pts = max(stop_pts, float(signal_stop))
-            stop_pts = float(signal_stop)
+        if signal_stop and float(signal_stop) > 0:
+            stop_pts = min(stop_pts, float(signal_stop))
+            # stop_pts = float(signal_stop)
 
 
         take_pts = max( 

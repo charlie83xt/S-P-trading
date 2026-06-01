@@ -148,10 +148,18 @@ class TradeAnalytics:
                 
                 status TEXT,  -- opened/closed
                 dry_run BOOLEAN,
-                
+                strategy_name TEXT,
+
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+
+        # Migrate existing DBs that predate this column
+        try:
+            cursor.execute('ALTER TABLE trades_enhanced ADD COLUMN strategy_name TEXT')
+            conn.commit()
+        except Exception:
+            pass # Column already exist
         
         # Table 3: Daily summary stats
         cursor.execute('''
@@ -276,8 +284,8 @@ class TradeAnalytics:
                 entry_price, exit_price, pnl, pnl_points,
                 ts_open, ts_close, duration_seconds,
                 entry_reason, exit_reason,
-                market_context, status, dry_run
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                market_context, status, dry_run, strategy_name
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             trade_record.get('trade_id') or trade_record.get('fill_id'),
             trade_record.get('signal_id'),
@@ -297,7 +305,8 @@ class TradeAnalytics:
             trade_record.get('exit_reason'),
             json.dumps(trade_record.get('market_context', {})),
             trade_record.get('status', 'opened'),
-            trade_record.get('dry', False)
+            trade_record.get('dry', False),
+            trade_record.get('strategy_name'),
         ))
         
         conn.commit()
@@ -358,7 +367,7 @@ class TradeAnalytics:
     
         cursor.execute('''
             SELECT
-                s.strategy_name,
+                COALESCE(t.strategy_name, s.strategy_name, 'Unknown') as strategy_name,
                 COUNT(t.trade_id) as total_trades,
                 SUM(CASE WHEN t.pnl > 0 THEN 1 ELSE 0 END) as wins,
                 SUM(CASE WHEN t.pnl < 0 THEN 1 ELSE 0 END) as losses,
@@ -368,11 +377,11 @@ class TradeAnalytics:
                 AVG(CASE WHEN t.pnl < 0 THEN t.pnl END) as avg_loss,
                 MAX(t.pnl) as max_win,
                 MIN(t.pnl) as max_loss
-            FROM signals s
-            LEFT JOIN trades_enhanced t ON s.signal_id = t.signal_id
-            WHERE s.executed = 1
-            AND date(s.ts) >= date('now', '-' || ? || ' days')
-            GROUP BY s.strategy_name
+            FROM trades_enhanced t
+            LEFT JOIN signals s ON t.signal_id = s.signal_id
+            WHERE t.status = 'closed'
+            AND date(t.ts_open) >= date('now', '-' || ? || ' days')
+            GROUP BY COALESCE(t.strategy_name, s.strategy_name, 'Unknown')
         ''', (days,))
     
         results = {}
@@ -414,11 +423,11 @@ class TradeAnalytics:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT t.pnl
-            FROM signals s
-            JOIN trades_enhanced t ON s.signal_id = t.signal_id
-            WHERE s.strategy_name = ?
+            FROM trades_enhanced t
+            LEFT JOIN signals s ON t.signal_id = s.signal_id
+            WHERE COALESCE(t.strategy_name, s.strategy_name, 'Unknown') = ?
             AND t.status = 'closed'
-            AND date(s.ts) >= date('now', '-' || ? || ' days')
+            AND date(t.ts_open) >= date('now', '-' || ? || ' days')
         ''', (strategy_name, days))
     
         pnls = [row[0] for row in cursor.fetchall() if row[0] is not None]
