@@ -62,7 +62,7 @@ class RiskManager:
         self.daily_pnl: float = 0.0
         self._last_reset_date = datetime.utcnow().date()
         # ES default multiplier (adjust per symbol if we want)
-        self.contract_multipliers: dict[str, float] = {"ES": 50.0}
+        self.contract_multipliers: dict[str, float] = getattr(config, 'CONTRACT_MULTIPLIERS', {"ES": 50.0, "MES": 5.0})
 
         self.wins = 0
         self.losses = 0

@@ -68,6 +68,9 @@ class StrategyManager:
             lookback=getattr(self.config, 'MEAN_REVERSION_LOOKBACK', 20),
             std_dev=getattr(self.config, 'MEAN_REVERSION_STD_DEV', 2.0),
             max_trades_per_day=getattr(self.config, 'MEAN_REVERSION_MAX_TRADES', 4),
+            min_bandwith_pct=getattr(self.config, 'MEAN_REVERSION_MIN_BANDWIDTH', 0.0010),
+            cooldown_bars=getattr(self.config, 'MEAN_REVERSION_COOLDOWN_BARS', 3),
+            require_reentry_confirmation=getattr(self.config, 'MEAN_REVERSION_REQUIRE_CONFIRMATION', True)
         )
 
         # MeanReversion (Old) for afternoon session (12:00 PM - 4:00 PM ET) in even days
@@ -171,14 +174,16 @@ class StrategyManager:
             # A/B Test: Temporary alternating between new and old strategy 12:00 PM - 4:00 PM
             current_day = datetime.now(ET_TZ).day
 
-            if current_day % 2 == 0:
-                # Even days: use old strategy
-                self.logger.debug(f"{CHART} A/B: Even day {current_day} -> MeanReversion")
-                return "MeanReversion"
-            else:
-                # Odd days: Use new strategy
-                self.logger.debug(f"{CHART} A/B: Odd day {current_day} -> PreviousDayHL")
-                return "PreviousDayHL"
+            # if current_day % 2 == 0:
+            #     # Even days: use old strategy
+            #     self.logger.debug(f"{CHART} A/B: Even day {current_day} -> MeanReversion")
+            #     return "MeanReversion"
+            # else:
+            #     # Odd days: Use new strategy
+            #     self.logger.debug(f"{CHART} A/B: Odd day {current_day} -> PreviousDayHL")
+            #     return "PreviousDayHL"
+            self.logger.debug(f"{CHART} A/B: Even day {current_day} -> MeanReversion")
+            return "MeanReversion"
 
         elif 8 <= hour_et < 9:
             return "OpeningRange"  # Add when built

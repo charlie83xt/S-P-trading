@@ -148,9 +148,9 @@ def create(name: str, *, data_manager, **params):
             session_start=time(12, 0),
             session_end=time(16, 0),
             use_session_filter=True,
-            min_bandwidth_pct=0.0025,
-            cooldown_bars=3,
-            require_reentry_confirmation=True,
+            min_bandwidth_pct=float(params.get("min_bandwidth_pct", 0.0010)),
+            cooldown_bars=int(params.get("cooldown_bars", 3)),
+            require_reentry_confirmation=bool(params.get("require_reentry_confirmation", True)),
         )
 
     # ========================================================================

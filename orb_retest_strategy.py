@@ -721,9 +721,9 @@ class ORBRetestStrategy:
                     return None
                 
                 # Generate BUY signal
-                self.state.trades_today += 1
+                # self.state.trades_today += 1
                 self.state.last_signal_ts = ts
-                self.state.phase = "WAIT_BREAK" if not self.allow_only_one_side_per_day else "DONE"
+                # self.state.phase = "WAIT_BREAK" if not self.allow_only_one_side_per_day else "DONE"
                 
                 return {
                     "type": "BUY",
@@ -759,9 +759,9 @@ class ORBRetestStrategy:
                     return None
                 
                 # Generate SELL signal
-                self.state.trades_today += 1
+                # self.state.trades_today += 1
                 self.state.last_signal_ts = ts
-                self.state.phase = "WAIT_BREAK" if not self.allow_only_one_side_per_day else "DONE"
+                # self.state.phase = "WAIT_BREAK" if not self.allow_only_one_side_per_day else "DONE"
                 
                 return {
                     "type": "SELL",
@@ -780,6 +780,21 @@ class ORBRetestStrategy:
         
         # Unknown phase or DONE
         return None
+
+    def on_trade_executed(self) -> None:
+        """
+        Called by trading_bot AFTER signal passes all filters and order is placed.
+        Only then consume the trades_today slot and advance phase.
+        """
+        self.state.trades_today += 1
+        if self.allow_only_one_side_per_day:
+            self.state.phase = "DONE"
+        else:
+            self.state.phase = "WAIT_BREAK"
+            self.state.retest_seen = False
+            self.state.breakout_side = None
+            self.state.breakout_level = None
+
 
     # ============================================================================
     # UI / DASHBOARD SUPPORT
