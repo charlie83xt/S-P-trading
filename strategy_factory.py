@@ -24,6 +24,14 @@ except ImportError:
     _HAS_ORB_RETEST = False
     ORBRetestStrategy = None
 
+# Try to import MNQ VWAP strategy (another cousin's recommendation)
+try:
+    from mnq_vwap_strategy import MNQVwapStrategy
+    _HAS_MNQ_VWAP = True
+except ImportError:
+    _HAS_MNQ_VWAP = False
+    MNQVwapStrategy = None
+
 
 _STRATEGIES = {
     "ORBRetest": {
@@ -49,6 +57,12 @@ _STRATEGIES = {
         "description": "Simple opening range breakout (0-2 trades/day)",
         "available": True,
         "enabled": False, # DISABLED - superseded by ORBRetest
+    },
+    "MNQVwap": {
+        "class": MNQVwapStrategy,
+        "description": "VWAP Fade + Volume Profile for NQ/MNQ",
+        "available": _HAS_MNQ_VWAP,
+        "enabled": True, # Default strategy
     },
     "Test": {
         "class": TestStrategy,
@@ -165,6 +179,16 @@ def create(name: str, *, data_manager, **params):
             max_trades_per_day=int(params.get("max_trades_per_day", 4)),
         )
 
+    # ========================================================================
+    # MEAN REVERSION STRATEGY (Afternoon Session)
+    # ========================================================================
+
+    elif name == "MNQVwap":
+        return MNQVwapStrategy(
+            data_manager=data_manager,
+            symbol=params.get("symbol", "MNQ"),
+            qty=int(params.get("qty", 1)),
+        )
 
     # ========================================================================
     # PREVIOUS DAY HIGH/LOW REVERSAL (Afternoon Session)

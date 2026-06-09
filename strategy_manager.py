@@ -82,6 +82,15 @@ class StrategyManager:
             max_trades_per_day=getattr(self.config, 'MEAN_REVERSION_MAX_TRADES', 4),
         )
 
+        active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+        if active_sym in ("NQ", "MNQ"):
+            strategies["MNQVwap"] = create_strategy(
+                "MNQVwap",
+                data_manager=self.dm,
+                symbol=active_sym,
+                qty=1,
+            )
+
         # PreviousDayHL for afternoon session (12:00 PM - 4:00 PM ET) on odd days
         strategies["PreviousDayHL"] = create_strategy(
             "PreviousDayHL",
@@ -168,6 +177,11 @@ class StrategyManager:
         - 4:00 PM - 8:00 AM: OFF (overnight - you're sleeping)
         - 8:00 AM - 9:45 AM: OpeningRange (pre-market - simpler strategy)
         """
+
+        active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+        if active_sym in ("NQ", "MNQ") and "MNQVwap" in self.strategies:
+            return "MNQVwap"
+
         if (hour_et == 9 and minute_et >= 45) or (10 <= hour_et < 12): # 9:45 - 12:00 PM
             return "ORBRetest"
         elif 12 <= hour_et < 16: 
