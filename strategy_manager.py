@@ -46,6 +46,10 @@ class StrategyManager:
         self.paused_strategies = set()
         self.manual_override = False
         self.manual_strategy_name = None
+        self.active_symbol = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+    
+    def set_active_symbol(self, symbol: str):
+        self.active_symbol = symbol.upper()
    
     def _initialize_strategies(self) -> Dict[str, Any]:
         """Create all strategy instances"""
@@ -68,7 +72,7 @@ class StrategyManager:
             lookback=getattr(self.config, 'MEAN_REVERSION_LOOKBACK', 20),
             std_dev=getattr(self.config, 'MEAN_REVERSION_STD_DEV', 2.0),
             max_trades_per_day=getattr(self.config, 'MEAN_REVERSION_MAX_TRADES', 4),
-            min_bandwith_pct=getattr(self.config, 'MEAN_REVERSION_MIN_BANDWIDTH', 0.0010),
+            min_bandwidth_pct=getattr(self.config, 'MEAN_REVERSION_MIN_BANDWIDTH', 0.0010),
             cooldown_bars=getattr(self.config, 'MEAN_REVERSION_COOLDOWN_BARS', 3),
             require_reentry_confirmation=getattr(self.config, 'MEAN_REVERSION_REQUIRE_CONFIRMATION', True)
         )
@@ -82,14 +86,17 @@ class StrategyManager:
             max_trades_per_day=getattr(self.config, 'MEAN_REVERSION_MAX_TRADES', 4),
         )
 
-        active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
-        if active_sym in ("NQ", "MNQ"):
+        try:
+        # active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+        # if active_sym in ("NQ", "MNQ"):
             strategies["MNQVwap"] = create_strategy(
                 "MNQVwap",
                 data_manager=self.dm,
-                symbol=active_sym,
+                symbol=getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper(),
                 qty=1,
             )
+        except Exception as e:
+            self.logger.warning(f"MNQVwap init skipped: {e}")
 
         # PreviousDayHL for afternoon session (12:00 PM - 4:00 PM ET) on odd days
         strategies["PreviousDayHL"] = create_strategy(
@@ -178,7 +185,8 @@ class StrategyManager:
         - 8:00 AM - 9:45 AM: OpeningRange (pre-market - simpler strategy)
         """
 
-        active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+        # active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+        active_sym = self.active_symbol
         if active_sym in ("NQ", "MNQ") and "MNQVwap" in self.strategies:
             return "MNQVwap"
 

@@ -1342,6 +1342,15 @@ def change_symbol():
         
         # Change the symbol on bot
         bot.symbol = new_symbol
+
+        if hasattr(bot, 'strategy_manager') and bot.strategy_manager:
+            bot.strategy_manager.set_active_symbol(new_symbol)
+            # If swiching to NQ/MNQ, update the MNQVwap instance's symbol too
+            sm = bot.strategy_manager
+            if new_symbol in ("NQ", "MNQ") and "MNQVwap" in sm.strategies:
+                mnq_strat = sm.strategies["MNQVwap"]
+                if hasattr(mnq_strat, "symbol"):
+                    mnq_strat.symbol = new_symbol
         
         app.logger.info(f"{CHART} Symbol changed: {old_symbol} -> {new_symbol}")
         
