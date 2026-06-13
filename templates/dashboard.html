@@ -465,6 +465,7 @@
                     <h1 class="mb-0">
                         <i class="fad fa-sort-amount-up-alt"></i> <!-- fas fa-robot-->
                         Futures Trading Bot v0.1.16
+                        <span class="badge bg-secondary ms-2" id="instance-badge">BOT 1 • MES</span>
                         <span class="badge bg-danger ms-2" id="status-badge">
                             <span class="status-indicator status-stopped"></span>
                             <span id="status-text">Stopped</span>
@@ -1019,6 +1020,17 @@
                 // --- symbol
                 const elSym = document.getElementById('symbol-display');
                 if (elSym) elSym.textContent = status.symbol || 'N/A';
+
+                // --- instance badge
+                const inst = status.instance;
+                const instBadge = document.getElementById('instance-badge');
+                if (inst && instBadge) {
+                    instBadge.textContent = `BOT ${inst.id} · ${inst.symbol}`;
+                    instBadge.className = inst.id === 2
+                        ? 'badge bg-info ms-2'
+                        : 'badge bg-secondary ms-2';
+                }
+
 
                 // --- current price (be careful with 0)
                 const cp = Number(status.current_price);

@@ -84,15 +84,79 @@ def ensure_chrome_running():
 # MAIN
 # ============================================================================
 
+# Port is set after instance selection in main()
+# port = int(os.getenv("PORT", "5050"))
+_DEFAULT_PORT = 5050
 
-port = int(os.getenv("PORT", "5050"))
 
 
-def open_browser():
+def open_browser(p=_DEFAULT_PORT):
     """Open the web browser to the dashboard URL."""
-    url = f"http://localhost:{port}"
+    url = f"http://localhost:{p}"
     production_print(f"{TERRA} Opening web browser to: {url}")
     webbrowser.open(url)
+
+def pick_instance():
+   """Show instance picker dialog. Returns (instance_id, symbol, port)."""
+   try:
+       # Tkinter path — works on Windows and most Mac installs
+       result = {'choice': 1}
+
+       root = tk.Tk()
+       root.title("Trading Bot Launcher")
+       root.geometry("380x190")
+       root.resizable(False, False)
+       root.configure(bg='#0d1117')
+       try:
+           root.eval('tk::PlaceWindow . center')
+       except Exception:
+           pass
+
+       tk.Label(
+           root, text="Select Bot Instance to Start:",
+           font=('Segoe UI', 12, 'bold'),
+           bg='#0d1117', fg='#f0f6fc', pady=16
+       ).pack()
+
+       btn_frame = tk.Frame(root, bg='#0d1117')
+       btn_frame.pack(pady=8)
+
+       def choose(n):
+           result['choice'] = n
+           root.destroy()
+
+       tk.Button(
+           btn_frame, text="Bot 1 — MES / ES\nport 5050",
+           command=lambda: choose(1),
+           bg='#238636', fg='white', font=('Segoe UI', 10, 'bold'),
+           padx=18, pady=10, relief='flat', cursor='hand2'
+       ).pack(side='left', padx=10)
+
+       tk.Button(
+           btn_frame, text="Bot 2 — NQ / MNQ\nport 5051",
+           command=lambda: choose(2),
+           bg='#1f6feb', fg='white', font=('Segoe UI', 10, 'bold'),
+           padx=18, pady=10, relief='flat', cursor='hand2'
+       ).pack(side='left', padx=10)
+
+       root.mainloop()
+       n = result['choice']
+
+   except Exception:
+       # Tkinter unavailable (older Mac dev machine) — CLI fallback
+       print("\n--- Trading Bot Launcher ---")
+       print("1: MES/ES Bot (port 5050)")
+       print("2: NQ/MNQ Bot (port 5051)")
+       try:
+           raw = input("Select instance (1 or 2, default=1): ").strip()
+           n = int(raw) if raw in ('1', '2') else 1
+       except Exception:
+           n = 1
+
+   symbol = 'MES' if n == 1 else 'MNQ'
+   port_num = 4999 + n  # 1→5050, 2→5051
+   return n, symbol, port_num
+
 
 
 def main():
@@ -101,6 +165,19 @@ def main():
 
     if DEBUG:
         production_print("=" * 60)
+
+    # ========================================================================
+    # INSTANCE SELECTION — must happen before importing web_app
+    # ========================================================================
+    instance_id, instance_symbol, port = pick_instance()
+    os.environ['BOT_INSTANCE'] = str(instance_id)
+    os.environ['PORT'] = str(port)
+    os.environ['DATABASE_PATH'] = os.getenv(
+        'DATABASE_PATH',
+        os.path.join('data', 'db', f'market_data_bot{instance_id}.db')
+    )
+    production_print(f"{CHECK} Instance {instance_id} selected: {instance_symbol} on port {port}")
+
     
     # Change to the script directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -134,7 +211,7 @@ def main():
     
     # Schedule browser opening after 3 seconds
     if os.environ.get('LAUNCHED_BY_LAUNCHER') != '1':
-        Timer(3.0, open_browser).start()
+        Timer(3.0, lambda: open_browser(port)).start()
     
     # Import and run the Flask app
     try:

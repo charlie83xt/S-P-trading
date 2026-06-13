@@ -14,6 +14,7 @@ import sys
 import os
 import shutil
 
+
 from trading_bot import TradingBot
 from config import Config
 from api_factory import APIFactory
@@ -39,6 +40,10 @@ from first_run import register_setup_routes
 
 # if not DEBUG:
 #     loggin.getLogger('werkzeug').setLevel(logging.ERROR)z
+
+INSTANCE_ID = int(os.getenv('BOT_INSTANCE', '1'))
+PORT = int(os.getenv('PORT', str(4999 + INSTANCE_ID)))  # Bot1=5050, Bot2=5051
+
 
 class UIWatchdog:
     """
@@ -995,7 +1000,9 @@ def get_status():
                 app.logger.debug(f"Expected error in [web_app.get_status]: {e}")
 
         # return jsonify(dict(_status))
+        s["instance"] = {"id": INSTANCE_ID, "symbol": s.get("symbol", "ES"), "port": PORT}
         return jsonify({"success": True, "status": s})
+
 
 @app.route('/api/start', methods=['POST'])
 def start_bot():
@@ -1133,12 +1140,26 @@ def get_market_analysis():
         """Get market analysis."""
         global bot, cfg, _status
         
-        analysis = dict(getattr(bot, "_latest_analysis", {}) or {}) # if 'bot' in globals() else None
+        analysis = dict(getattr(bot, "_latest_analysis", {}) or {})
         sym = None
         if isinstance(_status, dict):
             sym = _status.get("symbol") or _status.get("sym")
         if not sym:
             sym = getattr(cfg, "DEFAULT_SYMBOL", "ES")
+
+        # Enrich with NQ-specific context when active symbol is NQ/MNQ
+        if sym.upper() in ("NQ", "MNQ"):
+            sm = getattr(bot, "strategy_manager", None)
+            if sm:
+                mnq_strat = getattr(sm, "strategies", {}).get("MNQVwap")
+                if mnq_strat and hasattr(mnq_strat, "analyze_market_context"):
+                    try:
+                        nq_ctx = mnq_strat.analyze_market_context()
+                        if nq_ctx:
+                            analysis.update(nq_ctx)
+                    except Exception as e:
+                        app.logger.debug(f"NQ context fetch failed: {e}")
+
             
             # analysis = getattr(bot, "_latest_analysis", {}) or {}
             # return jsonify({'success': True, 'analysis': bot._latest_analysis})
@@ -1496,5 +1517,5 @@ if __name__ == '__main__':
     if SUPPRESS_WERKZEUG:
         logging.getLogger('werkzeug').setLevel(logging.ERROR)
     
-    app.run(host='0.0.0.0', port=5050, debug=DEBUG)
+    app.run(host='0.0.0.0', port=PORT, debug=DEBUG)
 
