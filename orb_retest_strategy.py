@@ -91,8 +91,9 @@ class ORBRetestStrategy:
         min_signal_gap_sec: float = 30.0,  # Cooldown between signals
         max_trades_per_day: int = 2,  # Max trades per session
         allow_only_one_side_per_day: bool = True,  # Prevents whipsaw
+        max_or_range_points: float = 25.0, # Skip day if OR wider than this
         trade_start_time_et: Tuple[int, int] = (9, 45),  # Earliest trade (h, m)
-        trade_end_time_et: Tuple[int, int] = (12, 0),  # Latest trade (h, m)
+        trade_end_time_et: Tuple[int, int] = (11, 30),  # Latest trade (h, m)
         use_sma_filter: bool = True,  # SMA20/200 trend filter
         sma_timeframe: str = "5m",
     ):
@@ -108,6 +109,7 @@ class ORBRetestStrategy:
         self.min_signal_gap_sec = float(min_signal_gap_sec)
         self.max_trades_per_day = int(max_trades_per_day)
         self.allow_only_one_side_per_day = bool(allow_only_one_side_per_day)
+        self.max_or_range_points = float(max_or_range_points)
         
         self.trade_start_time_et = trade_start_time_et
         self.trade_end_time_et = trade_end_time_et
@@ -173,7 +175,8 @@ class ORBRetestStrategy:
         
         return start_ok and end_ok
 
-    def _in_trading_window(self, ts: float) -> bool:
+    # This method is unwired but in case of wiring needs fixing to inexistent vars
+    def _in_trading_window(self, ts: float) -> bool: 
         """
         Check if current time is within trading window.
         
@@ -197,8 +200,8 @@ class ORBRetestStrategy:
         minute = current_et.minute
         
         # Get window from config
-        start_hour, start_min = self.trade_window_start  # (9, 45)
-        end_hour, end_min = self.trade_window_end        # (12, 0)
+        start_hour, start_min = self.trade_window_start  # (9, 45) => Undeclared VAR
+        end_hour, end_min = self.trade_window_end        # (12, 0) => Undeclared VAR
         
         # Check if before window start
         if hour < start_hour or (hour == start_hour and minute < start_min):
@@ -300,6 +303,21 @@ class ORBRetestStrategy:
         lo = min(float(c["low"]) for c in candles)
         hi = max(float(c["high"]) for c in candles)
         
+        or_range = hi - lo
+        if or_range > self.max_or_range_points:
+            # Range too wide — retest zone is undefinable and R:R is unworkable.
+            # Mark computed so we don't recheck, but never arm the strategy today.
+            self.state.or_low = lo
+            self.state.or_high = hi
+            self.state.or_computed = True
+            self.state.or_ready = False
+            self.state.phase = "DONE"
+            self.logger.warning(
+                f"{WARNING} ORB skipped for {symbol}: OR range {or_range:.2f} pts "
+                f"> max {self.max_or_range_points:.2f} pts — no trades today"
+            )
+            return
+
         self.state.or_low = lo
         self.state.or_high = hi
         self.state.or_ready = True
@@ -496,8 +514,14 @@ class ORBRetestStrategy:
             return None
         
         # Step 2: Check trade window
-        # if not self._within_trade_window(ts):
-        #     return None
+        if not self._within_trade_window(ts):
+            if PRINT_STRATEGY_STATE or should_log_throttled('strategy_state', 300):
+                now_et = self._et_now(ts)
+                self.logger.info(
+                    f"{SANDTIME} ORB outside trade window "
+                    f"({now_et.hour:02d}:{now_et.minute:02d} ET) - no entries"
+                )
+            return None
         
         # Step 3: Check daily trade limits
         if self.state.trades_today >= self.max_trades_per_day:

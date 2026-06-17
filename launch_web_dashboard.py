@@ -11,9 +11,6 @@ import time
 import logging
 from threading import Timer
 
-# Tkinter for double launch
-import tkinter as tk
-from tkinter import simpledialog
 
 # ============================================================================
 # WINDOWS ENCODING FIX - Must be FIRST
@@ -97,65 +94,74 @@ def open_browser(p=_DEFAULT_PORT):
     webbrowser.open(url)
 
 def pick_instance():
-   """Show instance picker dialog. Returns (instance_id, symbol, port)."""
-   try:
-       # Tkinter path — works on Windows and most Mac installs
-       result = {'choice': 1}
+    """Show instance picker dialog. Returns (instance_id, symbol, port)."""
+    n = 1  # default
 
-       root = tk.Tk()
-       root.title("Trading Bot Launcher")
-       root.geometry("380x190")
-       root.resizable(False, False)
-       root.configure(bg='#0d1117')
-       try:
-           root.eval('tk::PlaceWindow . center')
-       except Exception:
-           pass
+    try:
+        # Import inside the function so a missing _tkinter doesn't crash startup
+        import tkinter as tk
 
-       tk.Label(
-           root, text="Select Bot Instance to Start:",
-           font=('Segoe UI', 12, 'bold'),
-           bg='#0d1117', fg='#f0f6fc', pady=16
-       ).pack()
+        result = {'choice': 1}
 
-       btn_frame = tk.Frame(root, bg='#0d1117')
-       btn_frame.pack(pady=8)
+        root = tk.Tk()
+        root.title("Trading Bot Launcher")
+        root.geometry("380x190")
+        root.resizable(False, False)
+        root.configure(bg='#0d1117')
+        try:
+            root.eval('tk::PlaceWindow . center')
+        except Exception:
+            pass
 
-       def choose(n):
-           result['choice'] = n
-           root.destroy()
+        tk.Label(
+            root, text="Select Bot Instance to Start:",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#0d1117', fg='#f0f6fc', pady=16
+        ).pack()
 
-       tk.Button(
-           btn_frame, text="Bot 1 — MES / ES\nport 5050",
-           command=lambda: choose(1),
-           bg='#238636', fg='white', font=('Segoe UI', 10, 'bold'),
-           padx=18, pady=10, relief='flat', cursor='hand2'
-       ).pack(side='left', padx=10)
+        btn_frame = tk.Frame(root, bg='#0d1117')
+        btn_frame.pack(pady=8)
 
-       tk.Button(
-           btn_frame, text="Bot 2 — NQ / MNQ\nport 5051",
-           command=lambda: choose(2),
-           bg='#1f6feb', fg='white', font=('Segoe UI', 10, 'bold'),
-           padx=18, pady=10, relief='flat', cursor='hand2'
-       ).pack(side='left', padx=10)
+        def choose(n_val):
+            result['choice'] = n_val
+            root.destroy()
 
-       root.mainloop()
-       n = result['choice']
+        tk.Button(
+            btn_frame, text="Bot 1 — MES / ES\nport 5050",
+            command=lambda: choose(1),
+            bg='#238636', fg='white', font=('Segoe UI', 10, 'bold'),
+            padx=18, pady=10, relief='flat', cursor='hand2'
+        ).pack(side='left', padx=10)
 
-   except Exception:
-       # Tkinter unavailable (older Mac dev machine) — CLI fallback
-       print("\n--- Trading Bot Launcher ---")
-       print("1: MES/ES Bot (port 5050)")
-       print("2: NQ/MNQ Bot (port 5051)")
-       try:
-           raw = input("Select instance (1 or 2, default=1): ").strip()
-           n = int(raw) if raw in ('1', '2') else 1
-       except Exception:
-           n = 1
+        tk.Button(
+            btn_frame, text="Bot 2 — NQ / MNQ\nport 5051",
+            command=lambda: choose(2),
+            bg='#1f6feb', fg='white', font=('Segoe UI', 10, 'bold'),
+            padx=18, pady=10, relief='flat', cursor='hand2'
+        ).pack(side='left', padx=10)
 
-   symbol = 'MES' if n == 1 else 'MNQ'
-   port_num = 4999 + n  # 1→5050, 2→5051
-   return n, symbol, port_num
+        root.mainloop()
+        n = result['choice']
+
+    except (ImportError, ModuleNotFoundError):
+        # _tkinter not available (older Mac dev machine) — silent CLI fallback
+        print("\n--- Trading Bot Launcher ---")
+        print("1: MES/ES Bot (port 5050)")
+        print("2: NQ/MNQ Bot (port 5051)")
+        try:
+            raw = input("Select instance (1 or 2, default=1): ").strip()
+            n = int(raw) if raw in ('1', '2') else 1
+        except Exception:
+            n = 1
+
+    except Exception as e:
+        # Any other Tk error (display not available, etc.) — fall back silently
+        production_print(f"{WARNING} GUI picker unavailable ({e}), defaulting to Bot 1")
+        n = 1
+
+    symbol = 'MES' if n == 1 else 'MNQ'
+    port_num = 4999 + n  # 1→5050, 2→5051
+    return n, symbol, port_num
 
 
 

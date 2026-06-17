@@ -111,12 +111,20 @@ class IntelligentEntryFilter:
         )
 
         # RANGING regime: patterns are unreliable - no override permitted
+        _mean_rev_strategies = ("MeanReversion", "MeanReversionStrategy")
         if regime_info["regime"] == 'RANGING':
-            self.logger.warning(
-                f"{CROSS} Entry BLOCKED: RANGING regime - ORB patterns unreliable in chop "
-                f"(confidence={regime_info['confidence']:.2f})"
-            )
-            return False, "ranging_regime_block"
+            if strategy_name in _mean_rev_strategies:
+                self.logger.info(
+                    f"{CROSS} RANGING regime - allowing mean-reversion strategy "
+                    f"'{strategy_name}'(chop is its intended condition)"
+                )
+            else:
+                self.logger.warning(
+                    f"{CROSS} Entry BLOCKED: RANGING regime - breakout patterns "
+                    f"unreliable in chop (confidence={regime_info['confidence']:.2f})"
+                )
+
+                return False, "ranging_regime_block"
         
         # ⭐ ADAPT THRESHOLDS based on regime
         original_thresholds = self._save_current_thresholds()
@@ -133,7 +141,7 @@ class IntelligentEntryFilter:
             
             # Layer 2: Momentum
             momentum_ok, momentum_reason = self._check_momentum(
-                symbol, signal_type, signal_price, signal_context
+                symbol, signal_type, signal_price, signal_context, strategy_name
             )
             if not momentum_ok:
                 self.logger.warning(f"{CROSS} Entry BLOCKED: {momentum_reason}")
@@ -238,6 +246,7 @@ class IntelligentEntryFilter:
         signal_type: str,
         signal_price: float,
         signal_context: Optional[Dict] = None,
+        strategy_name: str = "",
     ) -> Tuple[bool, str]:
         """
         Momentum Confirmation - FIXED VERSION.
@@ -276,6 +285,14 @@ class IntelligentEntryFilter:
             # ✅ FIX: Check for strong pattern FIRST
             trigger = (signal_context or {}).get('trigger', '')
             has_strong_pattern = trigger in self.strong_pattern_triggers
+
+            # Mean-reversion deliberately enters AGAINST short-term momentum
+            # (sell he bounce, buy the dip). The directional momentum gate
+            # below is meant for breakout/continuation strategies - skip it
+            # for mean-reversion and treat it like a strong-pattern override.
+            _mean_rev_strategies = ("MeanReversion", "MeanReversionStrategy")
+            if strategy_name in _mean_rev_strategies:
+                has_strong_pattern = True
             
             if signal_type == "BUY":
                 # ✅ FIX: Allow SMALL negative moves for strong patterns

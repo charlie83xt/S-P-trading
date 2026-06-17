@@ -82,6 +82,7 @@ python_modules = [
     'previous_day_high_low_strategy.py',
     'mean_reversion_strategy.py',
     'mean_reversion_strategy_light.py',
+    'mnq_vwap_strategy.py',
     'intelligent_entry_filter.py',
     'market_regime_detector.py',
     'minute_bar_builder.py',
@@ -92,7 +93,8 @@ python_modules = [
     'debug_config.py',
     # -- New Phase 2/3 modules --
     'first_run.py',
-    'update_manager.py'
+    'update_manager.py',
+    'launch_web_dashboard.py'
 ]
 
 # Verify each module exists
@@ -224,6 +226,12 @@ hiddenimports = [
     'postgrest',
     'realtime',
     'storage3',
+
+    # Timezone data (required on Windows - no system tz database)
+    'zoneinfo',
+    'tzdata',
+    'tzdata.zoneinfo',
+    'tzdata.zoneinfo.America',
     
     # Avoid warnings
     'pkg_resources.py2_warn',
@@ -366,7 +374,6 @@ a = Analysis(
         'matplotlib',
         'scipy',
         'PIL',
-        'tkinter',
         'pytest',
         'IPython',
         'notebook',

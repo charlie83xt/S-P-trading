@@ -62,7 +62,7 @@ class StrategyManager:
             opening_range_minutes=self.config.ORB_RETEST_OR_MINUTES,
             breakout_points=self.config.ORB_RETEST_BREAKOUT_POINTS,
             trade_start_time_et=(9, 45),
-            trade_end_time_et=(12, 0)
+            trade_end_time_et=(11, 30)
         )
 
         # MeanReversion for afternoon session (12:00 PM - 4:00 PM ET) in odd days

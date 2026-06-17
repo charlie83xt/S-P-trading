@@ -143,7 +143,7 @@ def create(name: str, *, data_manager, **params):
             max_trades_per_day=int(params.get("max_trades_per_day", 2)),
             allow_only_one_side_per_day=bool(params.get("allow_only_one_side_per_day", True)),
             trade_start_time_et=params.get("trade_start_time_et", (9, 45)),
-            trade_end_time_et=params.get("trade_end_time_et", (12, 0)),
+            trade_end_time_et=params.get("trade_end_time_et", (11, 30)),
             use_sma_filter=bool(params.get("use_sma_filter", True)),
             sma_timeframe=params.get("sma_timeframe", "5m"),
         )
