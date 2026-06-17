@@ -103,7 +103,7 @@ class Config:
     
     # Database settings
     DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///trading_bot.db')
-    DATABASE_PATH = 'data/db/market_data.db'
+    DATABASE_PATH = os.getenv('DATABASE_PATH', 'data/db/market_data.db')
     
     # Logging settings
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
@@ -153,8 +153,8 @@ class Config:
     # MAX_TRADE_DURATION_MINUTES forces a flat exit if price hasn't
     # committed in either direction within the time window.
     # -------------------------------------------------------------------
-    BREAKEVEN_TRIGGER_POINTS = float(os.getenv("BREAKEVEN_TRIGGER_POINTS", "2.0"))
-    BREAKEVEN_BUFFER_POINTS  = float(os.getenv("BREAKEVEN_BUFFER_POINTS",  "0.5"))
+    BREAKEVEN_TRIGGER_POINTS = float(os.getenv("BREAKEVEN_TRIGGER_POINTS", "4.0"))
+    BREAKEVEN_BUFFER_POINTS  = float(os.getenv("BREAKEVEN_BUFFER_POINTS",  "1.0"))
     MAX_TRADE_DURATION_MINUTES = int(os.getenv("MAX_TRADE_DURATION_MINUTES", "20"))
 
     # -------------------------------------------------------------------

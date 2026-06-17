@@ -46,6 +46,10 @@ class StrategyManager:
         self.paused_strategies = set()
         self.manual_override = False
         self.manual_strategy_name = None
+        self.active_symbol = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+    
+    def set_active_symbol(self, symbol: str):
+        self.active_symbol = symbol.upper()
    
     def _initialize_strategies(self) -> Dict[str, Any]:
         """Create all strategy instances"""
@@ -58,7 +62,7 @@ class StrategyManager:
             opening_range_minutes=self.config.ORB_RETEST_OR_MINUTES,
             breakout_points=self.config.ORB_RETEST_BREAKOUT_POINTS,
             trade_start_time_et=(9, 45),
-            trade_end_time_et=(12, 0)
+            trade_end_time_et=(11, 30)
         )
 
         # MeanReversion for afternoon session (12:00 PM - 4:00 PM ET) in odd days
@@ -68,6 +72,9 @@ class StrategyManager:
             lookback=getattr(self.config, 'MEAN_REVERSION_LOOKBACK', 20),
             std_dev=getattr(self.config, 'MEAN_REVERSION_STD_DEV', 2.0),
             max_trades_per_day=getattr(self.config, 'MEAN_REVERSION_MAX_TRADES', 4),
+            min_bandwidth_pct=getattr(self.config, 'MEAN_REVERSION_MIN_BANDWIDTH', 0.0010),
+            cooldown_bars=getattr(self.config, 'MEAN_REVERSION_COOLDOWN_BARS', 3),
+            require_reentry_confirmation=getattr(self.config, 'MEAN_REVERSION_REQUIRE_CONFIRMATION', True)
         )
 
         # MeanReversion (Old) for afternoon session (12:00 PM - 4:00 PM ET) in even days
@@ -78,6 +85,18 @@ class StrategyManager:
             std_dev=getattr(self.config, 'MEAN_REVERSION_STD_DEV', 2.0),
             max_trades_per_day=getattr(self.config, 'MEAN_REVERSION_MAX_TRADES', 4),
         )
+
+        try:
+        # active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+        # if active_sym in ("NQ", "MNQ"):
+            strategies["MNQVwap"] = create_strategy(
+                "MNQVwap",
+                data_manager=self.dm,
+                symbol=getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper(),
+                qty=1,
+            )
+        except Exception as e:
+            self.logger.warning(f"MNQVwap init skipped: {e}")
 
         # PreviousDayHL for afternoon session (12:00 PM - 4:00 PM ET) on odd days
         strategies["PreviousDayHL"] = create_strategy(
@@ -165,20 +184,28 @@ class StrategyManager:
         - 4:00 PM - 8:00 AM: OFF (overnight - you're sleeping)
         - 8:00 AM - 9:45 AM: OpeningRange (pre-market - simpler strategy)
         """
+
+        # active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+        active_sym = self.active_symbol
+        if active_sym in ("NQ", "MNQ") and "MNQVwap" in self.strategies:
+            return "MNQVwap"
+
         if (hour_et == 9 and minute_et >= 45) or (10 <= hour_et < 12): # 9:45 - 12:00 PM
             return "ORBRetest"
         elif 12 <= hour_et < 16: 
             # A/B Test: Temporary alternating between new and old strategy 12:00 PM - 4:00 PM
             current_day = datetime.now(ET_TZ).day
 
-            if current_day % 2 == 0:
-                # Even days: use old strategy
-                self.logger.debug(f"{CHART} A/B: Even day {current_day} -> MeanReversion")
-                return "MeanReversion"
-            else:
-                # Odd days: Use new strategy
-                self.logger.debug(f"{CHART} A/B: Odd day {current_day} -> PreviousDayHL")
-                return "PreviousDayHL"
+            # if current_day % 2 == 0:
+            #     # Even days: use old strategy
+            #     self.logger.debug(f"{CHART} A/B: Even day {current_day} -> MeanReversion")
+            #     return "MeanReversion"
+            # else:
+            #     # Odd days: Use new strategy
+            #     self.logger.debug(f"{CHART} A/B: Odd day {current_day} -> PreviousDayHL")
+            #     return "PreviousDayHL"
+            self.logger.debug(f"{CHART} A/B: Even day {current_day} -> MeanReversion")
+            return "MeanReversion"
 
         elif 8 <= hour_et < 9:
             return "OpeningRange"  # Add when built

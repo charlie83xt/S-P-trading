@@ -658,6 +658,8 @@ class TradingBot:
                 self.trades_executed = getattr(self, "trades_executed", 0) + 1
                 self.logger.info(f"Trade executed successfully: {signal['type']} {exec_qty} {self.symbol}")
 
+            if hasattr(self.strategy, 'on_trade_executed'):
+                self.strategy.on_trade_executed()
                 
         except Exception as e:
             self.logger.error(f"Error processing signal: {e}")

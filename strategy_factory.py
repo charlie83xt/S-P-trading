@@ -24,6 +24,14 @@ except ImportError:
     _HAS_ORB_RETEST = False
     ORBRetestStrategy = None
 
+# Try to import MNQ VWAP strategy (another cousin's recommendation)
+try:
+    from mnq_vwap_strategy import MNQVwapStrategy
+    _HAS_MNQ_VWAP = True
+except ImportError:
+    _HAS_MNQ_VWAP = False
+    MNQVwapStrategy = None
+
 
 _STRATEGIES = {
     "ORBRetest": {
@@ -49,6 +57,12 @@ _STRATEGIES = {
         "description": "Simple opening range breakout (0-2 trades/day)",
         "available": True,
         "enabled": False, # DISABLED - superseded by ORBRetest
+    },
+    "MNQVwap": {
+        "class": MNQVwapStrategy,
+        "description": "VWAP Fade + Volume Profile for NQ/MNQ",
+        "available": _HAS_MNQ_VWAP,
+        "enabled": True, # Default strategy
     },
     "Test": {
         "class": TestStrategy,
@@ -129,7 +143,7 @@ def create(name: str, *, data_manager, **params):
             max_trades_per_day=int(params.get("max_trades_per_day", 2)),
             allow_only_one_side_per_day=bool(params.get("allow_only_one_side_per_day", True)),
             trade_start_time_et=params.get("trade_start_time_et", (9, 45)),
-            trade_end_time_et=params.get("trade_end_time_et", (12, 0)),
+            trade_end_time_et=params.get("trade_end_time_et", (11, 30)),
             use_sma_filter=bool(params.get("use_sma_filter", True)),
             sma_timeframe=params.get("sma_timeframe", "5m"),
         )
@@ -148,9 +162,9 @@ def create(name: str, *, data_manager, **params):
             session_start=time(12, 0),
             session_end=time(16, 0),
             use_session_filter=True,
-            min_bandwidth_pct=0.0025,
-            cooldown_bars=3,
-            require_reentry_confirmation=True,
+            min_bandwidth_pct=float(params.get("min_bandwidth_pct", 0.0010)),
+            cooldown_bars=int(params.get("cooldown_bars", 3)),
+            require_reentry_confirmation=bool(params.get("require_reentry_confirmation", True)),
         )
 
     # ========================================================================
@@ -165,6 +179,16 @@ def create(name: str, *, data_manager, **params):
             max_trades_per_day=int(params.get("max_trades_per_day", 4)),
         )
 
+    # ========================================================================
+    # MEAN REVERSION STRATEGY (Afternoon Session)
+    # ========================================================================
+
+    elif name == "MNQVwap":
+        return MNQVwapStrategy(
+            data_manager=data_manager,
+            symbol=params.get("symbol", "MNQ"),
+            qty=int(params.get("qty", 1)),
+        )
 
     # ========================================================================
     # PREVIOUS DAY HIGH/LOW REVERSAL (Afternoon Session)

@@ -74,92 +74,6 @@ def ensure_chrome_running():
         # Chrome not running - try to launch it
         production_print(f"{CROSS} Chrome not running and auto-launch failed")
         
-        # import subprocess
-        # import platform
-        
-        # system = platform.system()
-        
-        # if system == "Darwin":  # macOS
-        #     chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-        #     user_data_dir = os.path.expanduser("~/.tv_chrome")
-        
-        # elif system == "Windows":
-        #     # Try common Windows locations
-        #     chrome_paths = [
-        #         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        #         r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        #     ]
-        #     chrome_path = None
-        #     for path in chrome_paths:
-        #         if os.path.exists(path):
-        #             chrome_path = path
-        #             break
-            
-        #     if not chrome_path:
-        #         print(f"{CROSS} Chrome not found on Windows")
-        #         print("   Expected locations:")
-        #         for p in chrome_paths:
-        #             print(f"     - {p}")
-        #         return False
-            
-        #     user_data_dir = os.path.expanduser("~/.tv_chrome")
-        
-        # else:  # Linux
-        #     chrome_path = "/usr/bin/google-chrome"
-        #     user_data_dir = os.path.expanduser("~/.tv_chrome")
-        
-        # # Check if Chrome executable exists
-        # if not os.path.exists(chrome_path):
-        #     print(f"{CROSS} Chrome not found at: {chrome_path}")
-        #     print("   Please install Google Chrome or update the path.")
-        #     return False
-        
-        # # Launch Chrome
-        # try:
-        #     args = [
-        #         chrome_path,
-        #         "--remote-debugging-port=9222",
-        #         f"--user-data-dir={user_data_dir}",
-        #         "--no-first-run",
-        #         "--no-default-browser-check",
-        #     ]
-            
-        #     if system == "Windows":
-        #         # Windows needs special handling
-        #         subprocess.Popen(
-        #             args,
-        #             stdout=subprocess.DEVNULL,
-        #             stderr=subprocess.DEVNULL,
-        #             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
-        #         )
-        #     else:
-        #         # Unix-like systems
-        #         subprocess.Popen(
-        #             args,
-        #             stdout=subprocess.DEVNULL,
-        #             stderr=subprocess.DEVNULL
-        #         )
-            
-        #     production_print(f"{CHECK} Chrome launched")
-            
-        #     # Wait for Chrome to be ready
-        #     time.sleep(3)
-            
-        #     # Verify it's running
-        #     try:
-        #         import requests
-        #         response = requests.get("http://localhost:9222/json/version", timeout=3)
-        #         if response.status_code == 200:
-        #             production_print("✓ Chrome ready on port 9222")
-        #             return True
-        #     except:
-        #         pass
-            
-        #     debug_print("⚠️  Chrome launched but not responding yet (may need more time)")
-        #     return True
-        
-        # except Exception as e:
-        #     print(f"{CROSS} Failed to launch Chrome: {e}")
         return False
 
 
@@ -167,15 +81,88 @@ def ensure_chrome_running():
 # MAIN
 # ============================================================================
 
+# Port is set after instance selection in main()
+# port = int(os.getenv("PORT", "5050"))
+_DEFAULT_PORT = 5050
 
-port = int(os.getenv("PORT", "5050"))
 
 
-def open_browser():
+def open_browser(p=_DEFAULT_PORT):
     """Open the web browser to the dashboard URL."""
-    url = f"http://localhost:{port}"
+    url = f"http://localhost:{p}"
     production_print(f"{TERRA} Opening web browser to: {url}")
     webbrowser.open(url)
+
+def pick_instance():
+    """Show instance picker dialog. Returns (instance_id, symbol, port)."""
+    n = 1  # default
+
+    try:
+        # Import inside the function so a missing _tkinter doesn't crash startup
+        import tkinter as tk
+
+        result = {'choice': 1}
+
+        root = tk.Tk()
+        root.title("Trading Bot Launcher")
+        root.geometry("380x190")
+        root.resizable(False, False)
+        root.configure(bg='#0d1117')
+        try:
+            root.eval('tk::PlaceWindow . center')
+        except Exception:
+            pass
+
+        tk.Label(
+            root, text="Select Bot Instance to Start:",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#0d1117', fg='#f0f6fc', pady=16
+        ).pack()
+
+        btn_frame = tk.Frame(root, bg='#0d1117')
+        btn_frame.pack(pady=8)
+
+        def choose(n_val):
+            result['choice'] = n_val
+            root.destroy()
+
+        tk.Button(
+            btn_frame, text="Bot 1 — MES / ES\nport 5050",
+            command=lambda: choose(1),
+            bg='#238636', fg='white', font=('Segoe UI', 10, 'bold'),
+            padx=18, pady=10, relief='flat', cursor='hand2'
+        ).pack(side='left', padx=10)
+
+        tk.Button(
+            btn_frame, text="Bot 2 — NQ / MNQ\nport 5051",
+            command=lambda: choose(2),
+            bg='#1f6feb', fg='white', font=('Segoe UI', 10, 'bold'),
+            padx=18, pady=10, relief='flat', cursor='hand2'
+        ).pack(side='left', padx=10)
+
+        root.mainloop()
+        n = result['choice']
+
+    except (ImportError, ModuleNotFoundError):
+        # _tkinter not available (older Mac dev machine) — silent CLI fallback
+        print("\n--- Trading Bot Launcher ---")
+        print("1: MES/ES Bot (port 5050)")
+        print("2: NQ/MNQ Bot (port 5051)")
+        try:
+            raw = input("Select instance (1 or 2, default=1): ").strip()
+            n = int(raw) if raw in ('1', '2') else 1
+        except Exception:
+            n = 1
+
+    except Exception as e:
+        # Any other Tk error (display not available, etc.) — fall back silently
+        production_print(f"{WARNING} GUI picker unavailable ({e}), defaulting to Bot 1")
+        n = 1
+
+    symbol = 'MES' if n == 1 else 'MNQ'
+    port_num = 4999 + n  # 1→5050, 2→5051
+    return n, symbol, port_num
+
 
 
 def main():
@@ -184,6 +171,19 @@ def main():
 
     if DEBUG:
         production_print("=" * 60)
+
+    # ========================================================================
+    # INSTANCE SELECTION — must happen before importing web_app
+    # ========================================================================
+    instance_id, instance_symbol, port = pick_instance()
+    os.environ['BOT_INSTANCE'] = str(instance_id)
+    os.environ['PORT'] = str(port)
+    os.environ['DATABASE_PATH'] = os.getenv(
+        'DATABASE_PATH',
+        os.path.join('data', 'db', f'market_data_bot{instance_id}.db')
+    )
+    production_print(f"{CHECK} Instance {instance_id} selected: {instance_symbol} on port {port}")
+
     
     # Change to the script directory
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -217,7 +217,7 @@ def main():
     
     # Schedule browser opening after 3 seconds
     if os.environ.get('LAUNCHED_BY_LAUNCHER') != '1':
-        Timer(3.0, open_browser).start()
+        Timer(3.0, lambda: open_browser(port)).start()
     
     # Import and run the Flask app
     try:
