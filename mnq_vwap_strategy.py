@@ -231,7 +231,7 @@ class MNQVwapStrategy:
     def reset_strategy(self) -> None:
         self._session_date = None
 
-    def analyze_market_context(self, symbol: str) -> Dict[str, Any]:
+    def analyze_market_context(self, symbol: str = None) -> Dict[str, Any]:
         self._reset_if_new_session()
         return {
             "strategy": "MNQVwap",

@@ -87,12 +87,16 @@ class StrategyManager:
         )
 
         try:
-        # active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
-        # if active_sym in ("NQ", "MNQ"):
+            # Always initialize with a valid NQ symbol.
+            # active_sym = updated at runtime via set_active_symbol()
+            # when the user switches to NQ/MNQ in the UI.
+            _mnq_init_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+            if _mnq_init_sym not in ("NQ", "MNQ"):
+                _mnq_init_sym = "MNQ" # Safe default for initialization 
             strategies["MNQVwap"] = create_strategy(
                 "MNQVwap",
                 data_manager=self.dm,
-                symbol=getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper(),
+                symbol=_mnq_init_sym,
                 qty=1,
             )
         except Exception as e:
