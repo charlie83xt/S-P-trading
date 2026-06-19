@@ -178,6 +178,7 @@ def main():
     instance_id, instance_symbol, port = pick_instance()
     os.environ['BOT_INSTANCE'] = str(instance_id)
     os.environ['PORT'] = str(port)
+    os.environ['DEFAULT_SYMBOL'] = instance_symbol
     os.environ['DATABASE_PATH'] = os.getenv(
         'DATABASE_PATH',
         os.path.join('data', 'db', f'market_data_bot{instance_id}.db')

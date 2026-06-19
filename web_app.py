@@ -692,7 +692,7 @@ def _trading_main():
 
             if cmd == "connect":
                 platform = payload.get("platform") or cfg.TRADING_PLATFORM
-                symbol = payload.get("symbol") or getattr(cfg, "DEFAULT_SYMBOL", "ES")
+                symbol = payload.get("symbol") or getattr(bot, "symbol", None) or getattr(cfg, "DEFAULT_SYMBOL", "ES")
                 
 
                 # Rebuild config+API+bot to requested platform inside THIS thread
