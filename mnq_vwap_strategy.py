@@ -155,31 +155,40 @@ class MNQVwapStrategy:
         )
 
     def _get_prev_day_bars(self) -> List[dict]:
+        """Return bars for the most recent trading day (skips weekends and holidays)."""
         try:
-            if hasattr(self.dm, "get_previous_day_bars"):
-                raw = self.dm.get_previous_day_bars(self.symbol) or []
-            elif hasattr(self.dm, "query_yesterday_bars"):
-                raw = self.dm.query_yesterday_bars(
-                    self.symbol,
-                    start_hour=9, start_min=30,
-                    end_hour=16, end_min=0,
-                ) or []
-            else:
+            if not (hasattr(self.dm, "get_historical_bars") and
+                    hasattr(self.dm, "_et_to_utc_timestamp")):
                 return []
+
+            from datetime import date, timedelta
+
+            # Walk back up to 5 calendar days to find the last day with bars
+            for days_back in range(1, 6):
+                target = (date.today() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+                start_ts = self.dm._et_to_utc_timestamp(target, "09:30:00")
+                end_ts   = self.dm._et_to_utc_timestamp(target, "16:00:00")
+                raw = self.dm.get_historical_bars(self.symbol, start_ts, end_ts) or []
+                if raw:
+                    break
+            else:
+                return []  # nothing found in 5 days
 
             normalized = []
             for b in raw:
                 normalized.append({
-                    "o": float(b.get("open")  or b.get("o", 0)),
-                    "h": float(b.get("high")  or b.get("h", 0)),
-                    "l": float(b.get("low")   or b.get("l", 0)),
-                    "c": float(b.get("close") or b.get("c", 0)),
+                    "o": float(b.get("open")   or b.get("o", 0)),
+                    "h": float(b.get("high")   or b.get("h", 0)),
+                    "l": float(b.get("low")    or b.get("l", 0)),
+                    "c": float(b.get("close")  or b.get("c", 0)),
                     "v": float(b.get("volume") or b.get("v", 1)),
                 })
             return normalized
+
         except Exception as exc:
             self.logger.warning("Could not fetch previous day bars: %s", exc)
             return []
+            
 
     # ------------------------------------------------------------------ #
     # Bar feeding                                                        #
@@ -187,64 +196,69 @@ class MNQVwapStrategy:
 
     def _seed_today_vwap(self) -> None:
         """
-        Feed completed 5-minute bars from today's Supabase data into the VWAP filter
-        so the strategy has VWAP history even when the bot starts mid-session.
+        Fetch today's 1-min Supabase bars from 9:00 AM ET onward, aggregate into
+        5-min bars, and seed the VWAP filter. Runs once at session init so the
+        strategy has VWAP direction before the first possible trade at 9:45 ET.
         """
         try:
-            if not hasattr(self.dm, "get_historical_bars"):
+            if not (hasattr(self.dm, "get_historical_bars") and
+                    hasattr(self.dm, "_et_to_utc_timestamp")):
                 return
 
-            now_et = datetime.now(ET_TZ)
+            from datetime import timedelta, datetime as _dt
+
+            now_et    = datetime.now(ET_TZ)
             today_str = now_et.date().strftime('%Y-%m-%d')
 
-            # Fetch from 9:30 ET to 5 minutes ago (avoid the in-progress bar)
-            if hasattr(self.dm, "_et_to_utc_timestamp"):
-                start_ts = self.dm._et_to_utc_timestamp(today_str, "09:30:00")
-                from datetime import timedelta
-                seed_end_et = now_et - timedelta(minutes=5)
-                end_ts = self.dm._et_to_utc_timestamp(
-                    seed_end_et.date().strftime('%Y-%m-%d'),
-                    seed_end_et.strftime('%H:%M:%S'),
-                )
-            else:
-                return
+            start_ts = self.dm._et_to_utc_timestamp(today_str, "09:00:00")
+
+            # End: 5 minutes before now so we never feed the in-progress bar
+            seed_end_et  = now_et - timedelta(minutes=5)
+            end_ts = self.dm._et_to_utc_timestamp(
+                seed_end_et.date().strftime('%Y-%m-%d'),
+                seed_end_et.strftime('%H:%M:%S'),
+            )
 
             raw = self.dm.get_historical_bars(self.symbol, start_ts, end_ts) or []
             if not raw:
-                self.logger.info("MNQVwap: no today bars in Supabase to seed VWAP")
+                self.logger.info(
+                    "MNQVwap: no today bars in Supabase (symbol=%s) — VWAP will build from live",
+                    self.symbol,
+                )
                 return
 
-            # Normalize to dicts
-            bars_1m = []
+            # Parse Supabase rows — format is "2026-06-22 02:48:00+00" (note +00, not +00:00)
+            tagged = []
             for b in raw:
-                ts_raw = b.get("ts") or b.get("timestamp") or ""
-                # Parse epoch from ISO string — Supabase returns ISO 8601
+                ts_raw = str(b.get("ts") or "")
                 try:
-                    from datetime import datetime as _dt
-                    dt = _dt.fromisoformat(ts_raw.replace("Z", "+00:00"))
-                    epoch = dt.timestamp()
+                    ts_clean = ts_raw.replace(" ", "T")
+                    # Python fromisoformat needs +HH:MM, not just +HH
+                    if len(ts_clean) > 3 and ts_clean[-3] == "+" and ":" not in ts_clean[-3:]:
+                        ts_clean += ":00"
+                    epoch = _dt.fromisoformat(ts_clean).timestamp()
                 except Exception:
-                    epoch = 0.0
+                    continue
 
-                bars_1m.append({
-                    "ts": epoch,
+                tagged.append({
+                    "ts":   epoch,
                     "win5": int(epoch // 300) * 300,
-                    "o": float(b.get("open")  or b.get("o", 0)),
-                    "h": float(b.get("high")  or b.get("h", 0)),
-                    "l": float(b.get("low")   or b.get("l", 0)),
-                    "c": float(b.get("close") or b.get("c", 0)),
-                    "v": float(b.get("volume") or b.get("v", 1)),
+                    "o": float(b.get("open")   or 0),
+                    "h": float(b.get("high")   or 0),
+                    "l": float(b.get("low")    or 0),
+                    "c": float(b.get("close")  or 0),
+                    "v": float(b.get("volume") or 1),
                 })
 
-            # Aggregate into 5-minute bars and feed
-            wins = sorted(set(b["win5"] for b in bars_1m))
+            if not tagged:
+                return
+
             current_win = int(now_et.timestamp() // 300) * 300
+            wins = sorted(w for w in set(b["win5"] for b in tagged) if w < current_win)
             fed = 0
 
             for win in wins:
-                if win >= current_win:
-                    continue  # skip in-progress window
-                wb = [b for b in bars_1m if b["win5"] == win]
+                wb = [b for b in tagged if b["win5"] == win]
                 agg = {
                     "o": wb[0]["o"],
                     "h": max(b["h"] for b in wb),
@@ -253,12 +267,13 @@ class MNQVwapStrategy:
                     "v": sum(b["v"] for b in wb),
                     "ts": win,
                 }
+                # Signal return is discarded — only VWAP history matters here
                 self._suite.on_new_5m_bar(agg, next_bar_open=agg["c"])
                 self._last_5m_window = win
                 fed += 1
 
             self.logger.info(
-                "MNQVwap: seeded VWAP with %d today bars (5m buckets from Supabase)", fed
+                "MNQVwap: seeded VWAP with %d 5-min bars from Supabase (09:00 ET → now)", fed
             )
 
         except Exception as exc:
