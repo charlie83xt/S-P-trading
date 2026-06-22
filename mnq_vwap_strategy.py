@@ -115,6 +115,8 @@ class MNQVwapStrategy:
         self._last_bar_ts: Optional[float] = None
         self._open_price: float = 0.0
 
+        self._last_5m_window: Optional[int] = None 
+
     # ------------------------------------------------------------------ #
     # Session management                                                    #
     # ------------------------------------------------------------------ #
@@ -128,6 +130,8 @@ class MNQVwapStrategy:
         self._pending_signal = None
         self._last_bar_ts = None
 
+        self._last_5m_window = None
+
         try:
             self._open_price = float(self.dm.get_current_price(self.symbol) or 0)
         except Exception:
@@ -140,6 +144,8 @@ class MNQVwapStrategy:
             profile_snapshot=snapshot,
             news_times=[],       # no news feed; governor skips news blocks
         )
+
+        self._seed_today_vwap()
 
         self.logger.info(
             "MNQVwap session reset | date=%s | POC=%.2f VAH=%.2f VAL=%.2f PDH=%.2f PDL=%.2f",
@@ -176,43 +182,151 @@ class MNQVwapStrategy:
             return []
 
     # ------------------------------------------------------------------ #
-    # Bar feeding                                                           #
+    # Bar feeding                                                        #
     # ------------------------------------------------------------------ #
 
+    def _seed_today_vwap(self) -> None:
+        """
+        Feed completed 5-minute bars from today's Supabase data into the VWAP filter
+        so the strategy has VWAP history even when the bot starts mid-session.
+        """
+        try:
+            if not hasattr(self.dm, "get_historical_bars"):
+                return
+
+            now_et = datetime.now(ET_TZ)
+            today_str = now_et.date().strftime('%Y-%m-%d')
+
+            # Fetch from 9:30 ET to 5 minutes ago (avoid the in-progress bar)
+            if hasattr(self.dm, "_et_to_utc_timestamp"):
+                start_ts = self.dm._et_to_utc_timestamp(today_str, "09:30:00")
+                from datetime import timedelta
+                seed_end_et = now_et - timedelta(minutes=5)
+                end_ts = self.dm._et_to_utc_timestamp(
+                    seed_end_et.date().strftime('%Y-%m-%d'),
+                    seed_end_et.strftime('%H:%M:%S'),
+                )
+            else:
+                return
+
+            raw = self.dm.get_historical_bars(self.symbol, start_ts, end_ts) or []
+            if not raw:
+                self.logger.info("MNQVwap: no today bars in Supabase to seed VWAP")
+                return
+
+            # Normalize to dicts
+            bars_1m = []
+            for b in raw:
+                ts_raw = b.get("ts") or b.get("timestamp") or ""
+                # Parse epoch from ISO string — Supabase returns ISO 8601
+                try:
+                    from datetime import datetime as _dt
+                    dt = _dt.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                    epoch = dt.timestamp()
+                except Exception:
+                    epoch = 0.0
+
+                bars_1m.append({
+                    "ts": epoch,
+                    "win5": int(epoch // 300) * 300,
+                    "o": float(b.get("open")  or b.get("o", 0)),
+                    "h": float(b.get("high")  or b.get("h", 0)),
+                    "l": float(b.get("low")   or b.get("l", 0)),
+                    "c": float(b.get("close") or b.get("c", 0)),
+                    "v": float(b.get("volume") or b.get("v", 1)),
+                })
+
+            # Aggregate into 5-minute bars and feed
+            wins = sorted(set(b["win5"] for b in bars_1m))
+            current_win = int(now_et.timestamp() // 300) * 300
+            fed = 0
+
+            for win in wins:
+                if win >= current_win:
+                    continue  # skip in-progress window
+                wb = [b for b in bars_1m if b["win5"] == win]
+                agg = {
+                    "o": wb[0]["o"],
+                    "h": max(b["h"] for b in wb),
+                    "l": min(b["l"] for b in wb),
+                    "c": wb[-1]["c"],
+                    "v": sum(b["v"] for b in wb),
+                    "ts": win,
+                }
+                self._suite.on_new_5m_bar(agg, next_bar_open=agg["c"])
+                self._last_5m_window = win
+                fed += 1
+
+            self.logger.info(
+                "MNQVwap: seeded VWAP with %d today bars (5m buckets from Supabase)", fed
+            )
+
+        except Exception as exc:
+            self.logger.warning("MNQVwap VWAP seeding failed: %s", exc)
+
+
     def ingest_tick(self, symbol: str, ts_epoch: float, price: Optional[float]) -> None:
-        """Called by trading_bot on every price tick."""
-        if price is None or not self._suite:
+        """Called by trading_bot on every price tick. Aggregates 1-min bars into 5-min bars."""
+        if price is None:
             return
         self._reset_if_new_session()
         if not self._suite:
             return
 
         try:
-            bars = self.dm.live.get_last_n(symbol, n=2)
-            if not bars:
+            raw_bars = self.dm.live.get_last_n(symbol, n=7)
+            if not raw_bars:
                 return
-            latest = bars[-1]
-            ts = float(getattr(latest, "ts_open", ts_epoch))
-            if ts == self._last_bar_ts:
-                return
-            self._last_bar_ts = ts
 
-            bar_dict = {
-                "o": float(latest.open),
-                "h": float(latest.high),
-                "l": float(latest.low),
-                "c": float(latest.close),
-                "v": float(getattr(latest, "volume", 1)),
-                "ts": ts,
-            }
+            # Tag each 1-min bar with its 5-minute window floor
+            tagged = []
+            for b in raw_bars:
+                ts = float(getattr(b, "ts_open", 0))
+                tagged.append({
+                    "ts": ts,
+                    "win5": int(ts // 300) * 300,   # e.g. 09:45 → 09:45, 09:46–09:49 → 09:45
+                    "o": float(b.open),
+                    "h": float(b.high),
+                    "l": float(b.low),
+                    "c": float(b.close),
+                    "v": float(getattr(b, "volume", 1)),
+                })
 
-            # Feed bar to suite — may return a Signal
-            sig = self._suite.on_new_5m_bar(bar_dict, next_bar_open=price)
-            if sig is not None and self._pending_signal is None:
-                self._pending_signal = sig
+            # Current (in-progress) window — never feed until it closes
+            current_win = tagged[-1]["win5"]
+
+            # Completed windows not yet fed to the suite
+            unseen = sorted(
+                win for win in set(b["win5"] for b in tagged)
+                if win < current_win
+                and (self._last_5m_window is None or win > self._last_5m_window)
+            )
+
+            for win in unseen:
+                wb = [b for b in tagged if b["win5"] == win]
+                agg = {
+                    "o": wb[0]["o"],
+                    "h": max(b["h"] for b in wb),
+                    "l": min(b["l"] for b in wb),
+                    "c": wb[-1]["c"],
+                    "v": sum(b["v"] for b in wb),
+                    "ts": win,
+                }
+                self._last_5m_window = win
+
+                # next_bar_open: first bar of the following window, else current tick
+                next_open = price
+                for b in tagged:
+                    if b["win5"] > win:
+                        next_open = b["o"]
+                        break
+
+                sig = self._suite.on_new_5m_bar(agg, next_bar_open=next_open)
+                if sig is not None and self._pending_signal is None:
+                    self._pending_signal = sig
 
         except Exception as exc:
-            self.logger.debug("ingest_tick bar update failed: %s", exc)
+            self.logger.debug("ingest_tick 5m aggregation failed: %s", exc)
 
     # ------------------------------------------------------------------ #
     # Signal check                                                          #

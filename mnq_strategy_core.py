@@ -73,7 +73,7 @@ def points_between(a: float, b: float) -> float:
     return abs(a - b)
 
 def rejection(module: str, reason: str):
-    log.info(f"{module}: blocked — {reason}")
+    log.debug(f"{module}: blocked — {reason}")
 
 
 # ─────────────────────────────────────────────

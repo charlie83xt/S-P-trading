@@ -102,6 +102,21 @@ class StrategyManager:
         except Exception as e:
             self.logger.warning(f"MNQVwap init skipped: {e}")
 
+
+        try:
+            _mes_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+            if _mes_sym not in ("MES", "ES"):
+                _mes_sym = "MES"
+            strategies["MESRunner"] = create_strategy(
+                "MESRunner",
+                data_manager=self.dm,
+                symbol=_mes_sym,
+                qty=1,
+            )
+        except Exception as e:
+            self.logger.warning(f"MESRunner init skipped: {e}")
+
+
         # PreviousDayHL for afternoon session (12:00 PM - 4:00 PM ET) on odd days
         strategies["PreviousDayHL"] = create_strategy(
             "PreviousDayHL",
@@ -194,11 +209,17 @@ class StrategyManager:
         if active_sym in ("NQ", "MNQ") and "MNQVwap" in self.strategies:
             return "MNQVwap"
 
-        if (hour_et == 9 and minute_et >= 45) or (10 <= hour_et < 12): # 9:45 - 12:00 PM
+        if active_sym in ("MES", "ES") and "MESRunner" in self.strategies:
+            if (hour_et == 9 and minute_et >= 45) or (10 <= hour_et < 11) or \
+                (hour_et == 11 and minute_et < 30):
+                return "MESRunner" # 9:45 - 11:30 PM
+
+        if (hour_et == 9 and minute_et >= 45) or (10 <= hour_et < 12):
             return "ORBRetest"
-        elif 12 <= hour_et < 16: 
+        elif 12 <= hour_et < 16:
+            # self.logger.debug(f"{CHART} Afternoon -> MeanReversion")
             # A/B Test: Temporary alternating between new and old strategy 12:00 PM - 4:00 PM
-            current_day = datetime.now(ET_TZ).day
+            # current_day = datetime.now(ET_TZ).day
 
             # if current_day % 2 == 0:
             #     # Even days: use old strategy
