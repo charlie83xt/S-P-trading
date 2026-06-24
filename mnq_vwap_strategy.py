@@ -8,6 +8,7 @@ Stop / trailing / exit execution stays in the bot's existing risk_manager.
 import time
 import logging
 from datetime import datetime, date
+from datetime import timezone as _tz
 from typing import Optional, Dict, Any, List
 from zoneinfo import ZoneInfo
 
@@ -188,7 +189,7 @@ class MNQVwapStrategy:
         except Exception as exc:
             self.logger.warning("Could not fetch previous day bars: %s", exc)
             return []
-            
+
 
     # ------------------------------------------------------------------ #
     # Bar feeding                                                        #
@@ -213,11 +214,8 @@ class MNQVwapStrategy:
             start_ts = self.dm._et_to_utc_timestamp(today_str, "09:00:00")
 
             # End: 5 minutes before now so we never feed the in-progress bar
-            seed_end_et  = now_et - timedelta(minutes=5)
-            end_ts = self.dm._et_to_utc_timestamp(
-                seed_end_et.date().strftime('%Y-%m-%d'),
-                seed_end_et.strftime('%H:%M:%S'),
-            )
+            seed_end_utc  = (now_et - timedelta(minutes=5)).astimezone(_tc.utc)
+            end_ts = seed_end_utc.strftime('%Y-%m-%d %H:%M:%S')
 
             raw = self.dm.get_historical_bars(self.symbol, start_ts, end_ts) or []
             if not raw:
