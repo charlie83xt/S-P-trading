@@ -102,6 +102,18 @@ class StrategyManager:
         except Exception as e:
             self.logger.warning(f"MNQVwap init skipped: {e}")
 
+        # MNQSim Block #############
+        try:
+            _mnq_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+            if _mnq_sym not in ("NQ", "MNQ"):
+                _mnq_sym = "MNQ"
+            strategies["MNQSim"] = create_strategy(
+                "MNQSim", data_manager=self.dm, symbol=_mnq_sym,
+                qty=1, enabled_setups={"D"}, dry=True,
+            )
+        except Exception as e:
+            self.logger.warning(f"MNQSim init skipped: {e}")
+
 
         try:
             _mes_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
@@ -205,6 +217,13 @@ class StrategyManager:
         """
 
         # active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+        active_sym = self.active_symbol
+        if active_sym in ("NQ", "MNQ"):
+            if "MNQSim" in self.strategies:
+                return "MNQSim"
+            if "MNQVwap" in self.strategies:
+                return "MNQVwap"
+
         active_sym = self.active_symbol
         if active_sym in ("NQ", "MNQ") and "MNQVwap" in self.strategies:
             return "MNQVwap"

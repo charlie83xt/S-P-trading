@@ -40,6 +40,14 @@ except ImportError:
     _HAS_MES_RUNNER = False
     MESStrategyWrapper = None
 
+# MNQ sim/paper strategy (mnq_sim package)
+try:
+    from mnq_sim_strategy import MNQSimStrategy
+    _HAS_MNQ_SIM = True
+except ImportError:
+    _HAS_MNQ_SIM = False
+    MNQSimStrategy = None
+
 
 _STRATEGIES = {
     "ORBRetest": {
@@ -83,6 +91,12 @@ _STRATEGIES = {
         "description": "ORB + PDH/PDL + VWAP Reclaim suite for MES/ES (9:45-11:30 ET)",
         "available": _HAS_MES_RUNNER,
         "enabled": True, #
+    },
+    "MNQSim": {
+        "class": MNQSimStrategy,
+        "description": "mnq_sim classifier+gate for NQ/MNQ (D-only paper by default)",
+        "available": _HAS_MNQ_SIM,
+        "enabled": True,
     },
 }
 
@@ -217,6 +231,21 @@ def create(name: str, *, data_manager, **params):
             data_manager=data_manager,
             symbol=params.get("symbol", "MES"),
             qty=int(params.get("qty", 1)),
+        )
+    
+    # ========================================================================
+    # MNQ STRATEGY Sim (ORB + PDH/PDL + VWAP Reclaim suite)
+    # ========================================================================
+    elif name == "MNQSim":
+        if not _HAS_MNQ_SIM:
+            raise ValueError("MNQSim not available. Ensure mnq_sim_strategy.py and the "
+                             "mnq_sim/ package are present.")
+        return MNQSimStrategy(
+            data_manager=data_manager,
+            symbol=params.get("symbol", "MNQ"),
+            qty=int(params.get("qty", 1)),
+            enabled_setups=params.get("enabled_setups", {"D"}),
+            dry=bool(params.get("dry", True)),
         )
 
     # ========================================================================
