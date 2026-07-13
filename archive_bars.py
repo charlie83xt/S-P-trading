@@ -10,6 +10,7 @@ import csv, os
 from datetime import datetime, timedelta, timezone
 from supabase import create_client
 from config import Config
+import gzip
 
 SYMBOLS = ("MNQ_CONTFUT", "MES_CONTFUT", "NQ_CONTFUT", "ES_CONTFUT")
 OUT_ROOT = "data/archive"
@@ -54,13 +55,13 @@ def main():
         os.makedirs(out_dir, exist_ok=True)
         d = first
         while d <= today:
-            path = os.path.join(out_dir, f"{d.isoformat()}.csv")
+            path = os.path.join(out_dir, f"{d.isoformat()}.csv.gz")
             if os.path.exists(path) and d < today:   # past day already saved
                 d += timedelta(days=1); continue
             rows = fetch_day(sb, sym, d)
             if rows:
                 cols = ["symbol", "ts", "open", "high", "low", "close", "volume"]
-                with open(path, "w", newline="") as f:
+                with gzip.open(path, "wt", newline="") as f:
                     w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
                     w.writeheader()
                     for r in rows:
