@@ -125,6 +125,16 @@ class IntelligentEntryFilter:
                 )
 
                 return False, "ranging_regime_block"
+
+        # STOP_HUNT: the detector says "wait for reversal confirmation" — do NOT
+        # enter into a live liquidity sweep. Safer to miss than to be the liquidity.
+        if regime_info["regime"] == "STOP_HUNT":
+            self.logger.warning(
+                f"{CROSS} Entry BLOCKED: STOP_HUNT "
+                f"(confidence={regime_info['confidence']:.2f}) - not trading into the sweep"
+            )
+            return False, "stop_hunt_block"
+            
         
         # ⭐ ADAPT THRESHOLDS based on regime
         original_thresholds = self._save_current_thresholds()

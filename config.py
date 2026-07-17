@@ -182,6 +182,11 @@ class Config:
     MEAN_REVERSION_COOLDOWN_BARS = int(os.getenv("MEAN_REVERSION_COOLDOWN_BARS", "3"))
     MEAN_REVERSION_REQUIRE_CONFIRMATION = os.getenv("MEAN_REVERSION_REQUIRE_CONFIRMATION", "true").lower() == 'true'
 
+    STORAGE_REMOTE = os.getenv("STORAGE_REMOTE", "gdrive:sp-trading-archive")
+    ARCHIVE_LOCAL_ROOT = os.getenv("ARCHIVE_LOCAL_ROOT", "data/archive")
+
+
+
 
     @classmethod
     def validate_platform(cls):
