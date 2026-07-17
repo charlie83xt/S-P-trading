@@ -316,12 +316,14 @@ for config_file in config_files:
 print()
 
 # JSON files (IMPORTANT for Tradovate)
-json_files = glob.glob('*.json')
+_SECRET_JSON = {"credentials.json", "client_secret.json", "token.json", "service_account.json"}
+json_files = [j for j in glob.glob('*.json')
+              if j not in ('package.json', 'package-lock.json') and j not in _SECRET_JSON]
 print("\nJSON files to bundle:")
 for json_file in json_files:
-    if json_file not in ['package.json', 'package-lock.json']:
-        datas.append((json_file, '.'))
-        print(f"  → {json_file}")
+    datas.append((json_file, '.'))
+    print(f"  → {json_file}")
+
 
 
 # ============================================================================

@@ -218,44 +218,32 @@ class StrategyManager:
 
         # active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
         active_sym = self.active_symbol
+
         if active_sym in ("NQ", "MNQ"):
             if "MNQSim" in self.strategies:
                 return "MNQSim"
             if "MNQVwap" in self.strategies:
                 return "MNQVwap"
 
-        active_sym = self.active_symbol
-        if active_sym in ("NQ", "MNQ") and "MNQVwap" in self.strategies:
-            return "MNQVwap"
-
+        # MES/ES: MESRunner 9:45–11:30, MeanReversion 12:00–16:00, nothing dead between
         if active_sym in ("MES", "ES") and "MESRunner" in self.strategies:
             if (hour_et == 9 and minute_et >= 45) or (10 <= hour_et < 11) or \
-                (hour_et == 11 and minute_et < 30):
-                return "MESRunner" # 9:45 - 11:30 PM
+               (hour_et == 11 and minute_et < 30):
+                return "MESRunner"
+            if 12 <= hour_et < 16:
+                return "MeanReversion"
+            return "OpeningRange"          # pre/post/gap → benign, no dead window
 
+        # Fallback schedule for any other symbol
         if (hour_et == 9 and minute_et >= 45) or (10 <= hour_et < 12):
             return "ORBRetest"
         elif 12 <= hour_et < 16:
-            # self.logger.debug(f"{CHART} Afternoon -> MeanReversion")
-            # A/B Test: Temporary alternating between new and old strategy 12:00 PM - 4:00 PM
-            # current_day = datetime.now(ET_TZ).day
-
-            # if current_day % 2 == 0:
-            #     # Even days: use old strategy
-            #     self.logger.debug(f"{CHART} A/B: Even day {current_day} -> MeanReversion")
-            #     return "MeanReversion"
-            # else:
-            #     # Odd days: Use new strategy
-            #     self.logger.debug(f"{CHART} A/B: Odd day {current_day} -> PreviousDayHL")
-            #     return "PreviousDayHL"
-            self.logger.debug(f"{CHART} A/B: Afternoon session -> MeanReversion")
             return "MeanReversion"
-
         elif 8 <= hour_et < 9:
-            return "OpeningRange"  # Add when built
-        else:
-            # Outside trading hours - use safest/simplest strategy
             return "OpeningRange"
+        else:
+            return "OpeningRange"
+
    
     def _get_fallback_strategy(self, hour_et: int) -> str:
         """Get alternative strategy if primary is paused"""
