@@ -96,7 +96,13 @@ class MNQSimStrategy:
             return
 
         now_et = datetime.now(ET)
-        today_bars = self._fetch_5m(today, (9, 30), (now_et.hour, now_et.minute))
+        # today_bars = self._fetch_5m(today, (9, 30), (now_et.hour, now_et.minute))
+        # NEW: before 09:30 there is nothing to seed; live bars build state from the open.
+        if (now_et.hour, now_et.minute) >= (9, 30):
+            today_bars = self._fetch_5m(today, (9, 30), (now_et.hour, now_et.minute))
+        else:
+            today_bars = []
+
         rth_open = today_bars[0].open if today_bars else float(
             self.dm.get_current_price(self.symbol) or levels.poc)
 
@@ -138,6 +144,9 @@ class MNQSimStrategy:
         return None
 
     def _fetch_5m(self, d: date, start_hm, end_hm) -> List[Bar]:
+        # Nohing to fetch if the window is empty/inverted (e.g. connected pre-09:30)
+        if (start_hm[0], start_hm[1]) >= (end_hm[0], end_hm[1]):
+            return []
         try:
             start = self.dm._et_to_utc_timestamp(
                 d.strftime("%Y-%m-%d"), f"{start_hm[0]:02d}:{start_hm[1]:02d}:00")
@@ -255,6 +264,8 @@ class MNQSimStrategy:
                 continue
             gd = self._gate.evaluate(d, b, b.ts, atr, self._risk)
             if not gd.allow:
+                self.logger.info("MNQSim %s FIRED but GATED @ %.2f: %s | (%s)",
+                                 d.tag, b.close, gd.reason, d.reason)
                 continue
             stop, pts = _structural_stop(d, b, atr)
             self.logger.info("MNQSim SIGNAL %s %s entry_ref=%.2f stop=%.2f (%.1fpt) size=%d | %s",
@@ -266,6 +277,7 @@ class MNQSimStrategy:
                 self._pending_live = self._to_signal(d, gd, stop, pts)
                 self._last_live_level = d.level
             break
+
 
     # ---- paper-sim bracket (dry) -------------------------------------- #
 
