@@ -111,11 +111,6 @@ for module in python_modules:
         print(f"  ✗ {module} - NOT FOUND (will skip)")
         missing_modules.append(module)
 
-# --- mnq_sim/ package (preserve folder structure) ---
-for pyf in glob.glob('mnq_sim/*.py'):
-    datas.append((pyf, 'mnq_sim'))
-    print(f"  → {pyf}")
-
 if missing_modules:
     print(f"\n⚠️  Warning: {len(missing_modules)} modules not found")
     print("   Build will continue but these won't be available at runtime")
@@ -269,6 +264,11 @@ for module in python_modules:
     if os.path.isfile(module) and module not in missing_modules:
         datas.append((module, '.'))
         print(f"  → {module} will be bundled")
+
+# --- mnq_sim/ package (preserve folder structure) ---
+for pyf in glob.glob('mnq_sim/*.py'):
+    datas.append((pyf, 'mnq_sim'))
+    print(f"  → {pyf}")
 
 # Templates (CRITICAL for Flask)
 if os.path.isdir('templates'):
