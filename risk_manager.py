@@ -168,15 +168,32 @@ class RiskManager:
         Returns: (stop_points, take_points)
         """
 
-        vol = self.update_volatility(symbol, current_price, alpha=0.05) 
-        stop_loss_base_points = getattr(self.config, "STOP_LOSS_BASE_POINTS", 4.0) 
-        take_profit_base_points = getattr(self.config, "TAKE_PROFIT_BASE_POINTS", 6.0)
-        volatility_stop_multiplier = getattr(self.config, "VOLATILITY_STOP_MULTIPLIER", 2.5)
-        volaility_take_multiplier = getattr(self.config, "VOLATILITY_TAKE_MULTIPLIER", 4.0)
-        max_stop_loss_points = getattr(self.config, "MAX_STOP_LOSS_POINTS", 12.0)
-        min_stop_loss_point = getattr(self.config, "MIN_STOP_LOSS_POINTS", 2.0)
-        max_take_profit_points = getattr(self.config, "MAX_TAKE_PROFIT_POINTS", 20.0)
-        min_take_profit_points  = getattr(self.config, "MIN_TAKE_PROFIT_POINTS", 4.0)
+        vol = self.update_volatility(symbol, current_price, alpha=0.05)
+
+        sym_norm = self._norm_sym(symbol)
+        is_nq = sym_norm in ("NQ", "MNQ")
+
+        if is_nq:
+            # MNQ/NQ move ~4x MES per point-equivalent; give D its structural room.
+            stop_loss_base_points = getattr(self.config, "NQ_STOP_LOSS_BASE_POINTS", 10.0) 
+            take_profit_base_points = getattr(self.config, "NQ_TAKE_PROFIT_BASE_POINTS", 15.0)
+            volatility_stop_multiplier = getattr(self.config, "VOLATILITY_STOP_MULTIPLIER", 2.5)
+            volaility_take_multiplier = getattr(self.config, "VOLATILITY_TAKE_MULTIPLIER", 4.0)
+            max_stop_loss_points = getattr(self.config, "NQ_MAX_STOP_LOSS_POINTS", 30.0)
+            min_stop_loss_point = getattr(self.config, "NQ_MIN_STOP_LOSS_POINTS", 6.0)
+            max_take_profit_points = getattr(self.config, "NQ_MAX_TAKE_PROFIT_POINTS", 45.0)
+            min_take_profit_points  = getattr(self.config, "NQ_MIN_TAKE_PROFIT_POINTS", 10.0)
+        
+        else:
+
+            stop_loss_base_points = getattr(self.config, "STOP_LOSS_BASE_POINTS", 4.0) 
+            take_profit_base_points = getattr(self.config, "TAKE_PROFIT_BASE_POINTS", 6.0)
+            volatility_stop_multiplier = getattr(self.config, "VOLATILITY_STOP_MULTIPLIER", 2.5)
+            volaility_take_multiplier = getattr(self.config, "VOLATILITY_TAKE_MULTIPLIER", 4.0)
+            max_stop_loss_points = getattr(self.config, "MAX_STOP_LOSS_POINTS", 12.0)
+            min_stop_loss_point = getattr(self.config, "MIN_STOP_LOSS_POINTS", 2.0)
+            max_take_profit_points = getattr(self.config, "MAX_TAKE_PROFIT_POINTS", 20.0)
+            min_take_profit_points  = getattr(self.config, "MIN_TAKE_PROFIT_POINTS", 4.0)
 
         
         stop_pts = max( 
@@ -192,8 +209,11 @@ class RiskManager:
         pos = self.positions.get(self._norm_sym(symbol), {})
         signal_stop = pos.get("stop_est_points")
         if signal_stop and float(signal_stop) > 0:
-            stop_pts = min(stop_pts, float(signal_stop))
-            # stop_pts = float(signal_stop)
+            if is_nq:
+                stop_pts = min(float(signal_stop), max_stop_loss_points) # trust
+            else:
+                stop_pts = min(stop_pts, float(signal_stop))
+                # stop_pts = float(signal_stop)
 
 
         take_pts = max( 
@@ -371,7 +391,10 @@ class RiskManager:
             return None
 
         # Read sniper config (safe defaults keep behaviour unchanged if env missing)
-        be_trigger = float(getattr(self.config, "BREAKEVEN_TRIGGER_POINTS", 2.0))
+        be_trigger = float(getattr(self.config,
+            "NQ_BREAKEVEN_TRIGGER_POINTS" if self._norm_sym(sym) in ("MNQ", "NQ")
+            else "BREAKEVEN_TRIGGER_POINTS", 8.0 if self._norm_sym(sym) in ("MNQ", "NQ") 
+            else 2.0))
         be_buffer  = float(getattr(self.config, "BREAKEVEN_BUFFER_POINTS",  0.25))
 
         # Bootstrap extremes in case position was opened before this code ran

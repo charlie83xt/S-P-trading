@@ -1394,6 +1394,12 @@ class TradingBot:
                 len(rm.trade_history),
                 getattr(rm, "instant_close", None)
             )
+            # Adding closed pnl for MNQVwap
+            if trade and isinstance(trade.get('closed'), dict):
+                pnl_usd = float(trade['closed'].get('pnl', 0.0))
+                if hasattr(self.strategy, 'record_trade_result'):
+                    self.strategy.record_trade_result(pnl_usd)
+                    
             return {
                 "fill_id": fill_id,
                 "signal_id": signal_id,

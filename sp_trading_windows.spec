@@ -95,6 +95,10 @@ python_modules = [
     'first_run.py',
     'update_manager.py',
     'launch_web_dashboard.py'
+    'mes_strategy_runner.py',
+    'mes_strategy_wrapper.py',
+    'mnq_sim_strategy.py',
+    'mnq_strategy_core.py',
 ]
 
 # Verify each module exists
@@ -106,6 +110,11 @@ for module in python_modules:
     else:
         print(f"  ✗ {module} - NOT FOUND (will skip)")
         missing_modules.append(module)
+
+# --- mnq_sim/ package (preserve folder structure) ---
+for pyf in glob.glob('mnq_sim/*.py'):
+    datas.append((pyf, 'mnq_sim'))
+    print(f"  → {pyf}")
 
 if missing_modules:
     print(f"\n⚠️  Warning: {len(missing_modules)} modules not found")
@@ -236,6 +245,17 @@ hiddenimports = [
     # Avoid warnings
     'pkg_resources.py2_warn',
     'pkg_resources.markers',
+
+    'mes_strategy_runner', 
+    'mes_strategy_wrapper', 
+    'mnq_sim_strategy',
+    'mnq_sim', 
+    'mnq_sim.types', 
+    'mnq_sim.vwap', 
+    'mnq_sim.profile',
+    'mnq_sim.classifier', 
+    'mnq_sim.gate', 
+    'mnq_sim.backtest',
 ]
 
 # ============================================================================
@@ -296,12 +316,14 @@ for config_file in config_files:
 print()
 
 # JSON files (IMPORTANT for Tradovate)
-json_files = glob.glob('*.json')
+_SECRET_JSON = {"credentials.json", "client_secret.json", "token.json", "service_account.json"}
+json_files = [j for j in glob.glob('*.json')
+              if j not in ('package.json', 'package-lock.json') and j not in _SECRET_JSON]
 print("\nJSON files to bundle:")
 for json_file in json_files:
-    if json_file not in ['package.json', 'package-lock.json']:
-        datas.append((json_file, '.'))
-        print(f"  → {json_file}")
+    datas.append((json_file, '.'))
+    print(f"  → {json_file}")
+
 
 
 # ============================================================================

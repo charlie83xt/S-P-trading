@@ -87,16 +87,47 @@ class StrategyManager:
         )
 
         try:
-        # active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
-        # if active_sym in ("NQ", "MNQ"):
+            # Always initialize with a valid NQ symbol.
+            # active_sym = updated at runtime via set_active_symbol()
+            # when the user switches to NQ/MNQ in the UI.
+            _mnq_init_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+            if _mnq_init_sym not in ("NQ", "MNQ"):
+                _mnq_init_sym = "MNQ" # Safe default for initialization 
             strategies["MNQVwap"] = create_strategy(
                 "MNQVwap",
                 data_manager=self.dm,
-                symbol=getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper(),
+                symbol=_mnq_init_sym,
                 qty=1,
             )
         except Exception as e:
             self.logger.warning(f"MNQVwap init skipped: {e}")
+
+        # MNQSim Block #############
+        try:
+            _mnq_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+            if _mnq_sym not in ("NQ", "MNQ"):
+                _mnq_sym = "MNQ"
+            strategies["MNQSim"] = create_strategy(
+                "MNQSim", data_manager=self.dm, symbol=_mnq_sym,
+                qty=1, enabled_setups={"D"}, dry=True,
+            )
+        except Exception as e:
+            self.logger.warning(f"MNQSim init skipped: {e}")
+
+
+        try:
+            _mes_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+            if _mes_sym not in ("MES", "ES"):
+                _mes_sym = "MES"
+            strategies["MESRunner"] = create_strategy(
+                "MESRunner",
+                data_manager=self.dm,
+                symbol=_mes_sym,
+                qty=1,
+            )
+        except Exception as e:
+            self.logger.warning(f"MESRunner init skipped: {e}")
+
 
         # PreviousDayHL for afternoon session (12:00 PM - 4:00 PM ET) on odd days
         strategies["PreviousDayHL"] = create_strategy(
@@ -187,31 +218,32 @@ class StrategyManager:
 
         # active_sym = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
         active_sym = self.active_symbol
-        if active_sym in ("NQ", "MNQ") and "MNQVwap" in self.strategies:
-            return "MNQVwap"
 
-        if (hour_et == 9 and minute_et >= 45) or (10 <= hour_et < 12): # 9:45 - 12:00 PM
+        if active_sym in ("NQ", "MNQ"):
+            if "MNQSim" in self.strategies:
+                return "MNQSim"
+            if "MNQVwap" in self.strategies:
+                return "MNQVwap"
+
+        # MES/ES: MESRunner 9:45–11:30, MeanReversion 12:00–16:00, nothing dead between
+        if active_sym in ("MES", "ES") and "MESRunner" in self.strategies:
+            if (hour_et == 9 and minute_et >= 45) or (10 <= hour_et < 11) or \
+               (hour_et == 11 and minute_et < 30):
+                return "MESRunner"
+            if 12 <= hour_et < 16:
+                return "MeanReversion"
+            return "OpeningRange"          # pre/post/gap → benign, no dead window
+
+        # Fallback schedule for any other symbol
+        if (hour_et == 9 and minute_et >= 45) or (10 <= hour_et < 12):
             return "ORBRetest"
-        elif 12 <= hour_et < 16: 
-            # A/B Test: Temporary alternating between new and old strategy 12:00 PM - 4:00 PM
-            current_day = datetime.now(ET_TZ).day
-
-            # if current_day % 2 == 0:
-            #     # Even days: use old strategy
-            #     self.logger.debug(f"{CHART} A/B: Even day {current_day} -> MeanReversion")
-            #     return "MeanReversion"
-            # else:
-            #     # Odd days: Use new strategy
-            #     self.logger.debug(f"{CHART} A/B: Odd day {current_day} -> PreviousDayHL")
-            #     return "PreviousDayHL"
-            self.logger.debug(f"{CHART} A/B: Even day {current_day} -> MeanReversion")
+        elif 12 <= hour_et < 16:
             return "MeanReversion"
-
         elif 8 <= hour_et < 9:
-            return "OpeningRange"  # Add when built
-        else:
-            # Outside trading hours - use safest/simplest strategy
             return "OpeningRange"
+        else:
+            return "OpeningRange"
+
    
     def _get_fallback_strategy(self, hour_et: int) -> str:
         """Get alternative strategy if primary is paused"""
