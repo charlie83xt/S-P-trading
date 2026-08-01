@@ -44,36 +44,17 @@ if SUPPRESS_WERKZEUG:
 # ============================================================================
 
 
-def ensure_chrome_running():
-    """
-    Ensure Chrome is running with remote debugging.
-    Uses chrome_helper.py if available, otherwise tries manual launch.
-    
-    Returns:
-        True if Chrome is running or launched successfully
-    """
+def ensure_chrome_running(port=9222, app_name="S-P-Trading"):
+    """Ensure a debug Chrome is up on `port`, with a per-instance profile so two
+    instances don't share (and lock) the same user-data-dir."""
     try:
-        # Try using chrome_helper module
-        import chrome_helper 
-        return chrome_helper.ensure_chrome_running(port=9222)
-    
+        from chrome_helper import launch_chrome, wait_for_chrome
+        if wait_for_chrome(port=port, timeout=2):
+            return True                      # already up — reuse existing Tradovate login
+        launch_chrome(port=port, app_name=app_name)
+        return wait_for_chrome(port=port, timeout=15)
     except Exception as e:
-        # Fallback: manual check
-        debug_print(f"{WARNING}  chrome_helper failed: {e}")
-        
-        try:
-            import requests
-            # Check if Chrome is already running
-            response = requests.get("http://localhost:9222/json/version", timeout=2)
-            if response.status_code == 200:
-                production_print("✓ Chrome already running on port 9222")
-                return True
-        except:
-            pass
-        
-        # Chrome not running - try to launch it
-        production_print(f"{CROSS} Chrome not running and auto-launch failed")
-        
+        debug_print(f"{WARNING}  chrome launch failed on port {port}: {e}")
         return False
 
 
@@ -160,8 +141,9 @@ def pick_instance():
         n = 1
 
     symbol = 'MES' if n == 1 else 'MNQ'
-    port_num = 4999 + n  # 1→5050, 2→5051
-    return n, symbol, port_num
+    port_num = 4999 + n      # 1→5050, 2→5051
+    chrome_port = 9221 + n   # 1→9222, 2→9223 
+    return n, symbol, port_num, chrome_port
 
 
 
@@ -175,15 +157,19 @@ def main():
     # ========================================================================
     # INSTANCE SELECTION — must happen before importing web_app
     # ========================================================================
-    instance_id, instance_symbol, port = pick_instance()
+    instance_id, instance_symbol, port, chrome_port = pick_instance()
     os.environ['BOT_INSTANCE'] = str(instance_id)
     os.environ['PORT'] = str(port)
     os.environ['DEFAULT_SYMBOL'] = instance_symbol
+    os.environ['CDP_PORT'] = str(chrome_port)
+    os.environ['CDP_URL'] = f'http://localhost:{chrome_port}'
+    os.environ['BROWSER_MODE'] = 'cdp'
+    os.environ['PW_MODE'] = 'cdp'
     os.environ['DATABASE_PATH'] = os.getenv(
         'DATABASE_PATH',
         os.path.join('data', 'db', f'market_data_bot{instance_id}.db')
     )
-    production_print(f"{CHECK} Instance {instance_id} selected: {instance_symbol} on port {port}")
+    production_print(f"{CHECK} Instance {instance_id}: {instance_symbol} | dashboard : {port} | chrome :{chrome_port}")
 
     
     # Change to the script directory
@@ -197,7 +183,7 @@ def main():
     # ========================================================================
     production_print(f"{TERRA} Checking Chrome remote debugging...")
     
-    if not ensure_chrome_running():
+    if not ensure_chrome_running(port=chrome_port, app_name=f'S-P-Trading-Bot{instance_id}'):
         print("\n" + "="*60)
         print(f"{WARNING}  WARNING: Chrome not running")
         print("="*60)

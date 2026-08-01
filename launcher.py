@@ -221,6 +221,7 @@ def setup_wizard(logger):
 
 def start_chrome(logger, config: dict) -> bool:
     chrome_port = config.get("chrome_port", 9222)
+    app_name = config.get("chrome_app_name", "S-P-Trading")
     logger.info(f"{TERRA} Launching Chrome on port {chrome_port}...")
     try:
         kill_chrome_on_port(chrome_port)
@@ -228,7 +229,7 @@ def start_chrome(logger, config: dict) -> bool:
     except Exception:
         pass
 
-    chrome_process = launch_chrome(port=chrome_port)
+    chrome_process = launch_chrome(port=chrome_port, app_name=app_name)
     if not chrome_process:
         logger.error(f"{CROSS} Failed to launch Chrome")
         return False
@@ -240,6 +241,59 @@ def start_chrome(logger, config: dict) -> bool:
 
     logger.info(f"{CHECK} Chrome ready")
     return True
+
+
+# ============================================================================
+# INSTANCE PICKER + RESOLVER
+# ============================================================================
+
+def pick_instance_gui():
+    """GUI picker for the packaged app. Returns 1 (MES) or 2 (MNQ)."""
+    try:
+        import tkinter as tk
+        result = {'choice': 1}
+        root = tk.Tk()
+        root.title("S-P Trading — Select Instance")
+        root.geometry("380x190"); root.resizable(False, False)
+        root.configure(bg='#0d1117')
+        try: root.eval('tk::PlaceWindow . center')
+        except Exception: pass
+        tk.Label(root, text="Select Bot Instance to Start:", font=('Segoe UI', 12, 'bold'),
+                 bg='#0d1117', fg='#f0f6fc', pady=16).pack()
+        f = tk.Frame(root, bg='#0d1117'); f.pack(pady=8)
+        def choose(v): result['choice'] = v; root.destroy()
+        tk.Button(f, text="Bot 1 — MES / ES\nport 5050", command=lambda: choose(1),
+                  bg='#238636', fg='white', font=('Segoe UI', 10, 'bold'),
+                  padx=18, pady=10, relief='flat', cursor='hand2').pack(side='left', padx=10)
+        tk.Button(f, text="Bot 2 — NQ / MNQ\nport 5051", command=lambda: choose(2),
+                  bg='#1f6feb', fg='white', font=('Segoe UI', 10, 'bold'),
+                  padx=18, pady=10, relief='flat', cursor='hand2').pack(side='left', padx=10)
+        root.mainloop()
+        return result['choice']
+    except Exception:
+        return 1   # tkinter unavailable → default Bot 1
+
+
+def resolve_instance(args, logger):
+    """Pick the instance, set all per-instance env vars, return config overrides."""
+    n = getattr(args, 'instance', None)
+    if n not in (1, 2):
+        n = pick_instance_gui()
+    symbol      = 'MES' if n == 1 else 'MNQ'
+    dash_port   = 4999 + n     # 1→5050, 2→5051
+    chrome_port = 9221 + n     # 1→9222, 2→9223
+    os.environ['BOT_INSTANCE']   = str(n)
+    os.environ['DEFAULT_SYMBOL'] = symbol
+    os.environ['PORT']           = str(dash_port)
+    os.environ['CDP_PORT']       = str(chrome_port)
+    os.environ['CDP_URL']        = f'http://localhost:{chrome_port}'
+    os.environ['BROWSER_MODE']   = 'cdp'
+    os.environ['PW_MODE']        = 'cdp'
+    os.environ.setdefault('DATABASE_PATH',
+        os.path.join('data', 'db', f'market_data_bot{n}.db'))
+    logger.info(f"Instance {n}: {symbol} | dashboard :{dash_port} | chrome :{chrome_port}")
+    return {'dashboard_port': dash_port, 'chrome_port': chrome_port,
+            'chrome_app_name': f'S-P-Trading-Bot{n}'}
 
 
 # ============================================================================
@@ -256,8 +310,8 @@ def start_dashboard(logger, config: dict) -> bool:
                 try:
                     os.environ['PW_MODE']      = 'cdp'
                     os.environ['BROWSER_MODE'] = 'cdp'
-                    os.environ['CDP_PORT']     = '9222'
-                    os.environ['CDP_URL']      = 'http://localhost:9222'
+                    os.environ['CDP_PORT']     = str(config.get("chrome_port", 9222))
+                    os.environ['CDP_URL']      = f'http://localhost:{config.get("chrome_port", 9222)}'
                     os.environ['PORT']         = str(dashboard_port)
                     os.environ['LAUNCHED_BY_LAUNCHER'] = '1'
                     logger.info("Environment set: PW_MODE=cdp, CDP_PORT=9222")
@@ -362,6 +416,7 @@ Examples:
   python launcher.py --machine-id  Show machine ID (to request a license)
         """
     )
+    parser.add_argument('--instance', type=int, choices=[1, 2], help='Bot instance to run (1 = MES/ES, 2 = NQ/MNQ)')
     parser.add_argument('--setup',      action='store_true', help='Run setup wizard')
     parser.add_argument('--debug',      action='store_true', help='Enable debug logging')
     parser.add_argument('--version',    action='store_true', help='Show version')
@@ -424,6 +479,11 @@ Examples:
         print(f"{INFO}  First-time setup required.\n")
         setup_wizard(logger)
         config = load_config()
+    
+    inst = resolve_instance(args, logger)
+    config['dashboard_port']  = inst['dashboard_port']
+    config['chrome_port']     = inst['chrome_port']
+    config['chrome_app_name'] = inst['chrome_app_name']
 
     success = run_app(logger, config)
     return 0 if success else 1
