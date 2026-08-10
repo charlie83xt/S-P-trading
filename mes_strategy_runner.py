@@ -870,7 +870,32 @@ class MESStrategyRunner:
                 self.trade.open(sig)
                 log.info(f"Signal: {sig.strategy} {sig.direction.value} entry={sig.entry} stop={sig.stop}")
                 return sig
+        self.diagnostics(bar)
         return None
+
+    def diagnostics(self, bar: dict) -> None:
+        """One compact line per completed bar showing how close each setup is to firing.
+        Pure logging — no trading effect. Only runs inside the trade window."""
+        try:
+            c = bar["c"]
+            v = self.vwap.value
+            col = self.vwap.color()
+            col = col.value if hasattr(col, "value") else str(col)
+            o, p, r = self.orb, self.pdh_pdl, self.reclaim
+            vtxt = f"{v:.2f}" if v else "NA"
+            log.info(
+                "MES near-miss | close=%.2f vwap=%s color=%s | "
+                "ORB[%s side=%s lvl=%s traded=%s] | "
+                "PDHPDL[pdh=%.1f(%+.1f) pdl=%.1f(%+.1f) done=%s/%s] | "
+                "RECLAIM[trades=%s cd=%s]",
+                c, vtxt, col,
+                o.phase, o.side, (f"{o.level:.1f}" if o.level else "-"), o.traded_today,
+                p.pdh, c - p.pdh, p.pdl, c - p.pdl, p.pdh_traded, p.pdl_traded,
+                r.trades_today, r.bars_since_trade,
+            )
+        except Exception as e:
+                log.debug("diagnostics failed: %s", e)
+
 
     def tick(self, price: float, volume: float, ts: float) -> Optional[Signal]:
         if FORCE_FLAT_ENABLED and after_force_flat(ts):
