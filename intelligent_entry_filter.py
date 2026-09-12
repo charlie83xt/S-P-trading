@@ -144,7 +144,7 @@ class IntelligentEntryFilter:
         # own gates here; the regime protections above (RANGING / STOP_HUNT) still apply.
         _SELF_GATING = ("MESStrategyWrapper", "MESRunner", "MNQSimStrategy", "MNQSim")
         if strategy_name in _SELF_GATING:
-            self.logger,info(
+            self.logger.info(
                 f"{CHECK} Entry APPROVED: {strategy_name} self-gates "
                 f"(regime={regime_info['regime']}) - micro-filters skipped"
             )
