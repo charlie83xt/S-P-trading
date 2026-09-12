@@ -134,6 +134,21 @@ class IntelligentEntryFilter:
                 f"(confidence={regime_info['confidence']:.2f}) - not trading into the sweep"
             )
             return False, "stop_hunt_block"
+
+        # Self-gating strategy suites (MESRunner, MNQSim) already apply their own
+        # confirmation - VWAP color, wick/body, structural stop, RiskManager
+        # (2-loss + daily-loss). The volume/momentum/RSI/trend micro-filters below
+        # are built for RAW breakout strategies and directly CONTRADICT mean-reversion
+        # setups: a VWAP reclaim or PDH/PDL reversal is low-momentum and near an RSI
+        # extreme BY DESIGN, so those checks block every one of them. Trust the suite's
+        # own gates here; the regime protections above (RANGING / STOP_HUNT) still apply.
+        _SELF_GATING = ("MESStrategyWrapper", "MESRunner", "MNQSimStrategy", "MNQSim")
+        if strategy_name in _SELF_GATING:
+            self.logger,info(
+                f"{CHECK} Entry APPROVED: {strategy_name} self-gates "
+                f"(regime={regime_info['regime']}) - micro-filters skipped"
+            )
+            return True, f"approved_self_gating_{regime_info['regime'].lower()}"
             
         
         # ⭐ ADAPT THRESHOLDS based on regime

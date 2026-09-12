@@ -182,6 +182,7 @@ class Vwap:
         self._cum_pv = 0.0
         self._cum_vol = 0.0
         self._history: List[float] = []
+        self._price_hist: List[float] = []
 
     def reset(self):
         self._cum_pv = 0.0
@@ -195,6 +196,7 @@ class Vwap:
         self._cum_vol += vol
         value = self._cum_pv / self._cum_vol
         self._history.append(value)
+        self._price_hist.append(bar["c"])
         return value
 
     @property
@@ -213,12 +215,20 @@ class Vwap:
             self.update(bar)
 
     def color(self, lookback: int = 3) -> VwapColor:
-        if len(self._history) < lookback + 1:
+        # Trend from recent PRICE direction relative to VWAP. The old cumulative-
+        # VWAP slope flattens to ~0 by mid-session and froze color at WHITE all day.
+        # if len(self._history) < lookback + 1:
+        if len(self._price_hist) < lookback + 1 or not self._history:
             return VwapColor.WHITE
-        delta = self._history[-1] - self._history[-(lookback + 1)]
-        if delta > 0.5:
+        vwap = self._history[-1]
+        close = self._price_hist[-1]
+        slope = close - self._price_hist[-(lookback + 1)]
+        if slope > 0.5 and close >= vwap:
+        # delta = self._history[-1] - self._history[-(lookback + 1)]
+        # if delta > 0.5:
             return VwapColor.GREEN
-        if delta < -0.5:
+        if slope < -0.5 and close <= vwap:
+        # if delta < -0.5:
             return VwapColor.RED
         return VwapColor.WHITE
 
