@@ -555,6 +555,8 @@ class RiskManager:
         px = float(price)
         cm = float(self.contract_multipliers.get(sym, 1.0))
 
+        comm = float(getattr(self.config, "COMMISSION_PER_CONTRACT", 0.62))
+
         pos = self.positions.setdefault(sym, {"qty": 0, "avg_price": 0.0, "last_px": px, "unrealized": 0.0})
         meta = {"fill_id": fill_id, "signal_id": signal_id, "attempt_id": attempt_id, "strategy_name": strategy_name}
 
@@ -638,7 +640,7 @@ class RiskManager:
                         "qty": reduce_qty,
                         "entry_price": avg,
                         "exit_price": px,
-                        "pnl": float((avg - px) * reduce_qty * cm),
+                        "pnl": float((avg - px) * reduce_qty * cm - 2 * comm * reduce_qty),
                         "exit_reason": exit_reason,
                         "status": "closed",
                         "ts": datetime.now(timezone.utc).isoformat(),
@@ -712,7 +714,7 @@ class RiskManager:
                         "qty": reduce_qty,
                         "entry_price": avg,
                         "exit_price": px,
-                        "pnl": float((px - avg) * reduce_qty * cm),
+                        "pnl": float((px - avg) * reduce_qty * cm - 2 * comm * reduce_qty),
                         "exit_reason": exit_reason,
                         "status": "closed",
                         "ts": datetime.now(timezone.utc).isoformat(),

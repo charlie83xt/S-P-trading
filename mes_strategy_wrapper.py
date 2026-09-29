@@ -8,7 +8,7 @@ sufficient for VWAP colour and regime detection).
 """
 
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional, Dict, Any, List
 from zoneinfo import ZoneInfo
 
@@ -73,6 +73,7 @@ class MESStrategyWrapper:
             pdl=self._pdl,
             news_times=[],
         )
+        self._seed_today()
 
         self.logger.info(
             "MESStrategy session reset | date=%s | PDH=%.2f PDL=%.2f",
@@ -80,32 +81,48 @@ class MESStrategyWrapper:
         )
 
     def _get_prev_day_hl(self):
+        """Return (PDH, PDL) from the most recent *trading* day.
+            Walks back day-by-day (skips weekends/holidays). Calendar-yesterday
+            breaks on Mondays (Sunday = 0 bars) and used to fall back to garbage
+            current-price ± 20 levels, silently disabling the PDH/PDL setup.
+        """
         try:
+            if hasattr(self.dm, "get_historical_bars") and hasattr(self.dm, "_et_to_utc_timestamp"):
+                for back in range(1, 8):
+                    d = (date.today() - timedelta(days=back)).strftime("%Y-%m-%d")
+                    start = self.dm._et_to_utc_timestamp(d, "09:30:00")
+                    end   = self.dm._et_to_utc_timestamp(d, "16:00:00")
+                    bars = self.dm.get_historical_bars(self.symbol, start, end) or []
+                    if bars:
+                        pdh = max(float(b.get("high") or b.get("h", 0)) for b in bars)
+                        pdl = min(float(b.get("low")  or b.get("l", 0)) for b in bars)
+                        self.logger.info("MESWrapper: prev-day levels from %s -> PDH=%.2f PDL=%.2f",
+                                        d, pdh, pdl)
+                        return pdh, pdl
+                self.logger.warning("MESWrapper: no trading day with bars in last 7 days")
+
+            # Legacy fallbacks (only if the helpers above are unavailable)
+            bars = []
             if hasattr(self.dm, "get_previous_day_bars"):
                 bars = self.dm.get_previous_day_bars(self.symbol) or []
             elif hasattr(self.dm, "query_yesterday_bars"):
-                bars = self.dm.query_yesterday_bars(
-                    self.symbol,
-                    start_hour=9, start_min=30,
-                    end_hour=16, end_min=0,
-                ) or []
-            else:
-                bars = []
+                bars = self.dm.query_yesterday_bars(self.symbol, start_hour=9, start_min=30,
+                                                    end_hour=16, end_min=0) or []
+            if bars:
+                pdh = max(float(b.get("high") or b.get("h", 0)) for b in bars)
+                pdl = min(float(b.get("low")  or b.get("l", 0)) for b in bars)
+                return pdh, pdl
 
-            if not bars:
-                px = float(self.dm.get_current_price(self.symbol) or 5000.0)
-                return px + 20.0, px - 20.0
-
-            pdh = max(float(b.get("high") or b.get("h", 0)) for b in bars)
-            pdl = min(float(b.get("low")  or b.get("l", 0)) for b in bars)
-            return pdh, pdl
+            px = float(self.dm.get_current_price(self.symbol) or 5000.0)
+            self.logger.warning("MESWrapper: FALLBACK PDH/PDL around current price %.2f (no history)", px)
+            return px + 20.0, px - 20.0
 
         except Exception as exc:
             self.logger.warning("MESWrapper: could not fetch prev-day bars: %s", exc)
             return 5020.0, 4980.0
 
     # ------------------------------------------------------------------ #
-    # Bar feeding with 5-minute aggregation                                #
+    # Bar feeding with 5-minute aggregation                              #
     # ------------------------------------------------------------------ #
 
     def ingest_tick(self, symbol: str, ts_epoch: float, price: Optional[float]) -> None:
@@ -253,4 +270,57 @@ class MESStrategyWrapper:
             "in_session":  in_session,
         }
 
+
+    def _seed_today(self) -> None:
+        """Seed the runner with today's completed 5-min bars (09:30 ET → now) from
+        Supabase, so the opening range (built 09:30–09:45) and VWAP exist even when
+        the bot starts after 09:45. Without this, a late start = no OR = no ORB all day."""
+        try:
+            if not (hasattr(self.dm, "get_historical_bars") and
+                    hasattr(self.dm, "_et_to_utc_timestamp")):
+                return
+            from datetime import timezone, timedelta
+            now_et = datetime.now(ET_TZ)
+            if (now_et.hour, now_et.minute) < (9, 30):
+                return
+            today = now_et.date().strftime("%Y-%m-%d")
+            start = self.dm._et_to_utc_timestamp(today, "09:30:00")
+            end   = (now_et - timedelta(minutes=1)).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S+00")
+            rows = self.dm.get_historical_bars(self.symbol, start, end) or []
+            if not rows:
+                self.logger.info("MESWrapper: no today bars to seed (OR builds from live)")
+                return
+
+            buckets = {}
+            for r in rows:
+                s = str(r.get("ts") or "").replace(" ", "T")
+                if s.endswith("+00"):
+                    s = s[:-3] + "+00:00"
+                try:
+                    epoch = datetime.fromisoformat(s).timestamp()
+                except Exception:
+                    continue
+                buckets.setdefault(int(epoch // 300) * 300, []).append(r)
+
+            now_win = int(now_et.timestamp() // 300) * 300
+            bars5 = []
+            for win in sorted(buckets):
+                if win >= now_win:
+                    continue
+                grp = buckets[win]
+                bars5.append({
+                    "ts": float(win),
+                    "o": float(grp[0].get("open")  or grp[0].get("o", 0)),
+                    "h": max(float(g.get("high") or g.get("h", 0)) for g in grp),
+                    "l": min(float(g.get("low")  or g.get("l", 0)) for g in grp),
+                    "c": float(grp[-1].get("close") or grp[-1].get("c", 0)),
+                    "v": sum(float(g.get("volume") or g.get("v", 1)) for g in grp),
+                })
+            if not bars5:
+                return
+            self._runner.rebuild_from_bars(bars5)
+            self._last_5m_window = bars5[-1]["ts"]
+            self.logger.info("MESWrapper: seeded %d today 5-min bars (OR + VWAP ready)", len(bars5))
+        except Exception as exc:
+            self.logger.warning("MESWrapper: today-seed failed: %s", exc)
 

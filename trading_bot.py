@@ -975,7 +975,36 @@ class TradingBot:
                     if fill_px is None:
                         self.logger.info("Orders-table: no matching FILLED row found (sym=%s side=%s)", sym, side)
 
-                px_exec = fill_px if fill_px is not None else px # fallback
+                # px_exec = fill_px if fill_px is not None else px # fallback <= Replaced with the below
+                px_exec = fill_px
+                if px_exec is None:
+                    # Orders-table scrape failed. DO NOT use the intended price - that
+                    # fabricates PnL. Read the ACTUAL average fill from broker position.
+                    try:
+                        for posn in (api.get_positions() or []):
+                            if str(posn.get("symbol", "")).upper().startswith(sym.upper()):
+                                cells = posn.get("cells") or []
+                                if len(cells) >= 5:
+                                    avg = float(str(cells[4]).replace(",", "").strip() or 0)
+                                    if avg > 0:
+                                        px_exec = avg
+                                        self.logger.warning(
+                                            "EXEC PX not in orders table; using broker position "
+                                            "avg %.2f (intended %.2f)", px_exec, px
+                                        )
+                                break
+                    except Exception as e:
+                        self.logger.warning("Broker-avg fill fallback failed: %s", e)
+                    
+                if px_exec is None:
+                    # Still unknown (e.g. an EXIT that flattened the position -> no avg to read).
+                    px_exec = current_price if curren_price else px
+                    self.logger.error(
+                        f"{WARNING} FILL PRICE UNVERIFIED for %s %s: recorded ~%.2f (intended %.2f) - "
+                        "this trade's PnL is approximate, reconcile against Tradovate.",
+                        sym, side, px_exec, px
+                    )
+
 
                 # Temporary logging info
                 self.logger.info(

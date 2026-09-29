@@ -202,7 +202,7 @@ def main():
     # ========================================================================
     production_print(f"{WRENCH} Starting Flask web server...")
     
-    # Schedule browser opening after 3 seconds
+    # Schedule browser opening after 3 seconds #
     if os.environ.get('LAUNCHED_BY_LAUNCHER') != '1':
         Timer(3.0, lambda: open_browser(port)).start()
     

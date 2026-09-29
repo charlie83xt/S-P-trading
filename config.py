@@ -185,7 +185,7 @@ class Config:
     STORAGE_REMOTE = os.getenv("STORAGE_REMOTE", "gdrive:sp-trading-archive")
     ARCHIVE_LOCAL_ROOT = os.getenv("ARCHIVE_LOCAL_ROOT", "data/archive")
 
-
+    COMMISSION_PER_CONTRACT = 0.62 # per side, USD - set to your extract Tradovate rate
 
 
     @classmethod
