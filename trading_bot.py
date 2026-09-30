@@ -998,7 +998,7 @@ class TradingBot:
                     
                 if px_exec is None:
                     # Still unknown (e.g. an EXIT that flattened the position -> no avg to read).
-                    px_exec = current_price if curren_price else px
+                    px_exec = current_price if current_price else px
                     self.logger.error(
                         f"{WARNING} FILL PRICE UNVERIFIED for %s %s: recorded ~%.2f (intended %.2f) - "
                         "this trade's PnL is approximate, reconcile against Tradovate.",
