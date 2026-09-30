@@ -235,6 +235,10 @@
      ".pane.balance-view.dropdown.open",
      "#content > div > div.app-controls > div.account-info-inline > div.pane.balance-view.dropdown.open"
    ],
+   "account.selector": [
+    ".account-selector-wrapper",
+    ".account-info-inline .account-selector"
+   ],
    "account.panic_button": [
      ".balance-view .risk-settings .panic-button",
      "#content > div > div.app-controls > div.account-info-inline > div.pane.balance-view.dropdown.open > div.dropdown-menu > li > div > div.risk-settings .panic-button"

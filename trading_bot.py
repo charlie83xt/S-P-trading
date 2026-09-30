@@ -1557,6 +1557,46 @@ class TradingBot:
         }
         self.logger.info("SYNC-RM: sym=%s qty=%s avg=%s", sym, rm.positions[sym]["qty"], rm.positions[sym]["avg_price"])
 
+    
+        def flatten_all(self, reason: str = "session_end") -> Dict:
+            """Send market exits for every non-zero position.
+
+            Syncs the risk manager from the broker first so a position the RM lost
+            track of is still closed. Callers should pause the bot first so the
+            monitoring loop does not open anything new while we flatten.
+            """
+            rm = self.risk_manager
+            try:
+                self._sync_rm_from_broker(self.symbol)
+            except Exception as e:
+                self.logger.warning("FLATTEN: broker sync failed: %s", e)
+
+            results = {}
+            for sym in list(rm.positions.keys()):
+                qty = rm.get_position_qty(sym)
+                if qty == 0:
+                    continue
+                px = self.data_manager.get_current_price(sym) or (rm.positions.get(sym) or {}).get("last_px") or 0.0
+                close_side = "SELL" if qty > 0 else "BUY"
+                # block the monitoring loop's own exit for the same position
+                self._last_exit_ts[sym] = time.time()
+                self.logger.warning("FLATTEN: reason=%s sym=%s qty=%s -> %s", reason, sym, qty, close_side)
+                exit_signal = {
+                    "type": close_side,
+                    "symbol": sym,
+                    "reason": reason,
+                    "is_exit": True,
+                    "_signal_id": _new_id("flatten"),
+                    "strategy_name": type(self.strategy).__name__ if self.strategy else "Unknown",
+                }
+                try:
+                    ok = self._execute_trade(exit_signal, abs(qty), px)
+                except Exception as e:
+                    self.logger.error("FLATTEN: exit for %s failed: %s", sym, e)
+                    ok = False
+                results[sym] = {"qty": qty, "sent": bool(ok)}
+            return results
+
 
     def set_strategy_manual(self, strategy_name: str, params: dict = None):
         """Manually override auto-switching for special events"""

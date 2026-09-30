@@ -778,6 +778,22 @@ class TradovateWebUIAPI(TradingAPIInterface):
         except Exception as e:
             return {"error": str(e)}
 
+    def get_account_label(self) -> str | None:
+        """Visible text of the account selector (e.g. 'DEMO1234567' on Simulation,
+        your live account id on trade). Returns None if the widget can't be read."""
+        try:
+            self._ensure_page()
+            try:
+                selectors = self.S("account.selector")
+            except KeyError:
+                selectors = [".account-selector-wrapper"]
+            for sel in selectors:
+                txt = self._inner_text_any(sel, timeout_ms=1500)
+                if txt and txt.strip():
+                    return " ".join(txt.split())
+        except Exception as e:
+            self.logger.warning("get_account_label failed: %s", e)
+        return None
     
     def get_current_price(self, symbol: str | None = None):
         """

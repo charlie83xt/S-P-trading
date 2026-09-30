@@ -691,6 +691,7 @@ def _trading_main():
                 return
 
             if cmd == "connect":
+                _thread_error = None # a new attempt must not report the previous failure
                 platform = payload.get("platform") or cfg.TRADING_PLATFORM
                 symbol = payload.get("symbol") or getattr(bot, "symbol", None) or getattr(cfg, "DEFAULT_SYMBOL", "ES")
                 
@@ -893,6 +894,44 @@ def _trading_main():
                 if payload.get("reply"):
                     payload["reply"].put({"success": ok, "message": "Strategy set" if ok else err})
 
+            elif cmd == "account":
+                label, err = None, None
+                try:
+                    if api is None or not hasattr(api, "get_account_label"):
+                        err = "API does not support account detection"
+                    else:
+                        label = api.get_account_label()
+                        if not label:
+                            err = "Account selector not found"
+                except Exception as e:
+                    err = str(e)
+                if payload.get("reply"):
+                    payload["reply"].put({"success": bool(label), "account": label, "message": err})
+
+            elif cmd == "flatten":
+                reason = payload.get("reason") or "session_end"
+                out, err = {}, None
+                try:
+                    if getattr(bot, "is_running", False) and hasattr(bot, "pause"):
+                        bot.pause()  # no new entries while we close out
+                    if hasattr(bot, "flatten_all"):
+                        out["sent"] = bot.flatten_all(reason)
+                    else:
+                        err = "Bot does not support flatten_all"
+                    # broker is the source of truth: [] means confidently flat
+                    if api is not None and hasattr(api, "get_positions"):
+                        time.sleep(2.0)
+                        rows = api.get_positions(root_symbol=getattr(bot, "symbol", None))
+                        out["broker_positions"] = rows
+                        out["broker_flat"] = (rows == [])
+                except Exception as e:
+                    err = str(e)
+                _snap_status(from_trading_thread=True)
+                if payload.get("reply"):
+                    payload["reply"].put({"success": err is None and out.get("broker_flat", False),
+                                          "message": err, **out})
+
+
             elif cmd == "load_symbol":
                 # Load a symbol in the Tradovate UI
                 symbol = payload.get("symbol", "").strip().upper()
@@ -962,7 +1001,7 @@ def _persist_state():
         try:
             pos = getattr(bot.risk_manager, "positions", {})
             with open(os.path.join(out_dir, "positions_snapshot.json"), "w") as f:
-                json.dumps(pos, f, indent=2, default=str)
+                json.dump(pos, f, indent=2, default=str)
         except Exception as e:
             app.logger.debug("persist positions failed: %s", e)
     except Exception as e:
@@ -1222,8 +1261,10 @@ def test_connection():
     platform = data.get("platform") or cfg.TRADING_PLATFORM
     symbol = data.get("symbol") or getattr(cfg, "DEFAULT_SYMBOL", "ES")
 
+    global _thread_error
     _ensure_trading_thread()
     _thread_connected.clear()
+    _thread_error = None
     _cmd_q.put(("connect", {"platform": platform, "symbol": symbol}))
 
     # wait up to ~90s for manual login
@@ -1238,6 +1279,19 @@ def test_connection():
         "success": bool(ok),
         "message": ("Connected to "  + platform) if ok else ("Failed to connect to " + platform)
     })
+
+@app.route("/api/account")
+def get_account():
+    """Which Tradovate account is selected (Trade vs Simulation)."""
+    res = _rpc("account", {}, timeout=15)
+    return jsonify(res), (200 if res.get("success") else 500)
+
+@app.route("/api/flatten", methods=["POST"])
+def flatten_positions():
+    """Pause the bot and market-exit every open position, then confirm with the broker table."""
+    data = _get_json()
+    res = _rpc("flatten", {"reason": data.get("reason") or "manual_flatten"}, timeout=60)
+    return jsonify(res), (200 if res.get("success") else 500)
 
 
 @app.route("/api/shutdown", methods=["POST"])
