@@ -1060,6 +1060,19 @@ def start_bot():
 
     _ensure_trading_thread()
 
+    # Refuse to start on the wrong Tradovate account (e.g. Simulation instead of Trade)
+    expected = os.getenv("EXPECTED_ACCOUNT", "").strip()
+    if expected:
+        acc = _rpc("account", {}, timeout=15)
+        selected = (acc.get("account") or "").strip()
+        if selected != expected:
+            app.logger.warning("START BLOCKED: account=%r expected=%r", selected, expected)
+            return jsonify({
+                "success": False,
+                "message": f"Wrong account selected in Tradovate: {selected or 'unknown'} "
+                           f"(expected {expected}). Swicth account, then press Start again."
+            }), 409
+            
     if not _thread_connected.is_set():
         _cmd_q.put(("connect", {"platform": platform, "symbol": symbol}))
 
