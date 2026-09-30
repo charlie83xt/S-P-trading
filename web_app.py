@@ -1072,7 +1072,7 @@ def start_bot():
                 "message": f"Wrong account selected in Tradovate: {selected or 'unknown'} "
                            f"(expected {expected}). Swicth account, then press Start again."
             }), 409
-            
+
     if not _thread_connected.is_set():
         _cmd_q.put(("connect", {"platform": platform, "symbol": symbol}))
 
@@ -1433,7 +1433,7 @@ def change_symbol():
 
         if hasattr(bot, 'strategy_manager') and bot.strategy_manager:
             bot.strategy_manager.set_active_symbol(new_symbol)
-            # If swiching to NQ/MNQ, update the MNQVwap instance's symbol too
+            # If switching to NQ/MNQ, update the MNQVwap instance's symbol too
             sm = bot.strategy_manager
             if new_symbol in ("NQ", "MNQ") and "MNQVwap" in sm.strategies:
                 mnq_strat = sm.strategies["MNQVwap"]
