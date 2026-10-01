@@ -1551,9 +1551,22 @@ class TradingBot:
         rm = self.risk_manager
         sym = want_root
         existing = rm.positions.get(sym) or {}
+
+        # Broker avg price is the truth (cells[4] on an open row, e.g. '7744.25')
+        # Falling back to the current price fabricates PnL on positions the bot didn't open.
+        broker_avg = None
+        cells = match.get("cells") >= 5:
+        if int(qty) != 0 and len(cells) >= 5:
+            try:
+                v = float(str(cells[4]).replace(",", "").strip() or 0)
+                broker_avg = v if v > 0 else None
+            except ValueError:
+                broker_avg = None
+
+
         rm.positions[sym] = {
             "qty": int(qty),
-            "avg_price": float(existing.get("avg_price") or self.data_manager.get_current_price(sym) or 0.0),
+            "avg_price": float(broker_avg or existing.get("avg_price") or self.data_manager.get_current_price(sym) or 0.0),
         }
         self.logger.info("SYNC-RM: sym=%s qty=%s avg=%s", sym, rm.positions[sym]["qty"], rm.positions[sym]["avg_price"])
 
