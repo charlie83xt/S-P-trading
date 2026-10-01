@@ -1070,7 +1070,7 @@ def start_bot():
             return jsonify({
                 "success": False,
                 "message": f"Wrong account selected in Tradovate: {selected or 'unknown'} "
-                           f"(expected {expected}). Swicth account, then press Start again."
+                           f"(expected {expected}). Switch account, then press Start again."
             }), 409
 
     if not _thread_connected.is_set():
