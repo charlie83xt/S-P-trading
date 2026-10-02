@@ -582,6 +582,65 @@ def not_found(e):
     return jsonify({"success": False, "error": "Not Found", "path": request.path}), 404
 
 
+# --- scheduled end-of-session flatten (New York time) ---
+from zoneinfo import ZoneInfo
+_ET = ZoneInfo("America/New_York")
+FLATTEN_AT_ET = os.getenv("FLATTEN_AT_ET", "").strip()   # "HH:MM" New York time; empty = off
+_auto_flatten = {"date": None, "done": False, "attempts": 0, "next_try": 0.0}
+_AUTO_FLATTEN_MAX_ATTEMPTS = 3
+
+
+def _flatten_now(reason: str) -> dict:
+    """Pause the bot, market-exit every position, confirm flat from the broker table.
+    Trading thread only (it drives Playwright)."""
+    out, err = {}, None
+    try:
+        if getattr(bot, "is_running", False) and hasattr(bot, "pause"):
+            bot.pause()  # no new entries while we close out
+        if hasattr(bot, "flatten_all"):
+            out["sent"] = bot.flatten_all(reason)
+        else:
+            err = "Bot does not support flatten_all"
+        # broker is the source of truth: [] means confidently flat
+        if api is not None and hasattr(api, "get_positions"):
+            time.sleep(2.0)
+            rows = api.get_positions(root_symbol=getattr(bot, "symbol", None))
+            out["broker_positions"] = rows
+            out["broker_flat"] = (rows == [])
+    except Exception as e:
+        err = str(e)
+    _snap_status(from_trading_thread=True)
+    return {"success": err is None and out.get("broker_flat", False), "message": err, **out}
+
+
+def _maybe_auto_flatten():
+    """Called from the trading thread heartbeat. Flattens once per day at FLATTEN_AT_ET."""
+    if not FLATTEN_AT_ET or not getattr(bot, "is_running", False):
+        return
+    now_et = datetime.now(_ET)
+    today = now_et.date()
+    if _auto_flatten["date"] != today:
+        _auto_flatten.update(date=today, done=False, attempts=0, next_try=0.0)
+    if _auto_flatten["done"] or now_et.strftime("%H:%M") < FLATTEN_AT_ET:
+        return
+    if _auto_flatten["attempts"] >= _AUTO_FLATTEN_MAX_ATTEMPTS or time.time() < _auto_flatten["next_try"]:
+        return
+
+    _auto_flatten["attempts"] += 1
+    n = _auto_flatten["attempts"]
+    app.logger.warning("AUTO-FLATTEN: %s ET reached (attempt %d/%d)", FLATTEN_AT_ET, n, _AUTO_FLATTEN_MAX_ATTEMPTS)
+    res = _flatten_now("auto_flatten_eod")
+    if res.get("success"):
+        _auto_flatten["done"] = True
+        app.logger.warning("AUTO-FLATTEN: broker confirms flat - bot paused for the rest of the day")
+    elif n < _AUTO_FLATTEN_MAX_ATTEMPTS:
+        _auto_flatten["next_try"] = time.time() + 30
+        app.logger.error("AUTO-FLATTEN: not confirmed flat (%s) - retrying in 30s", res.get("message"))
+    else:
+        app.logger.error("AUTO-FLATTEN: GAVE UP after %d attempts - CHECK TRADOVATE NOW: %s",
+                         n, res.get("broker_positions"))
+
+
 def _trading_main():
     """Owns Playwright (TradovateWebUIAPI) and runs the bot. All UI actions happen here"""
     global cfg, api, bot, _thread_error, _trading_thread, _last_strategy_name, _last_strategy_params
@@ -601,6 +660,10 @@ def _trading_main():
         now = time.time()
         if now - last_hb > 1.0:
             _snap_status(from_trading_thread=True)
+            try:
+                _maybe_auto_flatten()
+            except Exception as e:
+                app.logger.error("auto-flatten check failed: %s", e)
             # NEW: push chart price scoped to the current symbol
             if PRICE_POLL and api: # keep your env guard if you added it]
                 try:
@@ -908,29 +971,34 @@ def _trading_main():
                 if payload.get("reply"):
                     payload["reply"].put({"success": bool(label), "account": label, "message": err})
 
-            elif cmd == "flatten":
-                reason = payload.get("reason") or "session_end"
-                out, err = {}, None
-                try:
-                    if getattr(bot, "is_running", False) and hasattr(bot, "pause"):
-                        bot.pause()  # no new entries while we close out
-                    if hasattr(bot, "flatten_all"):
-                        out["sent"] = bot.flatten_all(reason)
-                    else:
-                        err = "Bot does not support flatten_all"
-                    # broker is the source of truth: [] means confidently flat
-                    if api is not None and hasattr(api, "get_positions"):
-                        time.sleep(2.0)
-                        rows = api.get_positions(root_symbol=getattr(bot, "symbol", None))
-                        out["broker_positions"] = rows
-                        out["broker_flat"] = (rows == [])
-                except Exception as e:
-                    err = str(e)
-                _snap_status(from_trading_thread=True)
-                if payload.get("reply"):
-                    payload["reply"].put({"success": err is None and out.get("broker_flat", False),
-                                          "message": err, **out})
+            # elif cmd == "flatten":
+            #     reason = payload.get("reason") or "session_end"
+            #     out, err = {}, None
+            #     try:
+            #         if getattr(bot, "is_running", False) and hasattr(bot, "pause"):
+            #             bot.pause()  # no new entries while we close out
+            #         if hasattr(bot, "flatten_all"):
+            #             out["sent"] = bot.flatten_all(reason)
+            #         else:
+            #             err = "Bot does not support flatten_all"
+            #         # broker is the source of truth: [] means confidently flat
+            #         if api is not None and hasattr(api, "get_positions"):
+            #             time.sleep(2.0)
+            #             rows = api.get_positions(root_symbol=getattr(bot, "symbol", None))
+            #             out["broker_positions"] = rows
+            #             out["broker_flat"] = (rows == [])
+            #     except Exception as e:
+            #         err = str(e)
+            #     _snap_status(from_trading_thread=True)
+            #     if payload.get("reply"):
+            #         payload["reply"].put({"success": err is None and out.get("broker_flat", False),
+            #                               "message": err, **out})
+            
 
+            elif cmd == "flatten":
+                res = _flatten_now(payload.get("reason") or "session_end")
+                if payload.get("reply"):
+                    payload["reply"].put(res)
 
             elif cmd == "load_symbol":
                 # Load a symbol in the Tradovate UI
