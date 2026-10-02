@@ -1555,7 +1555,7 @@ class TradingBot:
         # Broker avg price is the truth (cells[4] on an open row, e.g. '7744.25')
         # Falling back to the current price fabricates PnL on positions the bot didn't open.
         broker_avg = None
-        cells = match.get("cells") >= 5:
+        cells = match.get("cells") or []
         if int(qty) != 0 and len(cells) >= 5:
             try:
                 v = float(str(cells[4]).replace(",", "").strip() or 0)
