@@ -975,7 +975,36 @@ class TradingBot:
                     if fill_px is None:
                         self.logger.info("Orders-table: no matching FILLED row found (sym=%s side=%s)", sym, side)
 
-                px_exec = fill_px if fill_px is not None else px # fallback
+                # px_exec = fill_px if fill_px is not None else px # fallback <= Replaced with the below
+                px_exec = fill_px
+                if px_exec is None:
+                    # Orders-table scrape failed. DO NOT use the intended price - that
+                    # fabricates PnL. Read the ACTUAL average fill from broker position.
+                    try:
+                        for posn in (api.get_positions() or []):
+                            if str(posn.get("symbol", "")).upper().startswith(sym.upper()):
+                                cells = posn.get("cells") or []
+                                if len(cells) >= 5:
+                                    avg = float(str(cells[4]).replace(",", "").strip() or 0)
+                                    if avg > 0:
+                                        px_exec = avg
+                                        self.logger.warning(
+                                            "EXEC PX not in orders table; using broker position "
+                                            "avg %.2f (intended %.2f)", px_exec, px
+                                        )
+                                break
+                    except Exception as e:
+                        self.logger.warning("Broker-avg fill fallback failed: %s", e)
+                    
+                if px_exec is None:
+                    # Still unknown (e.g. an EXIT that flattened the position -> no avg to read).
+                    px_exec = current_price if current_price else px
+                    self.logger.error(
+                        f"{WARNING} FILL PRICE UNVERIFIED for %s %s: recorded ~%.2f (intended %.2f) - "
+                        "this trade's PnL is approximate, reconcile against Tradovate.",
+                        sym, side, px_exec, px
+                    )
+
 
                 # Temporary logging info
                 self.logger.info(
@@ -1522,9 +1551,22 @@ class TradingBot:
         rm = self.risk_manager
         sym = want_root
         existing = rm.positions.get(sym) or {}
+
+        # Broker avg price is the truth (cells[4] on an open row, e.g. '7744.25')
+        # Falling back to the current price fabricates PnL on positions the bot didn't open.
+        broker_avg = None
+        cells = match.get("cells") or []
+        if int(qty) != 0 and len(cells) >= 5:
+            try:
+                v = float(str(cells[4]).replace(",", "").strip() or 0)
+                broker_avg = v if v > 0 else None
+            except ValueError:
+                broker_avg = None
+
+
         rm.positions[sym] = {
             "qty": int(qty),
-            "avg_price": float(existing.get("avg_price") or self.data_manager.get_current_price(sym) or 0.0),
+            "avg_price": float(broker_avg or existing.get("avg_price") or self.data_manager.get_current_price(sym) or 0.0),
         }
         self.logger.info("SYNC-RM: sym=%s qty=%s avg=%s", sym, rm.positions[sym]["qty"], rm.positions[sym]["avg_price"])
 
