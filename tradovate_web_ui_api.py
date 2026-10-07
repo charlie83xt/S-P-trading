@@ -28,6 +28,7 @@ import json
 import asyncio, threading
 import traceback, sys
 from contextlib import contextmanager
+from notifier import notify
 
 # Import your shared interface
 # If our interface name/module differs, we will adjust this import
@@ -35,7 +36,7 @@ from api_interface import TradingAPIInterface
 
 from playwright.async_api import async_playwright, Error as PWError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-from debug_config import debug_print, production_print
+from debug_config import debug_print, production_print, KEY
 
 logger = logging.getLogger(__name__)
 logger.info("Loaded tradovate_web_ui_api from: %s", __file__)
@@ -99,6 +100,22 @@ class TradovateWebUIAPI(TradingAPIInterface):
         self._last_positions_ts = 0.0
         self.logger = logging.getLogger(__name__)
         
+        self._connection_state_lock = threading.Lock()
+        self._connection_state = {
+            "state": "DISCONNECTED",
+            "updated_at": time.time(),
+            "error_type": None,
+        }
+
+        self.login_timeout_seconds = int(
+            os.getenv("LOGIN_TIMEOUT_SECONDS", "600")
+        )
+
+        if not 30 <= self.login_timeout_seconds <= 1800:
+            raise ValueError(
+                "LOGIN_TIMEOUT_SECONDS must be between 30 and 1800"
+            )
+        
         try:
             self._load_selectors()
         except Exception:
@@ -160,11 +177,34 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 ],
             })
     # ------------------- TradingAPIInterface: Lifecycle --------------------
+    def _set_connection_state(self, state: str, error_type=None):
+        with self._connection_state_lock:
+            previous = self._connection_state["state"]
+            self._connection_state = {
+                "state": state,
+                "updated_at": time.time(),
+                "error_type": error_type,
+            }
+
+        if previous != state:
+            self.logger.info(
+                "CONNECTION_STATE previous=%s state=%s error_type=%s",
+                previous,
+                state,
+                error_type or "-",
+            )
+
+    def get_connection_state(self) -> dict:
+        """Return cached state without interacting with Playwright."""
+        with self._connection_state_lock:
+            return dict(self._connection_state)
+
 
     def connect(self) -> bool:
         if getattr(self, "_connected", False):
             return True
         try:
+            self._set_connection_state("CONNECTING")
             self._launch()
             self._login_if_needed()
             try:
@@ -176,9 +216,17 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 self.logger.warning(f"Expected error in [TradovateWebUIAPI.connect]: {e}")
                 # pass
             self._connected = True
+            self._set_connection_state("CONNECTED")
             return True
         except Exception as e:
             self._connected = False
+            current_state = self.get_connection_state()["state"] 
+            if current_state != "LOGIN_TIMEOUT":
+                self._set_connection_state(
+                    "CONNECTION_FAILED",
+                    type(e).__name__,
+                )
+
             logger.exception("TradovateWebUIAPI.connect failed: %s", e)
             self._connect_fail("connect", e)
             print("connect() failed:", e, file=sys.stderr)
@@ -200,6 +248,7 @@ class TradovateWebUIAPI(TradingAPIInterface):
         finally:
             self._pw = self._browser = self._context = self._page = None
             self._connected = False
+            self._set_connection_state("DISCONNECTED")
 
     def is_connected(self) -> bool:
         return bool(self._connected)
@@ -1289,12 +1338,17 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
         # If manual_login: let the user log_in, then wait for a logged-in marker
         if self.manual_login:
+            self._set_connection_state("AWAITING_LOGIN")
             # Give you time to type; we just wait.
             production_print("Please log in manually in the opened browser window...")
+            notify(f"{KEY} Tradovate login needed - log in within 2 minutes.")
 
             # 4) Try for up to ~120s; if we find a page/frame a with any marker, switch self._page to it
             # marker = None
-            deadline = time.monotonic() + 120 #(self.timeout_ms * 6 / 1000.0)
+            deadline = (
+                time.monotonic() + self.login_timeout_seconds
+            )
+
             while time.monotonic() < deadline:
                 pg = self._find_logged_in_page(markers)
                 if pg:
@@ -1316,6 +1370,10 @@ class TradovateWebUIAPI(TradingAPIInterface):
         #         except Exception:
         #             continue
         # if not marker:
+            self._set_connection_state(
+                "LOGIN_TIMEOUT",
+                "ManualLoginTimeout",
+                )
             raise RuntimeError("Manual login timed out - no logged-in marker found.")
         else:
             # OPTIONAL: auto-login path (only if you really want to)
@@ -1359,7 +1417,9 @@ class TradovateWebUIAPI(TradingAPIInterface):
             else:
                 self._run(self._page.keyboard.press("Enter"))
             # waiting for logged-in marker
-            deadline = time.monotonic() + 120
+            deadline = (
+                time.monotonic() + self.login_timeout_seconds
+            )
             while time.monotonic() < deadline:
                 pg = self._find_logged_in_page(markers)
                 if pg:
@@ -2674,28 +2734,37 @@ class TradovateWebUIAPI(TradingAPIInterface):
             return float("nan")
 
 
+    # def _snapshot(self, label: str):
+    #     """Save a screenshot and HTML snapshot to help debug selectors."""
+    #     async def _do():
+    #         ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    #         try:
+    #             # ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    #             await self._page.screenshot(path=f"ui_error_{label}_{ts}.png", full_page=True)
+    #         except Exception as e:
+    #             self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+    #             # pass
+    #         try:
+    #             html = await self._page.content()
+    #             with open(f"ui_error_{label}_{ts}.html", "w", encoding="utf-8") as f:
+    #                 f.write(html)
+    #         except Exception as e:
+    #             self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+    #             # pass
+    #     try:
+    #         self._run(_do(), timeout=20)
+    #     except Exception as e:
+    #         self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
+    #         # pass
+
     def _snapshot(self, label: str):
-        """Save a screenshot and HTML snapshot to help debug selectors."""
-        async def _do():
-            ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            try:
-                # ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-                await self._page.screenshot(path=f"ui_error_{label}_{ts}.png", full_page=True)
-            except Exception as e:
-                self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
-                # pass
-            try:
-                html = await self._page.content()
-                with open(f"ui_error_{label}_{ts}.html", "w", encoding="utf-8") as f:
-                    f.write(html)
-            except Exception as e:
-                self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
-                # pass
-        try:
-            self._run(_do(), timeout=20)
-        except Exception as e:
-            self.logger.debug(f"Expected error in [TradovateWebUIAPI._snapshot]: {e}")
-            # pass
+        """Record a diagnostic event without saving page contents."""
+        safe_label = re.sub(r"[^A-Za-z0-9_-]", "_", str(label))[:80]
+
+        self.logger.info(
+            "UI_DIAGNOSTIC event=%s capture=disabled",
+            safe_label,
+        )
 
     
     def _expand(self, keys_or_selectors):

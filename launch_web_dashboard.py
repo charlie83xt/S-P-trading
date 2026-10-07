@@ -10,6 +10,7 @@ import webbrowser
 import time
 import logging
 from threading import Timer
+import argparse
 
 
 # ============================================================================
@@ -150,6 +151,16 @@ def pick_instance():
 def main():
     production_print(f"{ROCKET} Launching Futures Trading Bot Web Dashboard...")
 
+    parser = argparse.ArgumentParser(
+        description="Launch the trading dashboard"
+    )
+    parser.add_argument(
+        "--instance",
+        type=int,
+        choices=(1, 2),
+        help="1 = MES/ES; 2 = MNQ/NQ",
+    )
+    args = parser.parse_args()
 
     if DEBUG:
         production_print("=" * 60)
@@ -157,7 +168,15 @@ def main():
     # ========================================================================
     # INSTANCE SELECTION — must happen before importing web_app
     # ========================================================================
-    instance_id, instance_symbol, port, chrome_port = pick_instance()
+    # instance_id, instance_symbol, port, chrome_port = pick_instance()
+    if args.instance is None:
+        instance_id, instance_symbol, port, chrome_port = pick_instance()
+    else:
+        instance_id = args.instance
+        instance_symbol = "MES" if instance_id == 1 else "MNQ"
+        port = 4999 + instance_id
+        chrome_port = 9221 + instance_id
+
     os.environ['BOT_INSTANCE'] = str(instance_id)
     os.environ['PORT'] = str(port)
     os.environ['DEFAULT_SYMBOL'] = instance_symbol
@@ -195,6 +214,10 @@ def main():
         print("="*60 + "\n")
         
         # Don't exit - continue anyway for testing
+        if args.instance is not None:
+            raise SystemExit(
+                "Unnattended launch aborted: Chrome CDP unavailable."
+            )
         time.sleep(2)
     
     # ========================================================================
@@ -216,7 +239,13 @@ def main():
             debug_print("=" * 60)
         
         # Run the Flask app
-        app.run(host='0.0.0.0', port=port, debug=DEBUG)
+        # app.run(host='0.0.0.0', port=port, debug=DEBUG)
+        app.run(
+            host=os.getenv("DASHBOARD_HOST", "127.0.0.1"), 
+            port=port, 
+            debug=False,
+            use_reloader=False    
+        )
         
     except ImportError as e:
         print(f"{TERRA} Error importing Flask app: {e}")

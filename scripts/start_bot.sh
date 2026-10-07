@@ -5,3 +5,4 @@ cd "~/Users/charliejmtorres/Solana/Building a Futures Trading Bot with Custom St
 source .venv/bin/activate
 
 python launch_web_dashboard.py
+

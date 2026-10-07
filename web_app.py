@@ -27,6 +27,7 @@ import trading_bot, risk_manager, api_factory, config
 import tradovate_web_ui_api  # wherever it is imported from
 
 from heartbeat_local import LocalSessionKeepAlive
+from notifier import notify
 from debug_config import (
     should_log_throttled, 
     PRINT_STATUS_POLLS, 
@@ -34,7 +35,7 @@ from debug_config import (
     DEBUG, SUPPRESS_WERKZEUG, 
     debug_print, 
     production_print,
-    WRENCH, CHART, LOADING, TERRA, MAGNI, CHECK, WARNING, FIRE
+    WRENCH, CHART, LOADING, TERRA, MAGNI, CHECK, WARNING, FIRE, BLOCKED, PLAY
     )
 from first_run import register_setup_routes
 
@@ -633,12 +634,17 @@ def _maybe_auto_flatten():
     if res.get("success"):
         _auto_flatten["done"] = True
         app.logger.warning("AUTO-FLATTEN: broker confirms flat - bot paused for the rest of the day")
+        rm = getattr(bot, "risk_manager", None)
+        pnl = float(getattr(rm, "realized_pnl", 0.0) or 0.0)
+        n_trades = len(getattr(rm, "trade_history", []) or [])
+        notify(f"{CHECK} Session closed at {FLATTEN_AT_ET} ET - flat. Trades: {n_trades} | Realised P&L: ${pnl:.2f}")
     elif n < _AUTO_FLATTEN_MAX_ATTEMPTS:
         _auto_flatten["next_try"] = time.time() + 30
         app.logger.error("AUTO-FLATTEN: not confirmed flat (%s) - retrying in 30s", res.get("message"))
     else:
         app.logger.error("AUTO-FLATTEN: GAVE UP after %d attempts - CHECK TRADOVATE NOW: %s",
                          n, res.get("broker_positions"))
+        notify(f"{WARNING} AUTO-FLATTEN FAILED after {n} attempts CHECK TRADOVATE NOW: {res.get('broker_positions')}")
 
 
 def _trading_main():
@@ -779,9 +785,14 @@ def _trading_main():
                 # except Exception:
                 #     pass
 
-                ok = True
-                if api and not api.is_connected():
-                    ok = api.connect()
+                ok = False
+
+                if api is not None:
+                    ok = bool(api.is_connected())
+
+                    if not ok:
+                        ok = bool(api.connect())
+
                 if ok:
                     # connected = True
                     _thread_connected.set()
@@ -804,6 +815,10 @@ def _trading_main():
                 else:
                     # connected = False
                     _thread_connected.clear()
+                    _thread_error = (
+                        "Connection failed. Check the browser login "
+                        "and /api/connection_state."
+                    )
                 _snap_status(from_trading_thread=True)
             
             elif cmd == "start":
@@ -829,16 +844,27 @@ def _trading_main():
                 # global _last_strategy_name, _last_strategy_params
                 _last_strategy_name, _last_strategy_params = name, params
 
-                # ensure connected
-                if not _thread_connected.is_set():
-                    #connect first if needed 
-                    _cmd_q.put(("connect", {"platform": cfg.TRADING_PLATFORM, "symbol": sym}))
-                    # spin until connected or timeout
-                    t0 = time.time()
-                    while not _thread_connected.is_set() and time.time() - t0 < 60:
-                        time.sleep(0.1)
-                        # _snap_status(from_trading_thread=True)
+                # # ensure connected
+                # if not _thread_connected.is_set():
+                #     #connect first if needed 
+                #     _cmd_q.put(("connect", {"platform": cfg.TRADING_PLATFORM, "symbol": sym}))
+                #     # spin until connected or timeout
+                #     t0 = time.time()
+                #     while not _thread_connected.is_set() and time.time() - t0 < 60:
+                #         time.sleep(0.1)
+                #         # _snap_status(from_trading_thread=True)
 
+                # Never wait for a command queued behind this command.
+                if (
+                    not _thread_connected.is_set()
+                    or api is None
+                    or not api.is_connected()
+                ):
+                    app.logger.warning(
+                        "START_BLOCKED reason=not_connected"
+                    )
+                    _snap_status(from_trading_thread=True)
+                    continue
 
                 if name and not hasattr(bot, 'strategy_manager'):
                     app.logger.info(f"{FIRE} SETTING STRATEGY: name=%s params=%s", name, params)
@@ -849,8 +875,12 @@ def _trading_main():
                         app.logger.exception("set_strategy in start failed: %s", e)
 
                 # mark as running and publish snapshot so UI flips to green immediately
+                # bot.symbol = sym
+                # bot.is_running = True
+                # _snap_status(from_trading_thread=True)
+
+                # TradingBot.start() sets is_running after its startup work.
                 bot.symbol = sym
-                bot.is_running = True
                 _snap_status(from_trading_thread=True)
 
                 # Start bot loop (your TradingBot.start will block inside this thread)
@@ -1128,6 +1158,16 @@ def start_bot():
 
     _ensure_trading_thread()
 
+    if not _thread_connected.is_set():
+        return jsonify({
+            "success": False,
+            "message": (
+                "Connect to Tradovate first. Complete Test Connection "
+                "before starting the bot."
+            ),
+        }), 409
+
+
     # Refuse to start on the wrong Tradovate account (e.g. Simulation instead of Trade)
     expected = os.getenv("EXPECTED_ACCOUNT", "").strip()
     if expected:
@@ -1135,14 +1175,15 @@ def start_bot():
         selected = (acc.get("account") or "").strip()
         if selected != expected:
             app.logger.warning("START BLOCKED: account=%r expected=%r", selected, expected)
+            notify(f"{BLOCKED} Start BLOCKED - Tradovate is on {selected or 'unknown'}, expected {expected}")
             return jsonify({
                 "success": False,
                 "message": f"Wrong account selected in Tradovate: {selected or 'unknown'} "
                            f"(expected {expected}). Switch account, then press Start again."
             }), 409
 
-    if not _thread_connected.is_set():
-        _cmd_q.put(("connect", {"platform": platform, "symbol": symbol}))
+    # if not _thread_connected.is_set():
+    #     _cmd_q.put(("connect", {"platform": platform, "symbol": symbol}))
 
     _cmd_q.put(("start", {
         "symbol": symbol, 
@@ -1152,6 +1193,7 @@ def start_bot():
     }))
 
     msg = f'Manual: {strategy}' if manual_mode else 'Auto-switching'
+    notify(f"{PLAY} Bot started: {symbol} ({msg})")
     return jsonify({'success': True, 'message': msg})
     # --- robust body parsing ---
     
@@ -1334,6 +1376,29 @@ def get_config():
         'take_profit_points': getattr(cfg, "TAKE_PROFIT_POINTS", 2.0)
     })
 
+@app.route("/api/connection_state", methods=["GET"])
+def connection_state():
+    """Read connection progress without touching the browser."""
+    adapter = api
+
+    if adapter is None:
+        return jsonify({
+            "state": "DISCONNECTED",
+            "updated_at": None,
+            "error_type": "APIUnavailable",
+        })
+
+    getter = getattr(adapter, "get_connection_state", None)
+
+    if not callable(getter):
+        return jsonify({
+            "state": "UNKNOWN",
+            "updated_at": None,
+            "error_type": "StateReportingUnavailable",
+        })
+
+    return jsonify(getter())
+
 @app.route('/api/test_connection', methods=['POST'])
 def test_connection():
     """Test connection to trading platform."""
@@ -1348,14 +1413,21 @@ def test_connection():
     _thread_error = None
     _cmd_q.put(("connect", {"platform": platform, "symbol": symbol}))
 
-    # wait up to ~90s for manual login
-    t0 = time.time()
-    while time.time() - t0 < 90 and not _thread_connected.is_set():
+    # Allow browser startup plus the configured manual-login window.
+    login_timeout = int(os.getenv("LOGIN_TIMEOUT_SECONDS", "600"))
+    wait_deadline = time.monotonic() + login_timeout + 180
+
+    while (
+        time.monotonic() < wait_deadline
+        and not _thread_connected.is_set()
+    ):
         if _thread_error:
             return jsonify({'success': False, 'message': _thread_error}), 500
         time.sleep(0.2)
 
     ok = _thread_connected.is_set()
+    if not ok:
+        notify(f"{CROSS} Test Connection failed: {_thread_error or 'login not completed in time'}")
     return jsonify({
         "success": bool(ok),
         "message": ("Connected to "  + platform) if ok else ("Failed to connect to " + platform)

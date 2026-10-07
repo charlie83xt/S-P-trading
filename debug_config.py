@@ -189,6 +189,8 @@ TARGET = emoji("🎯", "[=>]")
 SNOW = emoji("❄️", "[*]")
 BLOCKED = emoji("⛔️", "[(-)]")
 MONEY = emoji("💰", "[$]")
+PLAY = emoji("▶️", ">")
+KEY = emoji("🔑", "‡")
 
 
 # Counter for throttling logs
