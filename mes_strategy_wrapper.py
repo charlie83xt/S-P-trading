@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, date, timedelta
 from typing import Optional, Dict, Any, List
 from zoneinfo import ZoneInfo
-
+from notifier import notify
 from mes_strategy_runner import MESStrategyRunner
 
 ET_TZ = ZoneInfo("America/New_York")
@@ -75,6 +75,13 @@ class MESStrategyWrapper:
         )
         self._seed_today()
 
+        if not getattr(self, "_levels_ok", False):
+            # stale or invented levels: switch the PDH/PDL setup off for today
+            self._runner.pdh_pdl.pdh_traded = True
+            self._runner.pdh_pdl.pdl_traded = True
+            self.logger.warning("MESWrapper: PDH/PDL setup DISABLED today - previous-day bars missing in Supabase")
+            notify("⚠️ No previous-day bars in Supabase - PDH/PDL setup disabled today. Check the IBKR ingester.")
+
         self.logger.info(
             "MESStrategy session reset | date=%s | PDH=%.2f PDL=%.2f",
             today, self._pdh, self._pdl,
@@ -86,6 +93,7 @@ class MESStrategyWrapper:
             breaks on Mondays (Sunday = 0 bars) and used to fall back to garbage
             current-price ± 20 levels, silently disabling the PDH/PDL setup.
         """
+        self._levels_ok = False
         try:
             if hasattr(self.dm, "get_historical_bars") and hasattr(self.dm, "_et_to_utc_timestamp"):
                 for back in range(1, 8):
@@ -93,12 +101,23 @@ class MESStrategyWrapper:
                     start = self.dm._et_to_utc_timestamp(d, "09:30:00")
                     end   = self.dm._et_to_utc_timestamp(d, "16:00:00")
                     bars = self.dm.get_historical_bars(self.symbol, start, end) or []
+
                     if bars:
                         pdh = max(float(b.get("high") or b.get("h", 0)) for b in bars)
                         pdl = min(float(b.get("low")  or b.get("l", 0)) for b in bars)
-                        self.logger.info("MESWrapper: prev-day levels from %s -> PDH=%.2f PDL=%.2f",
-                                        d, pdh, pdl)
+                        expected = date.today() - timedelta(days=1)
+                        while expected.weekday() >= 5:          # skip Sat/Sun
+                            expected -= timedelta(days=1)
+                        self._levels_ok = (d == expected.strftime("%Y-%m-%d"))
+                        if self._levels_ok:
+                            self.logger.info("MESWrapper: prev-day levels from %s -> PDH=%.2f PDL=%.2f",
+                                             d, pdh, pdl)
+                        else:
+                            self.logger.warning("MESWrapper: STALE prev-day levels from %s (expected %s) "
+                                                "-> PDH=%.2f PDL=%.2f", d, expected, pdh, pdl)
                         return pdh, pdl
+
+
                 self.logger.warning("MESWrapper: no trading day with bars in last 7 days")
 
             # Legacy fallbacks (only if the helpers above are unavailable)
