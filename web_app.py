@@ -1193,7 +1193,11 @@ def start_bot():
     }))
 
     msg = f'Manual: {strategy}' if manual_mode else 'Auto-switching'
-    notify(f"{PLAY} Bot started: {symbol} ({msg})")
+    notify(
+        f"{PLAY} Start requested: {symbol} ({msg}). "
+        "Check dashboard status for confirmation."
+    )
+    
     return jsonify({'success': True, 'message': msg})
     # --- robust body parsing ---
     
@@ -1426,8 +1430,8 @@ def test_connection():
         time.sleep(0.2)
 
     ok = _thread_connected.is_set()
-    if not ok:
-        notify(f"{CROSS} Test Connection failed: {_thread_error or 'login not completed in time'}")
+    # if not ok:
+    #     notify(f"{CROSS} Test Connection failed: {_thread_error or 'login not completed in time'}")
     return jsonify({
         "success": bool(ok),
         "message": ("Connected to "  + platform) if ok else ("Failed to connect to " + platform)

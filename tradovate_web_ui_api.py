@@ -186,13 +186,34 @@ class TradovateWebUIAPI(TradingAPIInterface):
                 "error_type": error_type,
             }
 
-        if previous != state:
-            self.logger.info(
-                "CONNECTION_STATE previous=%s state=%s error_type=%s",
-                previous,
-                state,
-                error_type or "-",
+        if previous == state:
+            return
+
+        self.logger.info(
+            "CONNECTION_STATE previous=%s state=%s error_type=%s",
+            previous,
+            state,
+            error_type or "-",
+        )
+
+        if state == "CONNECTED":
+            notify(
+                "Tradovate login confirmed. "
+                "Connection established; this does not confirm "
+                "that trading has started."
             )
+        elif state == "LOGIN_TIMEOUT":
+            notify(
+                "Tradovate login timed out. "
+                "Complete authentication, then retry Test Connection."
+            )
+        elif state == "CONNECTION_FAILED":
+            notify(
+                "Tradovate connection failed "
+                f"({error_type or 'unknown error'}). "
+                "Check the dashboard and browser."
+            )
+
 
     def get_connection_state(self) -> dict:
         """Return cached state without interacting with Playwright."""
@@ -1341,7 +1362,11 @@ class TradovateWebUIAPI(TradingAPIInterface):
             self._set_connection_state("AWAITING_LOGIN")
             # Give you time to type; we just wait.
             production_print("Please log in manually in the opened browser window...")
-            notify(f"{KEY} Tradovate login needed - log in within 2 minutes.")
+            notify(f"{KEY} Tradovate login required. "
+                   f"Complete authentication within "
+                   f"{self.login_timeout_seconds} seconds. "
+                   f"Trading has not been started."
+            )
 
             # 4) Try for up to ~120s; if we find a page/frame a with any marker, switch self._page to it
             # marker = None
