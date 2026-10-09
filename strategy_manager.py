@@ -47,6 +47,7 @@ class StrategyManager:
         self.manual_override = False
         self.manual_strategy_name = None
         self.active_symbol = getattr(self.config, 'DEFAULT_SYMBOL', 'MES').upper()
+        self.position_open = lambda: False
     
     def set_active_symbol(self, symbol: str):
         self.active_symbol = symbol.upper()
@@ -192,7 +193,34 @@ class StrategyManager:
             )
        
         # Switch strategies if needed
+            if _auto_flatten["date"] != today:
+        _auto_flatten.update(date=today, done=False, attempts=0, next_try=0.0, waiting=False)
+        bot.entries_closed = False
+    hhmm = now_et.strftime("%H:%M")
+    if _auto_flatten["done"] or hhmm < FLATTEN_AT_ET:
+        return
+
+    bot.entries_closed = True   # no new entries from here; stops/targets keep running
+
+    if FLATTEN_HARD_ET and hhmm < FLATTEN_HARD_ET and _open_qty() != 0:
+        if not _auto_flatten.get("waiting"):
+            _auto_flatten["waiting"] = True
+            app.logger.warning("AUTO-FLATTEN: position open at %s ET - leaving it to stop/target until %s ET",
+                               FLATTEN_AT_ET, FLATTEN_HARD_ET)
+            notify(f"Entries closed at {FLATTEN_AT_ET} ET - open trade left to its stop/target until {FLATTEN_HARD_ET} ET.")
+        return
+        
+        # Switch strategies if needed - but never while the current strategy's trade is open
         if strategy_name != self.current_strategy_name:
+            if self.current_strategy_name and self.position_open():
+                if getattr(self, "_deferred_to", None) != strategy_name:
+                    self._deferred_to = strategy_name
+                    self.logger.info(
+                        f"STRATEGY SWITCH DEFERRED: {self.current_strategy_name} keeps control "
+                        f"until its position closes (next: {strategy_name})"
+                    )
+                return self.current_strategy
+            self._deferred_to = None
             self.logger.info(
                 f"{LOADING} STRATEGY SWITCH: {self.current_strategy_name} -> {strategy_name} "
                 f"(ET time: {current_et.strftime('%H:%M')})"

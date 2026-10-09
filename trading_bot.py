@@ -124,6 +124,9 @@ class TradingBot:
         # Avoid spamming exits repeatedly
         self._last_exit_ts: dict[str, float] = {}
 
+        self._entry_strategy: dict[str, str] = {}   # symbol -> strategy that opened the position
+        self.strategy_manager.position_open = lambda: self.risk_manager.get_position_qty(self.symbol) != 0
+
         #startup grace
         self._startup_ts = time.time()
 
@@ -664,6 +667,7 @@ class TradingBot:
             
             if success:
                 self.trades_executed = getattr(self, "trades_executed", 0) + 1
+                self._entry_strategy[(sym or "").upper()] = strategy_name
                 self.logger.info(f"Trade executed successfully: {signal['type']} {exec_qty} {self.symbol}")
 
             if hasattr(self.strategy, 'on_trade_executed'):
@@ -1507,7 +1511,8 @@ class TradingBot:
             "reason": reason, 
             "is_exit": True, 
             "_signal_id": _new_id("exit"),
-            "strategy_name": type(self.strategy).__name__ if self.strategy else "Unknown"  
+            # "strategy_name": type(self.strategy).__name__ if self.strategy else "Unknown" 
+            "strategy_name": self._entry_strategy.get((symbol or "").upper(), type(self.strategy).__name__ if self.strategy else "Unknown") 
             }
         self._execute_trade(exit_signal, abs(qty), current_price)
 
@@ -1608,7 +1613,8 @@ class TradingBot:
                 "reason": reason,
                 "is_exit": True,
                 "_signal_id": _new_id("flatten"),
-                "strategy_name": type(self.strategy).__name__ if self.strategy else "Unknown",
+                # "strategy_name": type(self.strategy).__name__ if self.strategy else "Unknown",
+                "strategy_name": self._entry_strategy.get((sym or "").upper(), type(self.strategy).__name__ if self.strategy else "Unknown"),
             }
             try:
                 ok = self._execute_trade(exit_signal, abs(qty), px)
