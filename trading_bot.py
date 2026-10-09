@@ -544,6 +544,14 @@ class TradingBot:
                 self.logger.warning("No current_price; skipping trade.")
                 return
 
+            # No new entries while paused or after the session's entry cutoff (exits are not affected:
+            # they go straight to _execute_trade from _maybe_exit_position / flatten_all)
+            if (getattr(self, "is_paused", False) or getattr(self, "entries_closed", False)) \
+                    and not signal.get("is_exit"):
+                self.logger.info("ENTRY BLOCKED: %s - no new entries",
+                                 "bot paused" if getattr(self, "is_paused", False) else "session closed")
+                return
+
             # config flags
             # figure out if we are in dry-run
             cfg_dry = getattr(self.config, "DRY_RUN", "true")

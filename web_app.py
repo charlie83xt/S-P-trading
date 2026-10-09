@@ -613,6 +613,15 @@ def _flatten_now(reason: str) -> dict:
     _snap_status(from_trading_thread=True)
     return {"success": err is None and out.get("broker_flat", False), "message": err, **out}
 
+FLATTEN_HARD_ET = os.getenv("FLATTEN_HARD_ET", "").strip()   # "HH:MM" New York; empty = flatten at FLATTEN_AT_ET
+
+def _open_qty() -> int:
+    rm = getattr(bot, "risk_manager", None)
+    try:
+        return int(rm.get_position_qty(getattr(bot, "symbol", "MES"))) if rm else 0
+    except Exception:
+        return 0
+
 
 def _maybe_auto_flatten():
     """Called from the trading thread heartbeat. Flattens once per day at FLATTEN_AT_ET."""
@@ -621,9 +630,23 @@ def _maybe_auto_flatten():
     now_et = datetime.now(_ET)
     today = now_et.date()
     if _auto_flatten["date"] != today:
-        _auto_flatten.update(date=today, done=False, attempts=0, next_try=0.0)
-    if _auto_flatten["done"] or now_et.strftime("%H:%M") < FLATTEN_AT_ET:
+        _auto_flatten.update(date=today, done=False, attempts=0, next_try=0.0, waiting=False)
+        bot.entries_closed = False
+    hhmm = now_et.strftime("%H:%M")
+    if _auto_flatten["done"] or hhmm < FLATTEN_AT_ET:
         return
+
+    bot.entries_closed = True   # no new entries from here; stops/targets keep running
+
+    if FLATTEN_HARD_ET and hhmm < FLATTEN_HARD_ET and _open_qty() != 0:
+        if not _auto_flatten.get("waiting"):
+            _auto_flatten["waiting"] = True
+            app.logger.warning("AUTO-FLATTEN: position open at %s ET - leaving it to stop/target until %s ET",
+                               FLATTEN_AT_ET, FLATTEN_HARD_ET)
+            notify(f"Entries closed at {FLATTEN_AT_ET} ET - open trade left to its stop/target until {FLATTEN_HARD_ET} ET.")
+        return
+
+
     if _auto_flatten["attempts"] >= _AUTO_FLATTEN_MAX_ATTEMPTS or time.time() < _auto_flatten["next_try"]:
         return
 
