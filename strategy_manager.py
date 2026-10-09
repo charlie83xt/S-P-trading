@@ -166,6 +166,12 @@ class StrategyManager:
         if ts is None:
             ts = time.time()
 
+        # Preserve the current strategy while its tracked position is open,
+        # including when a different manual strategy has been requested.
+        if self.current_strategy is not None and self.position_open():
+            return self.current_strategy
+
+
         # Check manual override FIRST
         if getattr(self, 'manual_override', False):
             manual_name = getattr(self, 'manual_strategy_name', None)
@@ -192,24 +198,24 @@ class StrategyManager:
                 f"using fallback"
             )
        
-        # Switch strategies if needed
-            if _auto_flatten["date"] != today:
-        _auto_flatten.update(date=today, done=False, attempts=0, next_try=0.0, waiting=False)
-        bot.entries_closed = False
-    hhmm = now_et.strftime("%H:%M")
-    if _auto_flatten["done"] or hhmm < FLATTEN_AT_ET:
-        return
+    #     # Switch strategies if needed
+    #         if _auto_flatten["date"] != today:
+    #     _auto_flatten.update(date=today, done=False, attempts=0, next_try=0.0, waiting=False)
+    #     bot.entries_closed = False
+    # hhmm = now_et.strftime("%H:%M")
+    # if _auto_flatten["done"] or hhmm < FLATTEN_AT_ET:
+    #     return
 
-    bot.entries_closed = True   # no new entries from here; stops/targets keep running
+    # bot.entries_closed = True   # no new entries from here; stops/targets keep running
 
-    if FLATTEN_HARD_ET and hhmm < FLATTEN_HARD_ET and _open_qty() != 0:
-        if not _auto_flatten.get("waiting"):
-            _auto_flatten["waiting"] = True
-            app.logger.warning("AUTO-FLATTEN: position open at %s ET - leaving it to stop/target until %s ET",
-                               FLATTEN_AT_ET, FLATTEN_HARD_ET)
-            notify(f"Entries closed at {FLATTEN_AT_ET} ET - open trade left to its stop/target until {FLATTEN_HARD_ET} ET.")
-        return
-        
+    # if FLATTEN_HARD_ET and hhmm < FLATTEN_HARD_ET and _open_qty() != 0:
+    #     if not _auto_flatten.get("waiting"):
+    #         _auto_flatten["waiting"] = True
+    #         app.logger.warning("AUTO-FLATTEN: position open at %s ET - leaving it to stop/target until %s ET",
+    #                            FLATTEN_AT_ET, FLATTEN_HARD_ET)
+    #         notify(f"Entries closed at {FLATTEN_AT_ET} ET - open trade left to its stop/target until {FLATTEN_HARD_ET} ET.")
+    #     return
+
         # Switch strategies if needed - but never while the current strategy's trade is open
         if strategy_name != self.current_strategy_name:
             if self.current_strategy_name and self.position_open():

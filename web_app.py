@@ -623,51 +623,89 @@ def _open_qty() -> int:
         return 0
 
 
+# def _maybe_auto_flatten():
+#     """Called from the trading thread heartbeat. Flattens once per day at FLATTEN_AT_ET."""
+#     if not FLATTEN_AT_ET or not getattr(bot, "is_running", False):
+#         return
+#     now_et = datetime.now(_ET)
+#     today = now_et.date()
+#     if _auto_flatten["date"] != today:
+#         _auto_flatten.update(date=today, done=False, attempts=0, next_try=0.0, waiting=False)
+#         bot.entries_closed = False
+#     hhmm = now_et.strftime("%H:%M")
+#     if _auto_flatten["done"] or hhmm < FLATTEN_AT_ET:
+#         return
+
+#     bot.entries_closed = True   # no new entries from here; stops/targets keep running
+
+#     if FLATTEN_HARD_ET and hhmm < FLATTEN_HARD_ET and _open_qty() != 0:
+#         if not _auto_flatten.get("waiting"):
+#             _auto_flatten["waiting"] = True
+#             app.logger.warning("AUTO-FLATTEN: position open at %s ET - leaving it to stop/target until %s ET",
+#                                FLATTEN_AT_ET, FLATTEN_HARD_ET)
+#             notify(f"Entries closed at {FLATTEN_AT_ET} ET - open trade left to its stop/target until {FLATTEN_HARD_ET} ET.")
+#         return
+
+
+#     if _auto_flatten["attempts"] >= _AUTO_FLATTEN_MAX_ATTEMPTS or time.time() < _auto_flatten["next_try"]:
+#         return
+
+#     _auto_flatten["attempts"] += 1
+#     n = _auto_flatten["attempts"]
+#     app.logger.warning("AUTO-FLATTEN: %s ET reached (attempt %d/%d)", FLATTEN_AT_ET, n, _AUTO_FLATTEN_MAX_ATTEMPTS)
+#     res = _flatten_now("auto_flatten_eod")
+#     if res.get("success"):
+#         _auto_flatten["done"] = True
+#         app.logger.warning("AUTO-FLATTEN: broker confirms flat - bot paused for the rest of the day")
+#         rm = getattr(bot, "risk_manager", None)
+#         pnl = float(getattr(rm, "realized_pnl", 0.0) or 0.0)
+#         n_trades = len(getattr(rm, "trade_history", []) or [])
+#         notify(f"{CHECK} Session closed at {FLATTEN_AT_ET} ET - flat. Trades: {n_trades} | Realised P&L: ${pnl:.2f}")
+#     elif n < _AUTO_FLATTEN_MAX_ATTEMPTS:
+#         _auto_flatten["next_try"] = time.time() + 30
+#         app.logger.error("AUTO-FLATTEN: not confirmed flat (%s) - retrying in 30s", res.get("message"))
+#     else:
+#         app.logger.error("AUTO-FLATTEN: GAVE UP after %d attempts - CHECK TRADOVATE NOW: %s",
+#                          n, res.get("broker_positions"))
+#         notify(f"{WARNING} AUTO-FLATTEN FAILED after {n} attempts CHECK TRADOVATE NOW: {res.get('broker_positions')}")
+
 def _maybe_auto_flatten():
-    """Called from the trading thread heartbeat. Flattens once per day at FLATTEN_AT_ET."""
-    if not FLATTEN_AT_ET or not getattr(bot, "is_running", False):
+    """Legacy name retained: close entries without submitting an exit."""
+    if not FLATTEN_AT_ET or bot is None:
         return
+
     now_et = datetime.now(_ET)
+
+    if now_et.strftime("%H:%M") < FLATTEN_AT_ET:
+        return
+
+    # Apply even when the bot has not started yet.
+    # Never reopen the gate automatically at a date boundary.
+    bot.entries_closed = True
+
     today = now_et.date()
-    if _auto_flatten["date"] != today:
-        _auto_flatten.update(date=today, done=False, attempts=0, next_try=0.0, waiting=False)
-        bot.entries_closed = False
-    hhmm = now_et.strftime("%H:%M")
-    if _auto_flatten["done"] or hhmm < FLATTEN_AT_ET:
+    if _auto_flatten["date"] == today and _auto_flatten["done"]:
         return
 
-    bot.entries_closed = True   # no new entries from here; stops/targets keep running
+    _auto_flatten.update(
+        date=today,
+        done=True,
+        attempts=0,
+        next_try=0.0,
+    )
 
-    if FLATTEN_HARD_ET and hhmm < FLATTEN_HARD_ET and _open_qty() != 0:
-        if not _auto_flatten.get("waiting"):
-            _auto_flatten["waiting"] = True
-            app.logger.warning("AUTO-FLATTEN: position open at %s ET - leaving it to stop/target until %s ET",
-                               FLATTEN_AT_ET, FLATTEN_HARD_ET)
-            notify(f"Entries closed at {FLATTEN_AT_ET} ET - open trade left to its stop/target until {FLATTEN_HARD_ET} ET.")
-        return
+    app.logger.warning(
+        "SESSION_DRAIN: entry window closed at %s ET; "
+        "existing exit monitoring continues; no scheduled market exit",
+        FLATTEN_AT_ET,
+    )
 
-
-    if _auto_flatten["attempts"] >= _AUTO_FLATTEN_MAX_ATTEMPTS or time.time() < _auto_flatten["next_try"]:
-        return
-
-    _auto_flatten["attempts"] += 1
-    n = _auto_flatten["attempts"]
-    app.logger.warning("AUTO-FLATTEN: %s ET reached (attempt %d/%d)", FLATTEN_AT_ET, n, _AUTO_FLATTEN_MAX_ATTEMPTS)
-    res = _flatten_now("auto_flatten_eod")
-    if res.get("success"):
-        _auto_flatten["done"] = True
-        app.logger.warning("AUTO-FLATTEN: broker confirms flat - bot paused for the rest of the day")
-        rm = getattr(bot, "risk_manager", None)
-        pnl = float(getattr(rm, "realized_pnl", 0.0) or 0.0)
-        n_trades = len(getattr(rm, "trade_history", []) or [])
-        notify(f"{CHECK} Session closed at {FLATTEN_AT_ET} ET - flat. Trades: {n_trades} | Realised P&L: ${pnl:.2f}")
-    elif n < _AUTO_FLATTEN_MAX_ATTEMPTS:
-        _auto_flatten["next_try"] = time.time() + 30
-        app.logger.error("AUTO-FLATTEN: not confirmed flat (%s) - retrying in 30s", res.get("message"))
-    else:
-        app.logger.error("AUTO-FLATTEN: GAVE UP after %d attempts - CHECK TRADOVATE NOW: %s",
-                         n, res.get("broker_positions"))
-        notify(f"{WARNING} AUTO-FLATTEN FAILED after {n} attempts CHECK TRADOVATE NOW: {res.get('broker_positions')}")
+    notify(
+        f"Entry window closed at {FLATTEN_AT_ET} ET. "
+        "Existing trade management continues. "
+        "No scheduled closing order was sent. "
+        "Automatic shutdown remains disabled."
+    )
 
 
 def _trading_main():
@@ -845,6 +883,15 @@ def _trading_main():
                 _snap_status(from_trading_thread=True)
             
             elif cmd == "start":
+                _maybe_auto_flatten()
+
+                if bot.entries_blocked():
+                    app.logger.warning(
+                        "START_BLOCKED: paused or entry window closed"
+                    )
+                    _snap_status(from_trading_thread=True)
+                    continue
+
                 sym = payload.get("symbol") or getattr(bot, "symbol", getattr(cfg, "DEFAULT_SYMBOL", "ES"))
                 name = (payload.get("strategy") or "").strip()
                 params = payload.get("params") or {}
@@ -1180,6 +1227,15 @@ def start_bot():
     #####
 
     _ensure_trading_thread()
+
+    if bot is not None and bot.entries_blocked():
+        return jsonify({
+            "success": False,
+            "message": (
+                "Bot is paused or the entry window is closed. "
+                "Existing trade monitoring remains active."
+            ),
+        }), 409
 
     if not _thread_connected.is_set():
         return jsonify({
@@ -1724,6 +1780,22 @@ def apply_update():
     except Exception as e:
         logger.error(f"Update apply error: {e}")
         return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/session_drain_state", methods=["GET"])
+def session_drain_state():
+    if bot is None:
+        return jsonify({
+            "entries_closed": None,
+            "submission_in_progress": None,
+            "submission_uncertain": True,
+            "shutdown_allowed": False,
+        })
+
+    return jsonify({
+        **bot.get_session_drain_status(),
+        "working_orders_verified": False,
+    })
 
 
 def _log_routes():

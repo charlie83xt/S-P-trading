@@ -338,29 +338,33 @@ class TradovateWebUIAPI(TradingAPIInterface):
 
     # ------------- TradingAPIInterface: Portfolio ---------------------
 
-    def get_open_orders(self) -> List[Dict[str, Any]]:
-        try:
-            self._ensure_page()
-            # self._click("[data-test-id='orders-tab']") # REPLACING
-            # rows = self._all("[data-test-id='orders-row']") # REPLACING
-            with self._with_orders_view() as ok:
-                if not ok:
-                    return []
-            out = []
-            for r in rows:
-                out.append({
-                    "id": r.get_attribute("data-order-id") or "",
-                    "symbol": r.get_attribute("data-symbol") or "",
-                    "side": (r.get_attribute("data-side") or "").upper(),
-                    "type": r.get_attribute("data-type") or "",
-                    "qty": self._to_float(r.get_attribute("data-qty")),
-                    "price": self._to_float(r.get_attribute("data-price")),
-                    "status": r.get_attribute("data-status") or "",
-                })
-            return out
-        except Exception as e:
-            self.logger.warning("get_open_orders failed: %s", e)
-            return []
+    def get_open_orders(self) -> List[Dict[str, Any]] | None:
+        "Unknown until complete working-order detection is implemented"
+        return None
+
+    # def get_open_orders(self) -> List[Dict[str, Any]]:
+    #     try:
+    #         self._ensure_page()
+    #         # self._click("[data-test-id='orders-tab']") # REPLACING
+    #         # rows = self._all("[data-test-id='orders-row']") # REPLACING
+    #         with self._with_orders_view() as ok:
+    #             if not ok:
+    #                 return []
+    #         out = []
+    #         for r in rows:
+    #             out.append({
+    #                 "id": r.get_attribute("data-order-id") or "",
+    #                 "symbol": r.get_attribute("data-symbol") or "",
+    #                 "side": (r.get_attribute("data-side") or "").upper(),
+    #                 "type": r.get_attribute("data-type") or "",
+    #                 "qty": self._to_float(r.get_attribute("data-qty")),
+    #                 "price": self._to_float(r.get_attribute("data-price")),
+    #                 "status": r.get_attribute("data-status") or "",
+    #             })
+    #         return out
+    #     except Exception as e:
+    #         self.logger.warning("get_open_orders failed: %s", e)
+    #         return []
 
     
     def get_positions(self, root_symbol: str | None = None, ui_symbol: str | None = None, include_zero_rows: bool = False) -> List[Dict[str, Any]] | None:

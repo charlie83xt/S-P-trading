@@ -8,8 +8,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 import logging
 import json
+import os
 
 from config import Config
+from zoneinfo import ZoneInfo
 from data_manager import DataManager
 from opening_range_strategy import OpeningRangeStrategy
 from risk_manager import RiskManager
@@ -106,6 +108,19 @@ class TradingBot:
         # Bot state
         self.is_running = False
         self.is_paused = False
+
+        self.entries_closed = False
+        self._submission_lock = threading.RLock()
+        self._submission_in_progress = False
+        self._submission_uncertain = False
+
+        cutoff = os.getenv("FLATTEN_AT_ET", "").strip()
+        self._entry_cutoff_et = (
+            datetime.strptime(cutoff, "%H:%M").time()
+            if cutoff
+            else None
+        )
+
         self.symbol_manager = SymbolManager(self.config)
         self.monitoring_thread = None
         self.last_price_check = None
@@ -211,6 +226,26 @@ class TradingBot:
             self.logger.info("Disconnected from trading platform")
         except Exception as e:
             self.logger.error(f"Disconnection error: {e}")
+
+    
+    def entries_blocked(self) -> bool:
+        """Check the clock without browser interaction; latch the entry gate."""
+        if self._entry_cutoff_et is not None:
+            now_et = datetime.now(ZoneInfo("America/New_York"))
+            if now_et.time() >= self._entry_cutoff_et:
+                self.entries_closed = True
+
+        return bool(self.entries_closed or self.is_paused)
+
+    def get_session_drain_status(self) -> dict:
+        """Process state only; never authorizes broker shutdown."""
+        return {
+            "entries_closed": bool(self.entries_closed),
+            "submission_in_progress": self._submission_in_progress,
+            "submission_uncertain": self._submission_uncertain,
+            "shutdown_allowed": False,
+        }
+
     
     def start(self, symbol: Optional[str] = None) -> bool:
         """
@@ -549,8 +584,9 @@ class TradingBot:
 
             # No new entries while paused or after the session's entry cutoff (exits are not affected:
             # they go straight to _execute_trade from _maybe_exit_position / flatten_all)
-            if (getattr(self, "is_paused", False) or getattr(self, "entries_closed", False)) \
-                    and not signal.get("is_exit"):
+            # if (getattr(self, "is_paused", False) or getattr(self, "entries_closed", False)) \
+            #         and not signal.get("is_exit"):
+            if not signal.get("is_exit") and self.entries_blocked():
                 self.logger.info("ENTRY BLOCKED: %s - no new entries",
                                  "bot paused" if getattr(self, "is_paused", False) else "session closed")
                 return
@@ -688,8 +724,45 @@ class TradingBot:
 
         self._execute_trade(signal, signal.get("qty", 1), signal.get("price"))
 
+
+        def _execute_trade(
+            self,
+            signal: Dict,
+            quantity: float,
+            current_price: float,
+        ) -> bool:
+            with self._submission_lock:
+                if not signal.get("is_exit") and self.entries_blocked():
+                    self.logger.warning(
+                        "ENTRY_BLOCKED: paused or session entry window closed"
+                    )
+                    return False
+
+                self._submission_in_progress = True
+
+                try:
+                    result = self._execute_trade_impl(
+                        signal,
+                        quantity,
+                        current_price,
+                    )
+
+                    # Current result handling cannot reliably distinguish
+                    # rejected orders from unconfirmed submissions.
+                    if result is not True:
+                        self._submission_uncertain = True
+
+                    return result
+
+                except Exception:
+                    self._submission_uncertain = True
+                    raise
+
+                finally:
+                    self._submission_in_progress = False
+
     
-    def _execute_trade(self, signal: Dict, quantity: float, current_price: float) -> bool:
+    def _execute_trade_impl(self, signal: Dict, quantity: float, current_price: float) -> bool:
         """
         Execute a trade based on the signal.
         
