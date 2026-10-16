@@ -45,13 +45,33 @@ Exit code 0 = candidate, 1 = rejected. Every run is appended to `research/regist
 | `strategies/template.py` | Start here for a new idea |
 | `strategies/prev_day_fade.py` | Previous-day level fade (rejected) |
 | `strategies/mesrunner.py` | The live MESRunner with live-like exits (rejected) |
+| `replay.py` | **Replay adapter**: runs the bot's live strategy classes unchanged on history (simulated clock + `ReplayDataManager`) |
+| `strategies/live_*.py` | The live ORBRetest, OpeningRange, PreviousDayHL, MeanReversion and MeanReversionLight, via the replay adapter |
 
 ## Results so far
 | Strategy | Stage reached | Trades | Avg / trade | Verdict |
 |---|---|---|---|---|
 | `mesrunner_live_like` | design | 161 | −$3.97 | rejected |
 | `prev_day_fade` | design | 130 | −$3.40 | rejected |
+| `live_orb_retest` | design | 125 | −$4.04 | rejected |
+| `live_prev_day_hl` | design | 35 | −$7.45 | rejected |
+| `live_mean_reversion` (12:00–16:00) | design | 542 | −$3.41 | rejected |
+| `live_mean_reversion_light` | design | 876 | −$4.12 | rejected |
+| `live_opening_range` | design | 0 | – | never signals (see chat: its range includes the current bar) |
 | ML baseline (30-min direction) | validation | 2,896 | −$4.29 | AUC 0.87 in-sample → 0.50 unseen |
+
+## Testing a live strategy file from the bot (replay adapter)
+The bot's strategies read the wall clock and the live `DataManager`. `replay.py` swaps both for
+history, so the strategy code itself is not changed. To add another one, copy any
+`strategies/live_*.py` and change three things: the `import <module> as mod` line, `name`, and
+`build()` (construct the class with the same arguments as `strategy_manager.py`). Keep
+`from research.replay import ...` **above** the strategy import (it installs a stub for `data_manager`).
+Notes:
+- the live bot calls a strategy about once a second; the replay calls it once per 1-minute bar;
+- the strategies only produce entries, so the replay applies live-like exits (`DEFAULT_EXITS` in
+  `replay.py`: the signal's `stop_est_points` if given, else 6 pts, clamped 2–12; 10-pt target;
+  breakeven at +4 locking 1; flatten at 11:33 ET), which you can override per wrapper;
+- a fresh strategy instance is built each day, like restarting the bot each morning.
 
 ## Plugging in agents (next phase)
 An agent (or you) writes one file in `strategies/` from the template, runs `research.run`, and reads
