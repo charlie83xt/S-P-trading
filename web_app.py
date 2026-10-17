@@ -28,6 +28,7 @@ import tradovate_web_ui_api  # wherever it is imported from
 
 from heartbeat_local import LocalSessionKeepAlive
 from notifier import notify
+from overnight_hold import OvernightHold
 from debug_config import (
     should_log_throttled, 
     PRINT_STATUS_POLLS, 
@@ -255,6 +256,7 @@ log.info("CWD: %s", os.getcwd())
 cfg = Config()
 api = APIFactory.create_api(cfg) # uses TRADING_PLATFORM=tradovate_ui
 bot = TradingBot(config=cfg)
+_overnight - OvernightHold(bot, notify, app.logger)
 
 # ADD THESE LINES: print("=" * 80) 
 debug_print(f"{MAGNI} DEBUG: Bot created") 
@@ -731,6 +733,12 @@ def _trading_main():
                 _maybe_auto_flatten()
             except Exception as e:
                 app.logger.error("auto-flatten check failed: %s", e)
+
+            try:
+                _overnight.tick(api, _thread_connected.is_set(), _flatten_now)
+            except Exception as e:
+                app.logger.error("overnight check failed: %s", e)
+
             # NEW: push chart price scoped to the current symbol
             if PRICE_POLL and api: # keep your env guard if you added it]
                 try:
@@ -1780,6 +1788,11 @@ def apply_update():
     except Exception as e:
         logger.error(f"Update apply error: {e}")
         return jsonify({"success": False, "error": str(e)})
+
+@app.route("/api/overnight", methods=["GET"])
+def overnight_status():
+    """Overnight-hold state: settings, closes on file, 200-day average, today's entry/exit."""
+    return jsonify(_overnight.status())
 
 
 @app.route("/api/session_drain_state", methods=["GET"])

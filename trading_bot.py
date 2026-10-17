@@ -725,41 +725,41 @@ class TradingBot:
         self._execute_trade(signal, signal.get("qty", 1), signal.get("price"))
 
 
-        def _execute_trade(
-            self,
-            signal: Dict,
-            quantity: float,
-            current_price: float,
-        ) -> bool:
-            with self._submission_lock:
-                if not signal.get("is_exit") and self.entries_blocked():
-                    self.logger.warning(
-                        "ENTRY_BLOCKED: paused or session entry window closed"
-                    )
-                    return False
+    def _execute_trade(
+        self,
+        signal: Dict,
+        quantity: float,
+        current_price: float,
+    ) -> bool:
+        with self._submission_lock:
+            if not signal.get("is_exit") and self.entries_blocked():
+                self.logger.warning(
+                    "ENTRY_BLOCKED: paused or session entry window closed"
+                )
+                return False
 
-                self._submission_in_progress = True
+            self._submission_in_progress = True
 
-                try:
-                    result = self._execute_trade_impl(
-                        signal,
-                        quantity,
-                        current_price,
-                    )
+            try:
+                result = self._execute_trade_impl(
+                    signal,
+                    quantity,
+                    current_price,
+                )
 
-                    # Current result handling cannot reliably distinguish
-                    # rejected orders from unconfirmed submissions.
-                    if result is not True:
-                        self._submission_uncertain = True
-
-                    return result
-
-                except Exception:
+                # Current result handling cannot reliably distinguish
+                # rejected orders from unconfirmed submissions.
+                if result is not True:
                     self._submission_uncertain = True
-                    raise
 
-                finally:
-                    self._submission_in_progress = False
+                return result
+
+            except Exception:
+                self._submission_uncertain = True
+                raise
+
+            finally:
+                self._submission_in_progress = False
 
     
     def _execute_trade_impl(self, signal: Dict, quantity: float, current_price: float) -> bool:
