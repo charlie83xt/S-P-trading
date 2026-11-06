@@ -40,6 +40,11 @@ from debug_config import (
     TARGET
 )
 
+try:
+    from feed_publisher import publish as feed_publish, code as feed_code
+except Exception: # the feed must never stop the bot
+    def feed_publish(*_a, **_k): pass
+    def feed_code(t): return "unknown"
 
 # ================= tiny helpers =====================
 import uuid
@@ -633,6 +638,9 @@ class TradingBot:
 
                 if not allow_entry:
                     self.logger.warning(f"{BLOCKED} ENTRY BLOCKED: {block_reason}")
+                    feed_publish("signal", status="blocked", setup=strategy_name,
+                                 side=side.lower(), reason=feed_code(block_reason))
+
                     self.analytics.log_signal(
                         signal_id=signal_id,
                         symbol=sym,
@@ -645,7 +653,7 @@ class TradingBot:
                     return # EXIT - Don't execute!
                 
                 self.logger.info(f"{CHECK} ENTRY APPROVED")
-
+                feed_publish("signal", status="approved", setup=strategy_name, side=side.lower())
             # ------------------------
             # DRY-RUN BRANCH
             # ------------------------
@@ -1508,6 +1516,25 @@ class TradingBot:
                 len(rm.trade_history),
                 getattr(rm, "instant_close", None)
             )
+
+            try:
+                if trade and isinstance(trade.get("closed"), dict):
+                    c = trade["closed"]
+                    # the closing order's side: BUY closes a short, SELL closes a long
+                    pos = "short" if str(c.get("side")).upper() == "BUY" else "long"
+                    entry, exit_ = float(c.get("entry_price") or 0), float(c.get("exit_price") or 0)
+                    feed_publish("trade_close", side=pos, setup=strategy_name,
+                                 entry_price=entry or None, exit_price=exit_,
+                                 points=(exit_ - entry if pos == "long" else entry - exit_) if entry else None,
+                                 exit_reason=feed_code(c.get("exit_reason")) if c.get("exit_reason") else None)
+                if trade and isinstance(trade.get("opened"), dict):
+                    o = trade["opened"]
+                    feed_publish("trade_open", side="long" if str(o.get("side")).upper() == "BUY" else "short",
+                                 setup=strategy_name, entry_price=float(o.get("entry_price") or 0))
+            except Exception:
+                pass
+
+
             # Adding closed pnl for MNQVwap
             if trade and isinstance(trade.get('closed'), dict):
                 pnl_usd = float(trade['closed'].get('pnl', 0.0))

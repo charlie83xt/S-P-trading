@@ -256,7 +256,7 @@ log.info("CWD: %s", os.getcwd())
 cfg = Config()
 api = APIFactory.create_api(cfg) # uses TRADING_PLATFORM=tradovate_ui
 bot = TradingBot(config=cfg)
-_overnight - OvernightHold(bot, notify, app.logger)
+_overnight = OvernightHold(bot, notify, app.logger)
 
 # ADD THESE LINES: print("=" * 80) 
 debug_print(f"{MAGNI} DEBUG: Bot created") 

@@ -22,6 +22,12 @@ import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+try:
+    from feed_publisher import publish
+except ImportError:                       # dashboard feed is optional
+    def publish(*_a, **_k):
+        pass
+
 ET = ZoneInfo("America/New_York")
 MAX_EXIT_ATTEMPTS = 3
 RETRY_SECONDS = 30
@@ -156,6 +162,7 @@ class OvernightHold:
             self._save_state()
             return
         if self.state.get("exit_attempts", 0) >= MAX_EXIT_ATTEMPTS:
+            publish("overnight", decision="exit_failed")
             self._once("exit_gave_up", f"🚨 Overnight EXIT FAILED {MAX_EXIT_ATTEMPTS} times - still holding "
                                        f"{qty}. Close it in Tradovate NOW.")
             return
@@ -166,6 +173,7 @@ class OvernightHold:
             pts = (px_before - self.state["entry_px"]) if (px_before and self.state.get("entry_px")) else None
             self.state.update(exit_date=today, holding=False, exit_attempts=0)
             self._save_state()
+            publish("overnight", decision="exit", points=pts)
             self._once("exit_done", "✅ Overnight EXIT done, flat." +
                        (f" Approx {pts:+.2f} pts (${pts * 5 - 3.74:+.2f} after costs)." if pts is not None else ""))
         else:
@@ -180,37 +188,42 @@ class OvernightHold:
     def _enter(self, api, connected, today):
         sym = self._symbol()
 
-        def skip(reason, alert=False):
+        def skip(reason, alert=False, reason_code="other", **facts):
             self.state["entry_date"] = today
             self._save_state()
+            publish("overnight", decision="skip", reason=reason_code, **facts)
             self._once("entry_skip", ("⚠️ " if alert else "") + f"Overnight: no position tonight - {reason}")
 
         if not connected or api is None:
             self._once("entry_disconnected", "⚠️ Overnight ENTRY: bot not connected to Tradovate (will keep trying until 16:00 ET).")
             return
         if self.bot.entries_blocked():
-            return skip("entries are blocked (bot paused, or FLATTEN_AT_ET is set - leave it empty in overnight mode)", True)
+            return skip("entries are blocked (bot paused, or FLATTEN_AT_ET is set - leave it empty in overnight mode)", True,
+                        reason_code="entries_blocked")
         if self.expected_account:
             label = api.get_account_label()
             if label != self.expected_account:
-                return skip(f"wrong Tradovate account selected ({label or 'unknown'}, expected {self.expected_account})", True)
+                return skip(f"wrong Tradovate account selected ({label or 'unknown'}, expected {self.expected_account})", True,
+                            reason_code="wrong_account")
         px = api.get_current_price(sym)
         if not px:
             return                                           # retry next second until 16:00
         self._record_close(today, px)
         avg = self.sma()
         if avg is None:
-            return skip(f"fewer than {self.sma_days} daily closes on file", True)
+            return skip(f"fewer than {self.sma_days} daily closes on file", True, reason_code="not_enough_history")
         if px <= avg:
-            return skip(f"price {px:.2f} is below its {self.sma_days}-day average {avg:.2f}")
+            return skip(f"price {px:.2f} is below its {self.sma_days}-day average {avg:.2f}",
+                        reason_code="below_average", price=px, average=avg, average_days=self.sma_days)
         qty = self._broker_qty(api)
         if qty is None:
-            return skip("cannot read Tradovate positions", True)
+            return skip("cannot read Tradovate positions", True, reason_code="positions_unreadable")
         if qty != 0:
-            return skip(f"a position is already open ({qty})", True)
+            return skip(f"a position is already open ({qty})", True, reason_code="already_in_position")
         if self.dry_run:
             self.state.update(entry_date=today)
             self._save_state()
+            publish("overnight", decision="enter_dry_run", price=px, average=avg, average_days=self.sma_days)
             return self._once("entry_dry", f"DRY RUN: would BUY 1 {sym} at {px:.2f} (200-day avg {avg:.2f}).")
 
         for prep in ("ensure_symbol_loaded", "ensure_trading_panels_ready"):
@@ -232,6 +245,7 @@ class OvernightHold:
             self.bot._entry_strategy[sym] = "OvernightHold"
             self.state.update(holding=True, entry_px=float(px), exit_attempts=0, next_try=0.0)
             self._save_state()
+            publish("overnight", decision="enter", price=px, average=avg, average_days=self.sma_days)
             self._once("entry_done", f"🌙 Overnight ENTRY: bought 1 {sym} ~{px:.2f} (200-day avg {avg:.2f}). "
                                      f"Exit at {self.exit_at} ET.")
         else:
